@@ -2,11 +2,19 @@ import { useEffect, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { AuthScreen } from './components/AuthScreen';
 import { AppShell } from './components/AppShell';
+import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { supabase } from './lib/supabase';
+
+function isRecoveryLink() {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const queryParams = new URLSearchParams(window.location.search);
+  return hashParams.get('type') === 'recovery' || queryParams.get('type') === 'recovery';
+}
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(() => isRecoveryLink());
 
   useEffect(() => {
     if (!supabase) {
@@ -21,8 +29,14 @@ export default function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecoveryMode(true);
+      }
+      if (event === 'SIGNED_IN' && !isRecoveryLink()) {
+        setIsRecoveryMode(false);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -34,6 +48,10 @@ export default function App() {
         Loading TaskFlow...
       </div>
     );
+  }
+
+  if (isRecoveryMode) {
+    return <ResetPasswordScreen onBackToSignIn={() => setIsRecoveryMode(false)} />;
   }
 
   if (!session?.user) {

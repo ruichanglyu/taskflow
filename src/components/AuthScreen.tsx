@@ -12,6 +12,7 @@ export function AuthScreen() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   const title = useMemo(
     () => (mode === 'sign-in' ? 'Sign in to TaskFlow' : 'Create your TaskFlow account'),
@@ -26,6 +27,36 @@ export function AuthScreen() {
     ),
     [mode]
   );
+
+  const handlePasswordReset = async () => {
+    if (!supabase) {
+      setError('Supabase is not configured yet. Add your VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+      return;
+    }
+
+    if (!email.trim()) {
+      setError('Enter your email address first so TaskFlow knows where to send the reset link.');
+      return;
+    }
+
+    setIsResettingPassword(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: window.location.origin,
+      });
+
+      if (resetError) throw resetError;
+
+      setMessage('Password reset email sent. Open the link from your inbox to choose a new password.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send password reset email.');
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -168,13 +199,24 @@ export function AuthScreen() {
 
             <button
               type="submit"
-              disabled={isSubmitting || !isSupabaseConfigured}
+              disabled={isSubmitting || isResettingPassword || !isSupabaseConfigured}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSubmitting && <LoaderCircle size={16} className="animate-spin" />}
               {mode === 'sign-in' ? 'Sign in' : 'Create account'}
             </button>
           </form>
+
+          {mode === 'sign-in' && (
+            <button
+              type="button"
+              onClick={() => void handlePasswordReset()}
+              disabled={isSubmitting || isResettingPassword || !isSupabaseConfigured}
+              className="mt-4 text-sm font-medium text-slate-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isResettingPassword ? 'Sending reset email...' : 'Forgot password?'}
+            </button>
+          )}
 
           <div className="mt-5 text-sm text-slate-400">
             {mode === 'sign-in' ? 'Need an account?' : 'Already have an account?'}{' '}

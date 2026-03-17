@@ -1,6 +1,6 @@
 export type Priority = 'low' | 'medium' | 'high';
 export type TaskStatus = 'todo' | 'in-progress' | 'done';
-export type View = 'dashboard' | 'tasks' | 'projects';
+export type View = 'dashboard' | 'tasks' | 'projects' | 'calendar';
 
 export interface Task {
   id: string;

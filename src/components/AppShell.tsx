@@ -7,6 +7,7 @@ import { Sidebar } from './Sidebar';
 import { Dashboard } from './Dashboard';
 import { TaskBoard } from './TaskBoard';
 import { ProjectList } from './ProjectList';
+import { CalendarView } from './CalendarView';
 import { supabase } from '../lib/supabase';
 import { ThemeSwitcher } from './ThemeSwitcher';
 
@@ -104,6 +105,9 @@ export function AppShell({ user }: AppShellProps) {
               onAddProject={store.addProject}
               onDeleteProject={store.deleteProject}
             />
+          )}
+          {currentView === 'calendar' && (
+            <CalendarView userId={user.id} />
           )}
             </>
           )}

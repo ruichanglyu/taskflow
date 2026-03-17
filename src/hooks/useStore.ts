@@ -23,6 +23,10 @@ function saveToStorage<T>(key: string, data: T): void {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
+function getStorageKey(baseKey: string, userId: string): string {
+  return `${baseKey}:${userId}`;
+}
+
 // Seed data
 const seedProjects: Project[] = [
   { id: 'p1', name: 'Website Redesign', description: 'Revamp the company website with modern design', color: '#6366f1', createdAt: new Date(Date.now() - 7 * 86400000).toISOString() },
@@ -42,12 +46,20 @@ const seedTasks: Task[] = [
   { id: 't9', title: 'API documentation', description: 'Write comprehensive API docs with examples', status: 'done', priority: 'low', projectId: 'p3', createdAt: new Date(Date.now() - 10 * 86400000).toISOString(), dueDate: new Date(Date.now() - 3 * 86400000).toISOString() },
 ];
 
-export function useStore() {
-  const [tasks, setTasks] = useState<Task[]>(() => loadFromStorage(STORAGE_KEY_TASKS, seedTasks));
-  const [projects, setProjects] = useState<Project[]>(() => loadFromStorage(STORAGE_KEY_PROJECTS, seedProjects));
+export function useStore(userId: string) {
+  const taskStorageKey = getStorageKey(STORAGE_KEY_TASKS, userId);
+  const projectStorageKey = getStorageKey(STORAGE_KEY_PROJECTS, userId);
 
-  useEffect(() => { saveToStorage(STORAGE_KEY_TASKS, tasks); }, [tasks]);
-  useEffect(() => { saveToStorage(STORAGE_KEY_PROJECTS, projects); }, [projects]);
+  const [tasks, setTasks] = useState<Task[]>(() => loadFromStorage(taskStorageKey, seedTasks));
+  const [projects, setProjects] = useState<Project[]>(() => loadFromStorage(projectStorageKey, seedProjects));
+
+  useEffect(() => {
+    setTasks(loadFromStorage(taskStorageKey, seedTasks));
+    setProjects(loadFromStorage(projectStorageKey, seedProjects));
+  }, [taskStorageKey, projectStorageKey]);
+
+  useEffect(() => { saveToStorage(taskStorageKey, tasks); }, [taskStorageKey, tasks]);
+  useEffect(() => { saveToStorage(projectStorageKey, projects); }, [projectStorageKey, projects]);
 
   const addTask = useCallback((title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null) => {
     const task: Task = {

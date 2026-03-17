@@ -8,6 +8,7 @@ import { Dashboard } from './Dashboard';
 import { TaskBoard } from './TaskBoard';
 import { ProjectList } from './ProjectList';
 import { supabase } from '../lib/supabase';
+import { ThemeSwitcher } from './ThemeSwitcher';
 
 interface AppShellProps {
   user: User;
@@ -24,7 +25,7 @@ export function AppShell({ user }: AppShellProps) {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-950 text-gray-100">
+    <div className="flex h-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text-primary)]">
       <Sidebar
         currentView={currentView}
         onViewChange={setCurrentView}
@@ -33,30 +34,31 @@ export function AppShell({ user }: AppShellProps) {
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex items-center gap-4 border-b border-gray-800 bg-gray-950/80 px-4 py-4 backdrop-blur-sm sm:px-6">
+        <header className="sticky top-0 z-10 flex items-center gap-4 border-b border-[var(--border-soft)] bg-[var(--bg-app-soft)] px-4 py-4 backdrop-blur-sm sm:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-gray-400 transition-colors hover:text-white lg:hidden"
+            className="text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] lg:hidden"
           >
             <Menu size={22} />
           </button>
           <div className="flex-1" />
-          <div className="hidden items-center gap-2 rounded-full bg-gray-800/60 px-3 py-1.5 sm:flex">
+          <div className="hidden items-center gap-2 rounded-full bg-[var(--surface-muted)] px-3 py-1.5 sm:flex">
             <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-[var(--text-muted)]">
               {store.tasks.filter(task => task.status !== 'done').length} active tasks
             </span>
           </div>
           <div className="flex items-center gap-3">
+            <ThemeSwitcher />
             <div className="hidden text-right sm:block">
-              <p className="text-sm font-medium text-white">
+              <p className="text-sm font-medium text-[var(--text-primary)]">
                 {user.user_metadata.full_name || user.email || 'TaskFlow user'}
               </p>
-              <p className="text-xs text-gray-500">{user.email}</p>
+              <p className="text-xs text-[var(--text-faint)]">{user.email}</p>
             </div>
             <button
               onClick={handleSignOut}
-              className="flex items-center gap-2 rounded-full border border-gray-700 px-3 py-2 text-sm text-gray-300 transition hover:border-gray-600 hover:text-white"
+              className="flex items-center gap-2 rounded-full border border-[var(--border-soft)] px-3 py-2 text-sm text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
             >
               <LogOut size={16} />
               <span className="hidden sm:inline">Log out</span>
@@ -78,7 +80,7 @@ export function AppShell({ user }: AppShellProps) {
           )}
 
           {store.isLoading ? (
-            <div className="flex min-h-[50vh] items-center justify-center rounded-3xl border border-gray-800 bg-gray-900/40 text-sm text-gray-400">
+            <div className="flex min-h-[50vh] items-center justify-center rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-muted)] text-sm text-[var(--text-muted)]">
               Syncing your workspace...
             </div>
           ) : (

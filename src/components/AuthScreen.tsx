@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { LoaderCircle, LockKeyhole, Mail, Rocket } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { ThemeSwitcher } from './ThemeSwitcher';
 
 type AuthMode = 'sign-in' | 'sign-up';
 
@@ -101,33 +102,36 @@ export function AuthScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.18),_transparent_30%),linear-gradient(180deg,_#050816_0%,_#0f172a_100%)] text-white">
+    <div className="min-h-screen text-[var(--text-primary)]" style={{ background: 'var(--bg-auth)' }}>
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center gap-10 px-6 py-12 lg:flex-row lg:items-center lg:gap-16">
         <section className="max-w-xl">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-400/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-indigo-200">
-            <Rocket size={14} />
-            TaskFlow
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--accent-soft)] px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-[var(--accent)]">
+              <Rocket size={14} />
+              TaskFlow
+            </div>
+            <ThemeSwitcher />
           </div>
           <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
             Task management with real accounts, not just one browser.
           </h1>
-          <p className="mt-4 max-w-lg text-base leading-7 text-slate-300">
+          <p className="mt-4 max-w-lg text-base leading-7 text-[var(--text-secondary)]">
             This app now uses Supabase Authentication so each person can keep a separate workspace and stay signed in across devices.
           </p>
-          <div className="mt-8 grid gap-3 text-sm text-slate-300">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="mt-8 grid gap-3 text-sm text-[var(--text-secondary)]">
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
               Email and password authentication is handled by Supabase.
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
               Existing task UI remains intact while data still lives locally per signed-in user.
             </div>
           </div>
         </section>
 
-        <section className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950/80 p-6 shadow-2xl shadow-black/30 backdrop-blur-xl">
+        <section className="w-full max-w-md rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-2xl backdrop-blur-xl" style={{ boxShadow: '0 24px 80px var(--shadow-color)' }}>
           <div className="mb-6">
             <h2 className="text-2xl font-semibold">{title}</h2>
-            <p className="mt-2 text-sm text-slate-400">{subtitle}</p>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">{subtitle}</p>
           </div>
 
           {!isSupabaseConfigured && (
@@ -139,7 +143,7 @@ export function AuthScreen() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'sign-up' && (
               <label className="block">
-                <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+                <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-muted)]">
                   Full name
                 </span>
                 <input
@@ -147,13 +151,13 @@ export function AuthScreen() {
                   value={fullName}
                   onChange={event => setFullName(event.target.value)}
                   placeholder="Jane Doe"
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-indigo-400/60"
+                  className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                 />
               </label>
             )}
 
             <label className="block">
-              <span className="mb-1.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+              <span className="mb-1.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-muted)]">
                 <Mail size={14} />
                 Email
               </span>
@@ -163,13 +167,13 @@ export function AuthScreen() {
                 onChange={event => setEmail(event.target.value)}
                 placeholder="you@example.com"
                 autoComplete="email"
-                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-indigo-400/60"
+                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                 required
               />
             </label>
 
             <label className="block">
-              <span className="mb-1.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+              <span className="mb-1.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-muted)]">
                 <LockKeyhole size={14} />
                 Password
               </span>
@@ -179,7 +183,7 @@ export function AuthScreen() {
                 onChange={event => setPassword(event.target.value)}
                 placeholder="At least 6 characters"
                 autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
-                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-indigo-400/60"
+                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                 minLength={6}
                 required
               />
@@ -200,7 +204,8 @@ export function AuthScreen() {
             <button
               type="submit"
               disabled={isSubmitting || isResettingPassword || !isSupabaseConfigured}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-500 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ backgroundColor: 'var(--accent-strong)' }}
             >
               {isSubmitting && <LoaderCircle size={16} className="animate-spin" />}
               {mode === 'sign-in' ? 'Sign in' : 'Create account'}
@@ -212,13 +217,13 @@ export function AuthScreen() {
               type="button"
               onClick={() => void handlePasswordReset()}
               disabled={isSubmitting || isResettingPassword || !isSupabaseConfigured}
-              className="mt-4 text-sm font-medium text-slate-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-4 text-sm font-medium text-[var(--text-secondary)] transition hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isResettingPassword ? 'Sending reset email...' : 'Forgot password?'}
             </button>
           )}
 
-          <div className="mt-5 text-sm text-slate-400">
+          <div className="mt-5 text-sm text-[var(--text-muted)]">
             {mode === 'sign-in' ? 'Need an account?' : 'Already have an account?'}{' '}
             <button
               type="button"
@@ -227,7 +232,7 @@ export function AuthScreen() {
                 setError(null);
                 setMessage(null);
               }}
-              className="font-medium text-indigo-300 transition hover:text-indigo-200"
+              className="font-medium text-[var(--accent)] transition hover:opacity-80"
             >
               {mode === 'sign-in' ? 'Create one' : 'Sign in instead'}
             </button>

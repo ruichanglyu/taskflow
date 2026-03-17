@@ -44,7 +44,7 @@ export default function App() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-950 text-sm text-gray-400">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-app)] text-sm text-[var(--text-muted)]">
         Loading TaskFlow...
       </div>
     );

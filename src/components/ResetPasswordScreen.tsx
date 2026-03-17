@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { CheckCircle2, KeyRound, LoaderCircle, ShieldCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { ThemeSwitcher } from './ThemeSwitcher';
 
 interface ResetPasswordScreenProps {
   onBackToSignIn: () => void;
@@ -51,30 +52,33 @@ export function ResetPasswordScreen({ onBackToSignIn }: ResetPasswordScreenProps
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.18),_transparent_30%),linear-gradient(180deg,_#050816_0%,_#0f172a_100%)] text-white">
+    <div className="min-h-screen text-[var(--text-primary)]" style={{ background: 'var(--bg-auth)' }}>
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center gap-10 px-6 py-12 lg:flex-row lg:items-center lg:gap-16">
         <section className="max-w-xl">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-emerald-200">
-            <ShieldCheck size={14} />
-            Secure Reset
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--accent-soft)] px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-[var(--accent)]">
+              <ShieldCheck size={14} />
+              Secure Reset
+            </div>
+            <ThemeSwitcher />
           </div>
           <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
             Set a new password and get back into your workspace.
           </h1>
-          <p className="mt-4 max-w-lg text-base leading-7 text-slate-300">
+          <p className="mt-4 max-w-lg text-base leading-7 text-[var(--text-secondary)]">
             This screen appears only from a valid Supabase recovery link. Once you save the new password, your account is updated immediately.
           </p>
         </section>
 
-        <section className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950/80 p-6 shadow-2xl shadow-black/30 backdrop-blur-xl">
+        <section className="w-full max-w-md rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-2xl backdrop-blur-xl" style={{ boxShadow: '0 24px 80px var(--shadow-color)' }}>
           <div className="mb-6">
             <h2 className="text-2xl font-semibold">Reset password</h2>
-            <p className="mt-2 text-sm text-slate-400">Choose a new password for your TaskFlow account.</p>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">Choose a new password for your TaskFlow account.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <label className="block">
-              <span className="mb-1.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+              <span className="mb-1.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-muted)]">
                 <KeyRound size={14} />
                 New password
               </span>
@@ -84,14 +88,14 @@ export function ResetPasswordScreen({ onBackToSignIn }: ResetPasswordScreenProps
                 onChange={event => setPassword(event.target.value)}
                 placeholder="At least 6 characters"
                 autoComplete="new-password"
-                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400/60"
+                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                 minLength={6}
                 required
               />
             </label>
 
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+              <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.2em] text-[var(--text-muted)]">
                 Confirm password
               </span>
               <input
@@ -100,7 +104,7 @@ export function ResetPasswordScreen({ onBackToSignIn }: ResetPasswordScreenProps
                 onChange={event => setConfirmPassword(event.target.value)}
                 placeholder="Repeat your new password"
                 autoComplete="new-password"
-                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-400/60"
+                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                 minLength={6}
                 required
               />
@@ -124,7 +128,8 @@ export function ResetPasswordScreen({ onBackToSignIn }: ResetPasswordScreenProps
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-medium text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ backgroundColor: 'var(--accent-strong)' }}
             >
               {isSubmitting && <LoaderCircle size={16} className="animate-spin" />}
               Update password
@@ -134,7 +139,7 @@ export function ResetPasswordScreen({ onBackToSignIn }: ResetPasswordScreenProps
           <button
             type="button"
             onClick={onBackToSignIn}
-            className="mt-5 text-sm font-medium text-emerald-300 transition hover:text-emerald-200"
+            className="mt-5 text-sm font-medium text-[var(--accent)] transition hover:opacity-80"
           >
             Back to sign in
           </button>

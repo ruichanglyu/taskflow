@@ -1,5 +1,97 @@
 @import "tailwindcss";
 
+:root {
+  --bg-app: #030712;
+  --bg-app-soft: rgba(3, 7, 18, 0.82);
+  --bg-auth: radial-gradient(circle at top, rgba(99, 102, 241, 0.18), transparent 30%), linear-gradient(180deg, #050816 0%, #0f172a 100%);
+  --surface: #111827;
+  --surface-muted: rgba(31, 41, 55, 0.75);
+  --surface-strong: #0f172a;
+  --surface-elevated: rgba(17, 24, 39, 0.88);
+  --border-soft: rgba(55, 65, 81, 0.9);
+  --border-strong: rgba(75, 85, 99, 0.9);
+  --text-primary: #f8fafc;
+  --text-secondary: #e5e7eb;
+  --text-muted: #94a3b8;
+  --text-faint: #64748b;
+  --accent: #818cf8;
+  --accent-strong: #6366f1;
+  --accent-soft: rgba(129, 140, 248, 0.18);
+  --accent-contrast: #ffffff;
+  --sidebar-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --avatar-gradient: linear-gradient(135deg, #6366f1 0%, #ec4899 100%);
+  --shadow-color: rgba(0, 0, 0, 0.3);
+}
+
+:root[data-theme="blush"] {
+  --bg-app: #1f1020;
+  --bg-app-soft: rgba(31, 16, 32, 0.84);
+  --bg-auth: radial-gradient(circle at top, rgba(244, 114, 182, 0.22), transparent 32%), linear-gradient(180deg, #2a1326 0%, #4a1d3c 100%);
+  --surface: #3b1d35;
+  --surface-muted: rgba(88, 28, 61, 0.72);
+  --surface-strong: #2a1326;
+  --surface-elevated: rgba(59, 29, 53, 0.9);
+  --border-soft: rgba(251, 207, 232, 0.18);
+  --border-strong: rgba(244, 114, 182, 0.35);
+  --text-primary: #fff7fb;
+  --text-secondary: #ffe4ef;
+  --text-muted: #f9a8d4;
+  --text-faint: #f472b6;
+  --accent: #f472b6;
+  --accent-strong: #ec4899;
+  --accent-soft: rgba(244, 114, 182, 0.18);
+  --accent-contrast: #fff7fb;
+  --sidebar-gradient: linear-gradient(135deg, #f472b6 0%, #fb7185 100%);
+  --avatar-gradient: linear-gradient(135deg, #ec4899 0%, #fb7185 100%);
+  --shadow-color: rgba(42, 19, 38, 0.38);
+}
+
+:root[data-theme="ocean"] {
+  --bg-app: #071722;
+  --bg-app-soft: rgba(7, 23, 34, 0.84);
+  --bg-auth: radial-gradient(circle at top, rgba(56, 189, 248, 0.22), transparent 32%), linear-gradient(180deg, #06131d 0%, #0f2f43 100%);
+  --surface: #102838;
+  --surface-muted: rgba(15, 44, 63, 0.74);
+  --surface-strong: #0b1d2a;
+  --surface-elevated: rgba(16, 40, 56, 0.92);
+  --border-soft: rgba(125, 211, 252, 0.16);
+  --border-strong: rgba(56, 189, 248, 0.35);
+  --text-primary: #f0f9ff;
+  --text-secondary: #dbeafe;
+  --text-muted: #93c5fd;
+  --text-faint: #60a5fa;
+  --accent: #38bdf8;
+  --accent-strong: #0ea5e9;
+  --accent-soft: rgba(56, 189, 248, 0.16);
+  --accent-contrast: #eff6ff;
+  --sidebar-gradient: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
+  --avatar-gradient: linear-gradient(135deg, #0ea5e9 0%, #14b8a6 100%);
+  --shadow-color: rgba(6, 19, 29, 0.4);
+}
+
+:root[data-theme="paper"] {
+  --bg-app: #f6f0e8;
+  --bg-app-soft: rgba(246, 240, 232, 0.88);
+  --bg-auth: radial-gradient(circle at top, rgba(59, 130, 246, 0.16), transparent 28%), linear-gradient(180deg, #f9f5ef 0%, #efe4d2 100%);
+  --surface: #fffaf2;
+  --surface-muted: rgba(243, 232, 213, 0.86);
+  --surface-strong: #fffdf9;
+  --surface-elevated: rgba(255, 250, 242, 0.96);
+  --border-soft: rgba(120, 113, 108, 0.18);
+  --border-strong: rgba(59, 130, 246, 0.22);
+  --text-primary: #1c1917;
+  --text-secondary: #292524;
+  --text-muted: #57534e;
+  --text-faint: #78716c;
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-soft: rgba(37, 99, 235, 0.12);
+  --accent-contrast: #ffffff;
+  --sidebar-gradient: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
+  --avatar-gradient: linear-gradient(135deg, #1d4ed8 0%, #0284c7 100%);
+  --shadow-color: rgba(120, 113, 108, 0.16);
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -10,17 +102,32 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #374151;
+  background: var(--text-faint);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4b5563;
+  background: var(--text-muted);
 }
 
 /* Smooth transitions */
 * {
-  scrollbar-color: #374151 transparent;
+  scrollbar-color: var(--text-faint) transparent;
+}
+
+html, body, #root {
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg-app);
+  color: var(--text-primary);
+}
+
+* {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 180ms;
+  transition-timing-function: ease;
 }
 
 /* Animate pulse for status dot */

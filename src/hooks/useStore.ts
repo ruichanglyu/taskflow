@@ -1,14 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Task, Project, TaskStatus, Priority } from '../types';
+import { supabase } from '../lib/supabase';
 
 const PROJECT_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
 
 const STORAGE_KEY_TASKS = 'taskflow_tasks';
 const STORAGE_KEY_PROJECTS = 'taskflow_projects';
-
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-}
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -25,6 +22,57 @@ function saveToStorage<T>(key: string, data: T): void {
 
 function getStorageKey(baseKey: string, userId: string): string {
   return `${baseKey}:${userId}`;
+}
+
+interface ProjectRow {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  created_at: string;
+}
+
+interface TaskRow {
+  id: string;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: Priority;
+  project_id: string | null;
+  created_at: string;
+  due_date: string | null;
+}
+
+function mapProject(row: ProjectRow): Project {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    color: row.color,
+    createdAt: row.created_at,
+  };
+}
+
+function mapTask(row: TaskRow): Task {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    status: row.status,
+    priority: row.priority,
+    projectId: row.project_id,
+    createdAt: row.created_at,
+    dueDate: row.due_date,
+  };
+}
+
+function getStoredSnapshot<T>(baseKey: string, userId: string): T | null {
+  const userScoped = loadFromStorage<T | null>(getStorageKey(baseKey, userId), null);
+  if (userScoped !== null) {
+    return userScoped;
+  }
+
+  return loadFromStorage<T | null>(baseKey, null);
 }
 
 // Seed data
@@ -49,55 +97,272 @@ const seedTasks: Task[] = [
 export function useStore(userId: string) {
   const taskStorageKey = getStorageKey(STORAGE_KEY_TASKS, userId);
   const projectStorageKey = getStorageKey(STORAGE_KEY_PROJECTS, userId);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [tasks, setTasks] = useState<Task[]>(() => loadFromStorage(taskStorageKey, seedTasks));
-  const [projects, setProjects] = useState<Project[]>(() => loadFromStorage(projectStorageKey, seedProjects));
+  const persistLocalSnapshot = useCallback((nextProjects: Project[], nextTasks: Task[]) => {
+    saveToStorage(projectStorageKey, nextProjects);
+    saveToStorage(taskStorageKey, nextTasks);
+  }, [projectStorageKey, taskStorageKey]);
+
+  const clearError = useCallback(() => setError(null), []);
+
+  const loadData = useCallback(async () => {
+    if (!supabase) {
+      setError('Supabase is not configured.');
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const [{ data: projectRows, error: projectError }, { data: taskRows, error: taskError }] = await Promise.all([
+        supabase
+          .from('projects')
+          .select('id, name, description, color, created_at')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('tasks')
+          .select('id, title, description, status, priority, project_id, created_at, due_date')
+          .order('created_at', { ascending: false }),
+      ]);
+
+      if (projectError) throw projectError;
+      if (taskError) throw taskError;
+
+      let nextProjects = (projectRows ?? []).map(mapProject);
+      let nextTasks = (taskRows ?? []).map(mapTask);
+
+      if (nextProjects.length === 0 && nextTasks.length === 0) {
+        const storedProjects = getStoredSnapshot<Project[]>(STORAGE_KEY_PROJECTS, userId);
+        const storedTasks = getStoredSnapshot<Task[]>(STORAGE_KEY_TASKS, userId);
+        const legacyProjects = storedProjects ?? seedProjects;
+        const legacyTasks = storedTasks ?? seedTasks;
+        const projectIdMap = new Map<string, string>();
+
+        if (legacyProjects.length > 0) {
+          const { data: insertedProjects, error: importProjectError } = await supabase
+            .from('projects')
+            .insert(
+              legacyProjects.map(project => ({
+                user_id: userId,
+                name: project.name,
+                description: project.description,
+                color: project.color,
+                created_at: project.createdAt,
+              }))
+            )
+            .select('id, name, description, color, created_at');
+
+          if (importProjectError) throw importProjectError;
+
+          legacyProjects.forEach((project, index) => {
+            const insertedProject = insertedProjects?.[index];
+            if (insertedProject) {
+              projectIdMap.set(project.id, insertedProject.id);
+            }
+          });
+        }
+
+        if (legacyTasks.length > 0) {
+          const { error: importTaskError } = await supabase.from('tasks').insert(
+            legacyTasks.map(task => ({
+              user_id: userId,
+              project_id: task.projectId ? projectIdMap.get(task.projectId) ?? null : null,
+              title: task.title,
+              description: task.description,
+              status: task.status,
+              priority: task.priority,
+              due_date: task.dueDate,
+              created_at: task.createdAt,
+            }))
+          );
+
+          if (importTaskError) throw importTaskError;
+        }
+
+        if (legacyProjects.length > 0 || legacyTasks.length > 0) {
+          const [{ data: importedProjects, error: reloadedProjectError }, { data: importedTasks, error: reloadedTaskError }] = await Promise.all([
+            supabase
+              .from('projects')
+              .select('id, name, description, color, created_at')
+              .order('created_at', { ascending: false }),
+            supabase
+              .from('tasks')
+              .select('id, title, description, status, priority, project_id, created_at, due_date')
+              .order('created_at', { ascending: false }),
+          ]);
+
+          if (reloadedProjectError) throw reloadedProjectError;
+          if (reloadedTaskError) throw reloadedTaskError;
+
+          nextProjects = (importedProjects ?? []).map(mapProject);
+          nextTasks = (importedTasks ?? []).map(mapTask);
+        }
+      }
+
+      setProjects(nextProjects);
+      setTasks(nextTasks);
+      persistLocalSnapshot(nextProjects, nextTasks);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load data from Supabase.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [persistLocalSnapshot, userId]);
 
   useEffect(() => {
-    setTasks(loadFromStorage(taskStorageKey, seedTasks));
-    setProjects(loadFromStorage(projectStorageKey, seedProjects));
-  }, [taskStorageKey, projectStorageKey]);
+    void loadData();
+  }, [loadData]);
 
-  useEffect(() => { saveToStorage(taskStorageKey, tasks); }, [taskStorageKey, tasks]);
-  useEffect(() => { saveToStorage(projectStorageKey, projects); }, [projectStorageKey, projects]);
+  const addTask = useCallback(async (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null) => {
+    if (!supabase) return;
 
-  const addTask = useCallback((title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null) => {
-    const task: Task = {
-      id: generateId(),
-      title,
-      description,
-      status: 'todo',
-      priority,
-      projectId,
-      createdAt: new Date().toISOString(),
-      dueDate,
-    };
-    setTasks(prev => [task, ...prev]);
-  }, []);
+    setError(null);
 
-  const updateTaskStatus = useCallback((id: string, status: TaskStatus) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, status } : t));
-  }, []);
+    try {
+      const { data, error: insertError } = await supabase
+        .from('tasks')
+        .insert({
+          user_id: userId,
+          title,
+          description,
+          status: 'todo',
+          priority,
+          project_id: projectId,
+          due_date: dueDate,
+        })
+        .select('id, title, description, status, priority, project_id, created_at, due_date')
+        .single();
 
-  const deleteTask = useCallback((id: string) => {
-    setTasks(prev => prev.filter(t => t.id !== id));
-  }, []);
+      if (insertError) throw insertError;
 
-  const addProject = useCallback((name: string, description: string) => {
-    const project: Project = {
-      id: generateId(),
-      name,
-      description,
-      color: PROJECT_COLORS[projects.length % PROJECT_COLORS.length],
-      createdAt: new Date().toISOString(),
-    };
-    setProjects(prev => [project, ...prev]);
-  }, [projects.length]);
+      setTasks(prev => {
+        const nextTasks = [mapTask(data), ...prev];
+        persistLocalSnapshot(projects, nextTasks);
+        return nextTasks;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create task.');
+    }
+  }, [persistLocalSnapshot, projects, userId]);
 
-  const deleteProject = useCallback((id: string) => {
-    setProjects(prev => prev.filter(p => p.id !== id));
-    setTasks(prev => prev.map(t => t.projectId === id ? { ...t, projectId: null } : t));
-  }, []);
+  const updateTaskStatus = useCallback(async (id: string, status: TaskStatus) => {
+    if (!supabase) return;
 
-  return { tasks, projects, addTask, updateTaskStatus, deleteTask, addProject, deleteProject };
+    setError(null);
+
+    try {
+      const { error: updateError } = await supabase
+        .from('tasks')
+        .update({ status })
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      if (updateError) throw updateError;
+
+      setTasks(prev => {
+        const nextTasks = prev.map(task => task.id === id ? { ...task, status } : task);
+        persistLocalSnapshot(projects, nextTasks);
+        return nextTasks;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update task.');
+    }
+  }, [persistLocalSnapshot, projects, userId]);
+
+  const deleteTask = useCallback(async (id: string) => {
+    if (!supabase) return;
+
+    setError(null);
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      if (deleteError) throw deleteError;
+
+      setTasks(prev => {
+        const nextTasks = prev.filter(task => task.id !== id);
+        persistLocalSnapshot(projects, nextTasks);
+        return nextTasks;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete task.');
+    }
+  }, [persistLocalSnapshot, projects, userId]);
+
+  const addProject = useCallback(async (name: string, description: string) => {
+    if (!supabase) return;
+
+    setError(null);
+
+    try {
+      const { data, error: insertError } = await supabase
+        .from('projects')
+        .insert({
+          user_id: userId,
+          name,
+          description,
+          color: PROJECT_COLORS[projects.length % PROJECT_COLORS.length],
+        })
+        .select('id, name, description, color, created_at')
+        .single();
+
+      if (insertError) throw insertError;
+
+      setProjects(prev => {
+        const nextProjects = [mapProject(data), ...prev];
+        persistLocalSnapshot(nextProjects, tasks);
+        return nextProjects;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create project.');
+    }
+  }, [persistLocalSnapshot, projects.length, tasks, userId]);
+
+  const deleteProject = useCallback(async (id: string) => {
+    if (!supabase) return;
+
+    setError(null);
+
+    try {
+      const { error: orphanError } = await supabase
+        .from('tasks')
+        .update({ project_id: null })
+        .eq('project_id', id)
+        .eq('user_id', userId);
+
+      if (orphanError) throw orphanError;
+
+      const { error: deleteError } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      if (deleteError) throw deleteError;
+
+      setProjects(prev => {
+        const nextProjects = prev.filter(project => project.id !== id);
+        setTasks(currentTasks => {
+          const nextTasks = currentTasks.map(task => task.projectId === id ? { ...task, projectId: null } : task);
+          persistLocalSnapshot(nextProjects, nextTasks);
+          return nextTasks;
+        });
+        return nextProjects;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete project.');
+    }
+  }, [persistLocalSnapshot, userId]);
+
+  return { tasks, projects, isLoading, error, clearError, loadData, addTask, updateTaskStatus, deleteTask, addProject, deleteProject };
 }

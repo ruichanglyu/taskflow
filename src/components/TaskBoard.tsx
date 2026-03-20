@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { Plus, Trash2, ChevronDown, Search, Filter } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, Search, Filter, Pencil } from 'lucide-react';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Task, Project, TaskStatus, Priority } from '../types';
 import { cn } from '../utils/cn';
 import { AddTaskModal } from './AddTaskModal';
+import { EditTaskModal } from './EditTaskModal';
 
 interface TaskBoardProps {
   tasks: Task[];
   projects: Project[];
   onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null) => void;
   onUpdateStatus: (id: string, status: TaskStatus) => void;
+  onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null }) => Promise<boolean>;
   onDeleteTask: (id: string) => void;
 }
 
@@ -28,11 +31,13 @@ function TaskCard({
   task,
   projects,
   onUpdateStatus,
+  onEdit,
   onDelete,
 }: {
   task: Task;
   projects: Project[];
   onUpdateStatus: (id: string, status: TaskStatus) => void;
+  onEdit: (task: Task) => void;
   onDelete: (id: string) => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
@@ -48,7 +53,13 @@ function TaskCard({
     <div className="group rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4 transition-all hover:border-[var(--border-strong)]">
       <div className="flex items-start justify-between gap-2">
         <h4 className="text-sm font-medium leading-snug text-[var(--text-primary)]">{task.title}</h4>
-        <div className="relative">
+        <div className="relative flex items-center gap-0.5">
+          <button
+            onClick={() => onEdit(task)}
+            className="p-1 text-[var(--text-faint)] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[var(--text-secondary)]"
+          >
+            <Pencil size={13} />
+          </button>
           <button
             onClick={() => setShowMenu(!showMenu)}
             className="p-1 text-[var(--text-faint)] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[var(--text-secondary)]"
@@ -110,8 +121,9 @@ function TaskCard({
   );
 }
 
-export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onDeleteTask }: TaskBoardProps) {
+export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onUpdateTask, onDeleteTask }: TaskBoardProps) {
   const [showModal, setShowModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [search, setSearch] = useState('');
   const [filterPriority, setFilterPriority] = useState<Priority | 'all'>('all');
   const [filterProject, setFilterProject] = useState<string>('all');
@@ -123,6 +135,16 @@ export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onDelete
     return matchesSearch && matchesPriority && matchesProject;
   });
 
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    const newStatus = result.destination.droppableId as TaskStatus;
+    const taskId = result.draggableId;
+    const task = tasks.find(t => t.id === taskId);
+    if (task && task.status !== newStatus) {
+      onUpdateStatus(taskId, newStatus);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -132,7 +154,7 @@ export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onDelete
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="self-start rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors"
+          className="flex items-center gap-2 self-start rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors"
           style={{ backgroundColor: 'var(--accent-strong)' }}
         >
           <Plus size={16} /> New Task
@@ -178,37 +200,77 @@ export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onDelete
         </div>
       </div>
 
-      {/* Kanban Columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {statusColumns.map(col => {
-          const columnTasks = filteredTasks.filter(t => t.status === col.status);
-          return (
-            <div key={col.status} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <div className={cn('w-2.5 h-2.5 rounded-full', col.dotColor)} />
-                <h3 className="text-sm font-semibold text-[var(--text-secondary)]">{col.label}</h3>
-                <span className="ml-auto rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-xs text-[var(--text-faint)]">{columnTasks.length}</span>
+      {/* Kanban Columns with Drag & Drop */}
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {statusColumns.map(col => {
+            const columnTasks = filteredTasks.filter(t => t.status === col.status);
+            return (
+              <div key={col.status} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className={cn('w-2.5 h-2.5 rounded-full', col.dotColor)} />
+                  <h3 className="text-sm font-semibold text-[var(--text-secondary)]">{col.label}</h3>
+                  <span className="ml-auto rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-xs text-[var(--text-faint)]">{columnTasks.length}</span>
+                </div>
+                <Droppable droppableId={col.status}>
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className={cn(
+                        'space-y-3 min-h-[120px] rounded-lg transition-colors',
+                        snapshot.isDraggingOver && 'bg-[var(--accent-soft)]/30'
+                      )}
+                    >
+                      {columnTasks.map((task, index) => (
+                        <Draggable key={task.id} draggableId={task.id} index={index}>
+                          {(dragProvided, dragSnapshot) => (
+                            <div
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              {...dragProvided.dragHandleProps}
+                              className={cn(dragSnapshot.isDragging && 'opacity-90')}
+                            >
+                              <TaskCard
+                                task={task}
+                                projects={projects}
+                                onUpdateStatus={onUpdateStatus}
+                                onEdit={setEditingTask}
+                                onDelete={onDeleteTask}
+                              />
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                      {columnTasks.length === 0 && !snapshot.isDraggingOver && (
+                        <div className="flex h-24 items-center justify-center rounded-lg border-2 border-dashed border-[var(--border-soft)]">
+                          <p className="text-xs text-[var(--text-faint)]">No tasks</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Droppable>
               </div>
-              <div className="space-y-3 min-h-[120px]">
-                {columnTasks.map(task => (
-                  <TaskCard key={task.id} task={task} projects={projects} onUpdateStatus={onUpdateStatus} onDelete={onDeleteTask} />
-                ))}
-                {columnTasks.length === 0 && (
-                  <div className="flex h-24 items-center justify-center rounded-lg border-2 border-dashed border-[var(--border-soft)]">
-                    <p className="text-xs text-[var(--text-faint)]">No tasks</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      </DragDropContext>
 
       {showModal && (
         <AddTaskModal
           projects={projects}
           onAdd={(title, desc, priority, projectId, dueDate) => { onAddTask(title, desc, priority, projectId, dueDate); setShowModal(false); }}
           onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {editingTask && (
+        <EditTaskModal
+          task={editingTask}
+          projects={projects}
+          onSave={async (id, updates) => { const ok = await onUpdateTask(id, updates); if (ok) setEditingTask(null); }}
+          onClose={() => setEditingTask(null)}
         />
       )}
     </div>

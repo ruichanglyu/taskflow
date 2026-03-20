@@ -140,6 +140,11 @@ body {
   }
 }
 
+/* Cursor fix for interactive elements */
+button, select, [role="button"] {
+  cursor: pointer;
+}
+
 /* Date input styling */
 input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(0.5);

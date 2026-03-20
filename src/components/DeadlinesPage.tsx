@@ -131,7 +131,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onUpdate, onD
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-medium text-[var(--accent-contrast)]"
+            className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-medium text-[var(--accent-contrast)] cursor-pointer"
             style={{ backgroundColor: 'var(--accent-strong)' }}
           >
             <Plus size={14} />

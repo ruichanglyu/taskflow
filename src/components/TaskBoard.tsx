@@ -11,7 +11,7 @@ interface TaskBoardProps {
   projects: Project[];
   onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null) => void;
   onUpdateStatus: (id: string, status: TaskStatus) => void;
-  onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null }) => void;
+  onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null }) => Promise<boolean>;
   onDeleteTask: (id: string) => void;
 }
 
@@ -269,7 +269,7 @@ export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onUpdate
         <EditTaskModal
           task={editingTask}
           projects={projects}
-          onSave={(id, updates) => { onUpdateTask(id, updates); setEditingTask(null); }}
+          onSave={async (id, updates) => { const ok = await onUpdateTask(id, updates); if (ok) setEditingTask(null); }}
           onClose={() => setEditingTask(null)}
         />
       )}

@@ -275,8 +275,8 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, projects, userId]);
 
-  const updateTask = useCallback(async (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null }) => {
-    if (!supabase) return;
+  const updateTask = useCallback(async (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null }): Promise<boolean> => {
+    if (!supabase) return false;
 
     setError(null);
 
@@ -301,8 +301,10 @@ export function useStore(userId: string) {
         persistLocalSnapshot(projects, nextTasks);
         return nextTasks;
       });
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update task.');
+      return false;
     }
   }, [persistLocalSnapshot, projects, userId]);
 

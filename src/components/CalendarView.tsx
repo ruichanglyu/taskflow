@@ -1,5 +1,7 @@
-import { CalendarDays, ExternalLink, RefreshCcw, Unplug } from 'lucide-react';
+import { useState } from 'react';
+import { CalendarDays, ExternalLink, Plus, RefreshCcw, Trash2, Unplug } from 'lucide-react';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
+import { CreateEventModal } from './CreateEventModal';
 
 function getEventStartLabel(date?: { date?: string; dateTime?: string }) {
   if (!date) return 'No start time';
@@ -49,6 +51,8 @@ interface CalendarViewProps {
 
 export function CalendarView({ userId }: CalendarViewProps) {
   const calendar = useGoogleCalendar(userId);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const groupedEvents = calendar.events.reduce<Record<string, typeof calendar.events>>((groups, event) => {
     const key = getEventSectionLabel(event.start);
@@ -57,19 +61,34 @@ export function CalendarView({ userId }: CalendarViewProps) {
     return groups;
   }, {});
 
+  const handleDelete = async (eventId: string) => {
+    setDeletingId(eventId);
+    await calendar.deleteEvent(eventId);
+    setDeletingId(null);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">Calendar</h1>
           <p className="mt-1 text-[var(--text-muted)]">
-            Read your Google Calendar inside TaskFlow so your schedule and tasks live in one place.
+            View and create Google Calendar events from TaskFlow.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           {calendar.isConnected ? (
             <>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)]"
+                style={{ backgroundColor: 'var(--accent-strong)' }}
+              >
+                <Plus size={16} />
+                New Event
+              </button>
               <button
                 type="button"
                 onClick={() => void calendar.refresh()}
@@ -122,7 +141,7 @@ export function CalendarView({ userId }: CalendarViewProps) {
 
           {!calendar.isConnected ? (
             <div className="mt-6 rounded-xl border border-dashed border-[var(--border-soft)] p-4 text-sm text-[var(--text-muted)]">
-              Connect your Google account to see upcoming events here. This first version is read-only.
+              Connect your Google account to view and create events here.
             </div>
           ) : (
             <div className="mt-5 space-y-4">
@@ -147,7 +166,7 @@ export function CalendarView({ userId }: CalendarViewProps) {
               <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Mode</p>
                 <p className="mt-2 text-sm text-[var(--text-secondary)]">
-                  Google Calendar is connected in read-only mode for now. Your events show here, but TaskFlow will not edit Google yet.
+                  Read &amp; write — you can view events, create new ones, and delete existing ones from TaskFlow.
                 </p>
               </div>
             </div>
@@ -168,8 +187,15 @@ export function CalendarView({ userId }: CalendarViewProps) {
               Connect Google Calendar to populate this view.
             </div>
           ) : calendar.events.length === 0 && !calendar.isLoading ? (
-            <div className="mt-6 flex min-h-[320px] items-center justify-center rounded-xl border border-dashed border-[var(--border-soft)] text-sm text-[var(--text-muted)]">
-              No upcoming events found for this calendar.
+            <div className="mt-6 flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[var(--border-soft)] text-sm text-[var(--text-muted)]">
+              <p>No upcoming events found for this calendar.</p>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent)] transition hover:bg-[var(--accent-soft)]"
+              >
+                <Plus size={14} /> Create your first event
+              </button>
             </div>
           ) : (
             <div className="mt-6 space-y-6">
@@ -180,7 +206,7 @@ export function CalendarView({ userId }: CalendarViewProps) {
                     {events.map(event => (
                       <article
                         key={event.id}
-                        className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4"
+                        className="group rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4"
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div className="min-w-0">
@@ -199,16 +225,26 @@ export function CalendarView({ userId }: CalendarViewProps) {
                               </p>
                             )}
                           </div>
-                          {event.htmlLink && (
-                            <a
-                              href={event.htmlLink}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="shrink-0 rounded-full border border-[var(--border-soft)] p-2 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => void handleDelete(event.id)}
+                              disabled={deletingId === event.id}
+                              className="rounded-full border border-[var(--border-soft)] p-2 text-[var(--text-faint)] opacity-0 transition group-hover:opacity-100 hover:border-red-500/30 hover:text-red-400 disabled:opacity-50"
                             >
-                              <ExternalLink size={14} />
-                            </a>
-                          )}
+                              <Trash2 size={14} />
+                            </button>
+                            {event.htmlLink && (
+                              <a
+                                href={event.htmlLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-full border border-[var(--border-soft)] p-2 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+                              >
+                                <ExternalLink size={14} />
+                              </a>
+                            )}
+                          </div>
                         </div>
                       </article>
                     ))}
@@ -219,6 +255,13 @@ export function CalendarView({ userId }: CalendarViewProps) {
           )}
         </section>
       </div>
+
+      {showCreateModal && (
+        <CreateEventModal
+          onSave={calendar.createEvent}
+          onClose={() => setShowCreateModal(false)}
+        />
+      )}
     </div>
   );
 }

@@ -3,16 +3,17 @@ import { X } from 'lucide-react';
 import { NewGoogleCalendarEvent } from '../lib/googleCalendar';
 
 interface CreateEventModalProps {
+  initialDate?: string;
   onSave: (event: NewGoogleCalendarEvent) => Promise<boolean>;
   onClose: () => void;
 }
 
-export function CreateEventModal({ onSave, onClose }: CreateEventModalProps) {
+export function CreateEventModal({ initialDate, onSave, onClose }: CreateEventModalProps) {
   const [summary, setSummary] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [allDay, setAllDay] = useState(false);
-  const [startDate, setStartDate] = useState('');
+  const [startDate, setStartDate] = useState(initialDate ?? '');
   const [startTime, setStartTime] = useState('09:00');
   const [endDate, setEndDate] = useState('');
   const [endTime, setEndTime] = useState('10:00');

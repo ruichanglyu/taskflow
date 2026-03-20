@@ -7,6 +7,8 @@ interface SidebarProps {
   onViewChange: (view: View) => void;
   isOpen: boolean;
   onClose: () => void;
+  userEmail?: string;
+  userName?: string;
 }
 
 const navItems: { view: View; label: string; icon: React.ReactNode }[] = [
@@ -16,7 +18,9 @@ const navItems: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: 'calendar', label: 'Calendar', icon: <CalendarDays size={20} /> },
 ];
 
-export function Sidebar({ currentView, onViewChange, isOpen, onClose }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail, userName }: SidebarProps) {
+  const displayName = userName || (userEmail ? userEmail.split('@')[0] : 'User');
+  const avatarInitial = displayName.charAt(0).toUpperCase();
   return (
     <>
       {/* Mobile overlay */}
@@ -66,11 +70,11 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose }: SidebarP
         <div className="border-t border-[var(--border-soft)] px-4 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white" style={{ backgroundImage: 'var(--avatar-gradient)' }}>
-              U
+              {avatarInitial}
             </div>
-            <div>
-              <p className="text-sm font-medium text-[var(--text-primary)]">User</p>
-              <p className="text-xs text-[var(--text-faint)]">Free Plan</p>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-[var(--text-primary)] truncate">{displayName}</p>
+              {userEmail && <p className="text-xs text-[var(--text-faint)] truncate">{userEmail}</p>}
             </div>
           </div>
         </div>

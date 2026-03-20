@@ -65,7 +65,7 @@ export function Dashboard({ tasks, projects }: DashboardProps) {
         <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp size={18} className="text-indigo-400" />
-            <h3 className="text-sm font-semibold text-white">Completion Rate</h3>
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Completion Rate</h3>
           </div>
           <div className="flex items-center justify-center py-4">
             <div className="relative w-32 h-32">
@@ -78,7 +78,7 @@ export function Dashboard({ tasks, projects }: DashboardProps) {
                 />
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-2xl font-bold text-white">{completionRate}%</span>
+                <span className="text-2xl font-bold text-[var(--text-primary)]">{completionRate}%</span>
               </div>
             </div>
           </div>
@@ -116,7 +116,7 @@ export function Dashboard({ tasks, projects }: DashboardProps) {
       <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
         <div className="flex items-center gap-2 mb-4">
           <FolderKanban size={18} className="text-indigo-400" />
-          <h3 className="text-sm font-semibold text-white">Projects Overview</h3>
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Projects Overview</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map(project => {
@@ -128,7 +128,7 @@ export function Dashboard({ tasks, projects }: DashboardProps) {
               <div key={project.id} className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: project.color }} />
-                  <h4 className="text-sm font-medium text-white truncate">{project.name}</h4>
+                  <h4 className="text-sm font-medium text-[var(--text-primary)] truncate">{project.name}</h4>
                 </div>
                 <div className="mb-2 h-1.5 w-full rounded-full bg-[var(--border-soft)]">
                   <div className="h-1.5 rounded-full transition-all" style={{ width: `${progress}%`, backgroundColor: project.color }} />

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Task, Project, TaskStatus, Priority } from '../types';
+import { Task, Project, Subtask, TaskStatus, Priority } from '../types';
 import { supabase } from '../lib/supabase';
 
 const PROJECT_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
@@ -32,6 +32,14 @@ interface ProjectRow {
   created_at: string;
 }
 
+interface SubtaskRow {
+  id: string;
+  task_id: string;
+  title: string;
+  done: boolean;
+  position: number;
+}
+
 interface TaskRow {
   id: string;
   title: string;
@@ -53,7 +61,17 @@ function mapProject(row: ProjectRow): Project {
   };
 }
 
-function mapTask(row: TaskRow): Task {
+function mapSubtask(row: SubtaskRow): Subtask {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    title: row.title,
+    done: row.done,
+    position: row.position,
+  };
+}
+
+function mapTask(row: TaskRow, subtasks: Subtask[] = []): Task {
   return {
     id: row.id,
     title: row.title,
@@ -63,6 +81,7 @@ function mapTask(row: TaskRow): Task {
     projectId: row.project_id,
     createdAt: row.created_at,
     dueDate: row.due_date,
+    subtasks,
   };
 }
 
@@ -83,15 +102,15 @@ const seedProjects: Project[] = [
 ];
 
 const seedTasks: Task[] = [
-  { id: 't1', title: 'Design homepage mockup', description: 'Create wireframes and high-fidelity mockups for the new homepage', status: 'done', priority: 'high', projectId: 'p1', createdAt: new Date(Date.now() - 6 * 86400000).toISOString(), dueDate: new Date(Date.now() - 1 * 86400000).toISOString() },
-  { id: 't2', title: 'Set up CI/CD pipeline', description: 'Configure GitHub Actions for automated testing and deployment', status: 'in-progress', priority: 'high', projectId: 'p1', createdAt: new Date(Date.now() - 5 * 86400000).toISOString(), dueDate: new Date(Date.now() + 2 * 86400000).toISOString() },
-  { id: 't3', title: 'User authentication flow', description: 'Implement login, signup, and password reset', status: 'in-progress', priority: 'high', projectId: 'p2', createdAt: new Date(Date.now() - 4 * 86400000).toISOString(), dueDate: new Date(Date.now() + 3 * 86400000).toISOString() },
-  { id: 't4', title: 'Design system components', description: 'Build reusable UI components library', status: 'todo', priority: 'medium', projectId: 'p1', createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), dueDate: new Date(Date.now() + 5 * 86400000).toISOString() },
-  { id: 't5', title: 'Payment gateway integration', description: 'Integrate Stripe for payment processing', status: 'todo', priority: 'high', projectId: 'p3', createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), dueDate: new Date(Date.now() + 7 * 86400000).toISOString() },
-  { id: 't6', title: 'Write unit tests', description: 'Add comprehensive test coverage for core modules', status: 'todo', priority: 'medium', projectId: 'p2', createdAt: new Date(Date.now() - 1 * 86400000).toISOString(), dueDate: new Date(Date.now() + 10 * 86400000).toISOString() },
-  { id: 't7', title: 'Performance optimization', description: 'Audit and optimize page load times and bundle size', status: 'todo', priority: 'low', projectId: 'p1', createdAt: new Date().toISOString(), dueDate: null },
-  { id: 't8', title: 'Push notifications', description: 'Implement push notification service for mobile', status: 'todo', priority: 'medium', projectId: 'p2', createdAt: new Date().toISOString(), dueDate: new Date(Date.now() + 14 * 86400000).toISOString() },
-  { id: 't9', title: 'API documentation', description: 'Write comprehensive API docs with examples', status: 'done', priority: 'low', projectId: 'p3', createdAt: new Date(Date.now() - 10 * 86400000).toISOString(), dueDate: new Date(Date.now() - 3 * 86400000).toISOString() },
+  { id: 't1', title: 'Design homepage mockup', description: 'Create wireframes and high-fidelity mockups for the new homepage', status: 'done', priority: 'high', projectId: 'p1', createdAt: new Date(Date.now() - 6 * 86400000).toISOString(), dueDate: new Date(Date.now() - 1 * 86400000).toISOString(), subtasks: [] },
+  { id: 't2', title: 'Set up CI/CD pipeline', description: 'Configure GitHub Actions for automated testing and deployment', status: 'in-progress', priority: 'high', projectId: 'p1', createdAt: new Date(Date.now() - 5 * 86400000).toISOString(), dueDate: new Date(Date.now() + 2 * 86400000).toISOString(), subtasks: [] },
+  { id: 't3', title: 'User authentication flow', description: 'Implement login, signup, and password reset', status: 'in-progress', priority: 'high', projectId: 'p2', createdAt: new Date(Date.now() - 4 * 86400000).toISOString(), dueDate: new Date(Date.now() + 3 * 86400000).toISOString(), subtasks: [] },
+  { id: 't4', title: 'Design system components', description: 'Build reusable UI components library', status: 'todo', priority: 'medium', projectId: 'p1', createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), dueDate: new Date(Date.now() + 5 * 86400000).toISOString(), subtasks: [] },
+  { id: 't5', title: 'Payment gateway integration', description: 'Integrate Stripe for payment processing', status: 'todo', priority: 'high', projectId: 'p3', createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), dueDate: new Date(Date.now() + 7 * 86400000).toISOString(), subtasks: [] },
+  { id: 't6', title: 'Write unit tests', description: 'Add comprehensive test coverage for core modules', status: 'todo', priority: 'medium', projectId: 'p2', createdAt: new Date(Date.now() - 1 * 86400000).toISOString(), dueDate: new Date(Date.now() + 10 * 86400000).toISOString(), subtasks: [] },
+  { id: 't7', title: 'Performance optimization', description: 'Audit and optimize page load times and bundle size', status: 'todo', priority: 'low', projectId: 'p1', createdAt: new Date().toISOString(), dueDate: null, subtasks: [] },
+  { id: 't8', title: 'Push notifications', description: 'Implement push notification service for mobile', status: 'todo', priority: 'medium', projectId: 'p2', createdAt: new Date().toISOString(), dueDate: new Date(Date.now() + 14 * 86400000).toISOString(), subtasks: [] },
+  { id: 't9', title: 'API documentation', description: 'Write comprehensive API docs with examples', status: 'done', priority: 'low', projectId: 'p3', createdAt: new Date(Date.now() - 10 * 86400000).toISOString(), dueDate: new Date(Date.now() - 3 * 86400000).toISOString(), subtasks: [] },
 ];
 
 export function useStore(userId: string) {
@@ -120,7 +139,7 @@ export function useStore(userId: string) {
     setError(null);
 
     try {
-      const [{ data: projectRows, error: projectError }, { data: taskRows, error: taskError }] = await Promise.all([
+      const [{ data: projectRows, error: projectError }, { data: taskRows, error: taskError }, { data: subtaskRows, error: subtaskError }] = await Promise.all([
         supabase
           .from('projects')
           .select('id, name, description, color, created_at')
@@ -129,13 +148,26 @@ export function useStore(userId: string) {
           .from('tasks')
           .select('id, title, description, status, priority, project_id, created_at, due_date')
           .order('created_at', { ascending: false }),
+        supabase
+          .from('subtasks')
+          .select('id, task_id, title, done, position')
+          .order('position', { ascending: true }),
       ]);
 
       if (projectError) throw projectError;
       if (taskError) throw taskError;
+      if (subtaskError) throw subtaskError;
+
+      const allSubtasks = (subtaskRows ?? []).map(mapSubtask);
+      const subtasksByTask = new Map<string, Subtask[]>();
+      for (const st of allSubtasks) {
+        const list = subtasksByTask.get(st.taskId) ?? [];
+        list.push(st);
+        subtasksByTask.set(st.taskId, list);
+      }
 
       let nextProjects = (projectRows ?? []).map(mapProject);
-      let nextTasks = (taskRows ?? []).map(mapTask);
+      let nextTasks = (taskRows ?? []).map(row => mapTask(row, subtasksByTask.get(row.id) ?? []));
 
       if (nextProjects.length === 0 && nextTasks.length === 0) {
         const storedProjects = getStoredSnapshot<Project[]>(STORAGE_KEY_PROJECTS, userId);
@@ -201,7 +233,7 @@ export function useStore(userId: string) {
           if (reloadedTaskError) throw reloadedTaskError;
 
           nextProjects = (importedProjects ?? []).map(mapProject);
-          nextTasks = (importedTasks ?? []).map(mapTask);
+          nextTasks = (importedTasks ?? []).map(row => mapTask(row));
         }
       }
 
@@ -397,5 +429,77 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, userId]);
 
-  return { tasks, projects, isLoading, error, clearError, loadData, addTask, updateTask, updateTaskStatus, deleteTask, addProject, deleteProject };
+  const addSubtask = useCallback(async (taskId: string, title: string): Promise<boolean> => {
+    if (!supabase) return false;
+    setError(null);
+    try {
+      const task = tasks.find(t => t.id === taskId);
+      const position = task ? task.subtasks.length : 0;
+      const { data, error: insertError } = await supabase
+        .from('subtasks')
+        .insert({ task_id: taskId, user_id: userId, title, position })
+        .select('id, task_id, title, done, position')
+        .single();
+      if (insertError) throw insertError;
+      setTasks(prev => {
+        const nextTasks = prev.map(t =>
+          t.id === taskId ? { ...t, subtasks: [...t.subtasks, mapSubtask(data)] } : t
+        );
+        persistLocalSnapshot(projects, nextTasks);
+        return nextTasks;
+      });
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add subtask.');
+      return false;
+    }
+  }, [persistLocalSnapshot, projects, tasks, userId]);
+
+  const toggleSubtask = useCallback(async (subtaskId: string, done: boolean) => {
+    if (!supabase) return;
+    setError(null);
+    try {
+      const { error: updateError } = await supabase
+        .from('subtasks')
+        .update({ done })
+        .eq('id', subtaskId)
+        .eq('user_id', userId);
+      if (updateError) throw updateError;
+      setTasks(prev => {
+        const nextTasks = prev.map(t => ({
+          ...t,
+          subtasks: t.subtasks.map(st => st.id === subtaskId ? { ...st, done } : st),
+        }));
+        persistLocalSnapshot(projects, nextTasks);
+        return nextTasks;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update subtask.');
+    }
+  }, [persistLocalSnapshot, projects, userId]);
+
+  const deleteSubtask = useCallback(async (subtaskId: string) => {
+    if (!supabase) return;
+    setError(null);
+    try {
+      const { error: deleteError } = await supabase
+        .from('subtasks')
+        .delete()
+        .eq('id', subtaskId)
+        .eq('user_id', userId);
+      if (deleteError) throw deleteError;
+      setTasks(prev => {
+        const nextTasks = prev.map(t => ({
+          ...t,
+          subtasks: t.subtasks.filter(st => st.id !== subtaskId),
+        }));
+        persistLocalSnapshot(projects, nextTasks);
+        return nextTasks;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete subtask.');
+    }
+  }, [persistLocalSnapshot, projects, userId]);
+
+  return { tasks, projects, isLoading, error, clearError, loadData, addTask, updateTask, updateTaskStatus, deleteTask, addProject, deleteProject, addSubtask, toggleSubtask, deleteSubtask };
 }

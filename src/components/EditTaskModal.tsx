@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Plus, Trash2, Check } from 'lucide-react';
 import { Task, Project, Priority } from '../types';
 import { cn } from '../utils/cn';
 
@@ -7,16 +7,21 @@ interface EditTaskModalProps {
   task: Task;
   projects: Project[];
   onSave: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null }) => Promise<void> | void;
+  onAddSubtask: (taskId: string, title: string) => Promise<boolean>;
+  onToggleSubtask: (subtaskId: string, done: boolean) => void;
+  onDeleteSubtask: (subtaskId: string) => void;
   onClose: () => void;
 }
 
-export function EditTaskModal({ task, projects, onSave, onClose }: EditTaskModalProps) {
+export function EditTaskModal({ task, projects, onSave, onAddSubtask, onToggleSubtask, onDeleteSubtask, onClose }: EditTaskModalProps) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [priority, setPriority] = useState<Priority>(task.priority);
   const [projectId, setProjectId] = useState<string>(task.projectId ?? '');
   const [dueDate, setDueDate] = useState(task.dueDate ? task.dueDate.slice(0, 10) : '');
   const [isSaving, setIsSaving] = useState(false);
+  const [newSubtask, setNewSubtask] = useState('');
+  const [isAddingSubtask, setIsAddingSubtask] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,6 +117,71 @@ export function EditTaskModal({ task, projects, onSave, onClose }: EditTaskModal
               ))}
             </select>
           </div>
+          {/* Subtasks */}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Subtasks</label>
+            <div className="space-y-1.5">
+              {task.subtasks.map(st => (
+                <div key={st.id} className="flex items-center gap-2 group">
+                  <button
+                    type="button"
+                    onClick={() => onToggleSubtask(st.id, !st.done)}
+                    className={cn(
+                      'flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded border transition-colors',
+                      st.done
+                        ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400'
+                        : 'border-[var(--border-soft)] text-transparent hover:border-[var(--border-strong)]'
+                    )}
+                  >
+                    <Check size={10} />
+                  </button>
+                  <span className={cn('flex-1 text-sm', st.done ? 'text-[var(--text-faint)] line-through' : 'text-[var(--text-secondary)]')}>
+                    {st.title}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteSubtask(st.id)}
+                    className="p-0.5 text-[var(--text-faint)] opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="text"
+                value={newSubtask}
+                onChange={e => setNewSubtask(e.target.value)}
+                onKeyDown={async e => {
+                  if (e.key === 'Enter' && newSubtask.trim() && !isAddingSubtask) {
+                    e.preventDefault();
+                    setIsAddingSubtask(true);
+                    const ok = await onAddSubtask(task.id, newSubtask.trim());
+                    if (ok) setNewSubtask('');
+                    setIsAddingSubtask(false);
+                  }
+                }}
+                placeholder="Add a subtask..."
+                className="flex-1 rounded-md border border-[var(--border-soft)] bg-[var(--surface-muted)] px-2.5 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+              />
+              <button
+                type="button"
+                disabled={!newSubtask.trim() || isAddingSubtask}
+                onClick={async () => {
+                  if (!newSubtask.trim() || isAddingSubtask) return;
+                  setIsAddingSubtask(true);
+                  const ok = await onAddSubtask(task.id, newSubtask.trim());
+                  if (ok) setNewSubtask('');
+                  setIsAddingSubtask(false);
+                }}
+                className="rounded-md border border-[var(--border-soft)] p-1.5 text-[var(--text-faint)] transition hover:border-[var(--border-strong)] hover:text-[var(--accent)] disabled:opacity-40"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          </div>
+
           <div className="flex gap-3 pt-2">
             <button
               type="button"

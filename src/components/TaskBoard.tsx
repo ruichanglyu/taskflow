@@ -13,6 +13,9 @@ interface TaskBoardProps {
   onUpdateStatus: (id: string, status: TaskStatus) => void;
   onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null }) => Promise<boolean>;
   onDeleteTask: (id: string) => void;
+  onAddSubtask: (taskId: string, title: string) => Promise<boolean>;
+  onToggleSubtask: (subtaskId: string, done: boolean) => void;
+  onDeleteSubtask: (subtaskId: string) => void;
 }
 
 const statusColumns: { status: TaskStatus; label: string; color: string; dotColor: string }[] = [
@@ -99,6 +102,22 @@ function TaskCard({
         <p className="mt-1.5 line-clamp-2 text-xs text-[var(--text-faint)]">{task.description}</p>
       )}
 
+      {task.subtasks.length > 0 && (
+        <div className="mt-2">
+          <div className="flex items-center gap-2">
+            <div className="h-1 flex-1 rounded-full bg-[var(--border-soft)]">
+              <div
+                className="h-1 rounded-full bg-emerald-400 transition-all"
+                style={{ width: `${task.subtasks.length > 0 ? Math.round((task.subtasks.filter(s => s.done).length / task.subtasks.length) * 100) : 0}%` }}
+              />
+            </div>
+            <span className="text-[10px] text-[var(--text-faint)]">
+              {task.subtasks.filter(s => s.done).length}/{task.subtasks.length}
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 mt-3 flex-wrap">
         <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded-full border capitalize', priorityBadge(task.priority))}>
           {task.priority}
@@ -121,7 +140,7 @@ function TaskCard({
   );
 }
 
-export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onUpdateTask, onDeleteTask }: TaskBoardProps) {
+export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onUpdateTask, onDeleteTask, onAddSubtask, onToggleSubtask, onDeleteSubtask }: TaskBoardProps) {
   const [showModal, setShowModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [search, setSearch] = useState('');
@@ -267,9 +286,12 @@ export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onUpdate
 
       {editingTask && (
         <EditTaskModal
-          task={editingTask}
+          task={tasks.find(t => t.id === editingTask.id) ?? editingTask}
           projects={projects}
           onSave={async (id, updates) => { const ok = await onUpdateTask(id, updates); if (ok) setEditingTask(null); }}
+          onAddSubtask={onAddSubtask}
+          onToggleSubtask={onToggleSubtask}
+          onDeleteSubtask={onDeleteSubtask}
           onClose={() => setEditingTask(null)}
         />
       )}

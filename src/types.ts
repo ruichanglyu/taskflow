@@ -1,6 +1,14 @@
 export type Priority = 'low' | 'medium' | 'high';
 export type TaskStatus = 'todo' | 'in-progress' | 'done';
-export type View = 'dashboard' | 'tasks' | 'projects' | 'calendar';
+export type View = 'dashboard' | 'tasks' | 'projects' | 'calendar' | 'timeline';
+
+export interface Subtask {
+  id: string;
+  taskId: string;
+  title: string;
+  done: boolean;
+  position: number;
+}
 
 export interface Task {
   id: string;
@@ -11,6 +19,7 @@ export interface Task {
   projectId: string | null;
   createdAt: string;
   dueDate: string | null;
+  subtasks: Subtask[];
 }
 
 export interface Project {

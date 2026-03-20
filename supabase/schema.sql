@@ -21,9 +21,21 @@ create table if not exists public.tasks (
   created_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.subtasks (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  done boolean not null default false,
+  position int not null default 0,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
 create index if not exists projects_user_id_idx on public.projects(user_id);
 create index if not exists tasks_user_id_idx on public.tasks(user_id);
 create index if not exists tasks_project_id_idx on public.tasks(project_id);
+create index if not exists subtasks_task_id_idx on public.subtasks(task_id);
+create index if not exists subtasks_user_id_idx on public.subtasks(user_id);
 
 alter table public.projects enable row level security;
 alter table public.tasks enable row level security;
@@ -84,6 +96,38 @@ with check (auth.uid() = user_id);
 
 create policy "Users can delete their own tasks"
 on public.tasks
+for delete
+to authenticated
+using (auth.uid() = user_id);
+
+alter table public.subtasks enable row level security;
+
+drop policy if exists "Users can read their own subtasks" on public.subtasks;
+drop policy if exists "Users can insert their own subtasks" on public.subtasks;
+drop policy if exists "Users can update their own subtasks" on public.subtasks;
+drop policy if exists "Users can delete their own subtasks" on public.subtasks;
+
+create policy "Users can read their own subtasks"
+on public.subtasks
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can insert their own subtasks"
+on public.subtasks
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update their own subtasks"
+on public.subtasks
+for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can delete their own subtasks"
+on public.subtasks
 for delete
 to authenticated
 using (auth.uid() = user_id);

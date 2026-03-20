@@ -1,4 +1,4 @@
-import { LayoutDashboard, CheckSquare, FolderKanban, CalendarDays, Zap, X } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, FolderKanban, CalendarDays, GanttChart, Zap, X } from 'lucide-react';
 import { View } from '../types';
 import { cn } from '../utils/cn';
 
@@ -16,6 +16,7 @@ const navItems: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: 'tasks', label: 'Tasks', icon: <CheckSquare size={20} /> },
   { view: 'projects', label: 'Projects', icon: <FolderKanban size={20} /> },
   { view: 'calendar', label: 'Calendar', icon: <CalendarDays size={20} /> },
+  { view: 'timeline', label: 'Timeline', icon: <GanttChart size={20} /> },
 ];
 
 export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail, userName }: SidebarProps) {

@@ -8,6 +8,7 @@ import { Dashboard } from './Dashboard';
 import { TaskBoard } from './TaskBoard';
 import { ProjectList } from './ProjectList';
 import { CalendarView } from './CalendarView';
+import { TimelineView } from './TimelineView';
 import { supabase } from '../lib/supabase';
 import { ThemeSwitcher } from './ThemeSwitcher';
 
@@ -99,6 +100,9 @@ export function AppShell({ user }: AppShellProps) {
               onUpdateStatus={store.updateTaskStatus}
               onUpdateTask={store.updateTask}
               onDeleteTask={store.deleteTask}
+              onAddSubtask={store.addSubtask}
+              onToggleSubtask={store.toggleSubtask}
+              onDeleteSubtask={store.deleteSubtask}
             />
           )}
           {currentView === 'projects' && (
@@ -111,6 +115,9 @@ export function AppShell({ user }: AppShellProps) {
           )}
           {currentView === 'calendar' && (
             <CalendarView userId={user.id} />
+          )}
+          {currentView === 'timeline' && (
+            <TimelineView tasks={store.tasks} projects={store.projects} />
           )}
             </>
           )}

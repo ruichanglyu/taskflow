@@ -6,7 +6,7 @@ import { cn } from '../utils/cn';
 interface EditTaskModalProps {
   task: Task;
   projects: Project[];
-  onSave: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null }) => void;
+  onSave: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null }) => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -16,17 +16,23 @@ export function EditTaskModal({ task, projects, onSave, onClose }: EditTaskModal
   const [priority, setPriority] = useState<Priority>(task.priority);
   const [projectId, setProjectId] = useState<string>(task.projectId ?? '');
   const [dueDate, setDueDate] = useState(task.dueDate ? task.dueDate.slice(0, 10) : '');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
-    onSave(task.id, {
-      title: title.trim(),
-      description: description.trim(),
-      priority,
-      projectId: projectId || null,
-      dueDate: dueDate || null,
-    });
+    if (!title.trim() || isSaving) return;
+    setIsSaving(true);
+    try {
+      await onSave(task.id, {
+        title: title.trim(),
+        description: description.trim(),
+        priority,
+        projectId: projectId || null,
+        dueDate: dueDate || null,
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -116,11 +122,11 @@ export function EditTaskModal({ task, projects, onSave, onClose }: EditTaskModal
             </button>
             <button
               type="submit"
-              disabled={!title.trim()}
+              disabled={!title.trim() || isSaving}
               className="flex-1 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
               style={{ backgroundColor: 'var(--accent-strong)' }}
             >
-              Save Changes
+              {isSaving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </form>

@@ -3,9 +3,11 @@ import { LogOut, Menu, Search } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { View } from '../types';
 import { useStore } from '../hooks/useStore';
+import { useDeadlines } from '../hooks/useDeadlines';
 import { useNotifications } from '../hooks/useNotifications';
 import { Sidebar } from './Sidebar';
 import { Dashboard } from './Dashboard';
+import { DeadlinesPage } from './DeadlinesPage';
 import { TaskBoard } from './TaskBoard';
 import { ProjectList } from './ProjectList';
 import { CalendarView } from './CalendarView';
@@ -23,6 +25,7 @@ export function AppShell({ user }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const store = useStore(user.id);
+  const deadlineStore = useDeadlines(user.id);
   const { requestPermission } = useNotifications(store.tasks);
 
   // Request notification permission on first load
@@ -122,7 +125,19 @@ export function AppShell({ user }: AppShellProps) {
           ) : (
             <>
           {currentView === 'dashboard' && (
-            <Dashboard tasks={store.tasks} projects={store.projects} />
+            <Dashboard tasks={store.tasks} projects={store.projects} deadlines={deadlineStore.deadlines} />
+          )}
+          {currentView === 'deadlines' && (
+            <DeadlinesPage
+              deadlines={deadlineStore.deadlines}
+              projects={store.projects}
+              tasks={store.tasks}
+              onAdd={deadlineStore.addDeadline}
+              onUpdate={deadlineStore.updateDeadline}
+              onDelete={deadlineStore.deleteDeadline}
+              onLinkTask={deadlineStore.linkTask}
+              onUnlinkTask={deadlineStore.unlinkTask}
+            />
           )}
           {currentView === 'tasks' && (
             <TaskBoard
@@ -166,6 +181,7 @@ export function AppShell({ user }: AppShellProps) {
         <GlobalSearch
           tasks={store.tasks}
           projects={store.projects}
+          deadlines={deadlineStore.deadlines}
           onClose={() => setSearchOpen(false)}
           onNavigate={(view) => { setCurrentView(view); setSearchOpen(false); }}
         />

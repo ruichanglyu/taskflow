@@ -1,24 +1,25 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, X, CheckSquare, FolderKanban, ArrowRight } from 'lucide-react';
-import { Task, Project, View } from '../types';
+import { Search, X, CheckSquare, FolderKanban, Target, ArrowRight } from 'lucide-react';
+import { Task, Project, Deadline, View } from '../types';
 import { cn } from '../utils/cn';
 
 interface GlobalSearchProps {
   tasks: Task[];
   projects: Project[];
+  deadlines?: Deadline[];
   onClose: () => void;
   onNavigate: (view: View) => void;
 }
 
 interface SearchResult {
-  type: 'task' | 'project';
+  type: 'task' | 'project' | 'deadline';
   id: string;
   title: string;
   subtitle: string;
   view: View;
 }
 
-export function GlobalSearch({ tasks, projects, onClose, onNavigate }: GlobalSearchProps) {
+export function GlobalSearch({ tasks, projects, deadlines = [], onClose, onNavigate }: GlobalSearchProps) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -53,8 +54,19 @@ export function GlobalSearch({ tasks, projects, onClose, onNavigate }: GlobalSea
         view: 'projects' as View,
       }));
 
-    return [...taskResults, ...projectResults];
-  }, [query, tasks, projects]);
+    const deadlineResults: SearchResult[] = deadlines
+      .filter(d => d.title.toLowerCase().includes(q) || d.notes.toLowerCase().includes(q))
+      .slice(0, 4)
+      .map(d => ({
+        type: 'deadline' as const,
+        id: d.id,
+        title: d.title,
+        subtitle: `${d.type} · Due ${d.dueDate}`,
+        view: 'deadlines' as View,
+      }));
+
+    return [...deadlineResults, ...taskResults, ...projectResults];
+  }, [query, tasks, projects, deadlines]);
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -118,6 +130,8 @@ export function GlobalSearch({ tasks, projects, onClose, onNavigate }: GlobalSea
               >
                 {result.type === 'task' ? (
                   <CheckSquare size={16} className="shrink-0" />
+                ) : result.type === 'deadline' ? (
+                  <Target size={16} className="shrink-0" />
                 ) : (
                   <FolderKanban size={16} className="shrink-0" />
                 )}

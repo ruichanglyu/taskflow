@@ -172,3 +172,73 @@ on public.task_comments
 for delete
 to authenticated
 using (auth.uid() = user_id);
+
+-- Deadlines
+create table if not exists public.deadlines (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  project_id uuid references public.projects(id) on delete set null,
+  title text not null,
+  status text not null default 'not-started' check (status in ('not-started', 'in-progress', 'done', 'missed')),
+  type text not null default 'assignment' check (type in ('assignment', 'exam', 'quiz', 'lab', 'project', 'other')),
+  due_date date not null,
+  due_time time,
+  notes text not null default '',
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+-- Linking table: deadlines <-> tasks (many-to-many)
+create table if not exists public.deadline_tasks (
+  deadline_id uuid not null references public.deadlines(id) on delete cascade,
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  primary key (deadline_id, task_id)
+);
+
+create index if not exists deadlines_user_id_idx on public.deadlines(user_id);
+create index if not exists deadlines_project_id_idx on public.deadlines(project_id);
+create index if not exists deadlines_due_date_idx on public.deadlines(due_date);
+create index if not exists deadline_tasks_deadline_id_idx on public.deadline_tasks(deadline_id);
+create index if not exists deadline_tasks_task_id_idx on public.deadline_tasks(task_id);
+
+alter table public.deadlines enable row level security;
+
+drop policy if exists "Users can read their own deadlines" on public.deadlines;
+drop policy if exists "Users can insert their own deadlines" on public.deadlines;
+drop policy if exists "Users can update their own deadlines" on public.deadlines;
+drop policy if exists "Users can delete their own deadlines" on public.deadlines;
+
+create policy "Users can read their own deadlines"
+on public.deadlines for select to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can insert their own deadlines"
+on public.deadlines for insert to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update their own deadlines"
+on public.deadlines for update to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can delete their own deadlines"
+on public.deadlines for delete to authenticated
+using (auth.uid() = user_id);
+
+alter table public.deadline_tasks enable row level security;
+
+-- For deadline_tasks, allow access if the user owns the deadline
+drop policy if exists "Users can read their own deadline_tasks" on public.deadline_tasks;
+drop policy if exists "Users can insert their own deadline_tasks" on public.deadline_tasks;
+drop policy if exists "Users can delete their own deadline_tasks" on public.deadline_tasks;
+
+create policy "Users can read their own deadline_tasks"
+on public.deadline_tasks for select to authenticated
+using (exists (select 1 from public.deadlines where id = deadline_id and user_id = auth.uid()));
+
+create policy "Users can insert their own deadline_tasks"
+on public.deadline_tasks for insert to authenticated
+with check (exists (select 1 from public.deadlines where id = deadline_id and user_id = auth.uid()));
+
+create policy "Users can delete their own deadline_tasks"
+on public.deadline_tasks for delete to authenticated
+using (exists (select 1 from public.deadlines where id = deadline_id and user_id = auth.uid()));

@@ -1,7 +1,9 @@
 export type Priority = 'low' | 'medium' | 'high';
 export type TaskStatus = 'todo' | 'in-progress' | 'done';
 export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
-export type View = 'dashboard' | 'tasks' | 'projects' | 'calendar' | 'timeline';
+export type DeadlineStatus = 'not-started' | 'in-progress' | 'done' | 'missed';
+export type DeadlineType = 'assignment' | 'exam' | 'quiz' | 'lab' | 'project' | 'other';
+export type View = 'dashboard' | 'tasks' | 'projects' | 'calendar' | 'timeline' | 'deadlines';
 
 export interface Subtask {
   id: string;
@@ -30,6 +32,19 @@ export interface Task {
   recurrence: Recurrence;
   subtasks: Subtask[];
   comments: TaskComment[];
+}
+
+export interface Deadline {
+  id: string;
+  title: string;
+  projectId: string | null;
+  status: DeadlineStatus;
+  type: DeadlineType;
+  dueDate: string;
+  dueTime: string | null;
+  notes: string;
+  createdAt: string;
+  linkedTaskIds: string[];
 }
 
 export interface Project {

@@ -106,11 +106,11 @@ export function AppShell({ user }: AppShellProps) {
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          {store.error && (
+          {(store.error || deadlineStore.error) && (
             <div className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
-              <p>{store.error}</p>
+              <p>{store.error || deadlineStore.error}</p>
               <button
-                onClick={store.clearError}
+                onClick={() => { store.clearError(); deadlineStore.clearError(); }}
                 className="shrink-0 rounded-full border border-rose-300/20 px-2 py-1 text-xs text-rose-100 transition hover:bg-rose-300/10"
               >
                 Dismiss

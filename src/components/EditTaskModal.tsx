@@ -1,27 +1,32 @@
 import { useState } from 'react';
-import { X, Plus, Trash2, Check } from 'lucide-react';
-import { Task, Project, Priority } from '../types';
+import { X, Plus, Trash2, Check, MessageSquare, Send } from 'lucide-react';
+import { Task, Project, Priority, Recurrence } from '../types';
 import { cn } from '../utils/cn';
 
 interface EditTaskModalProps {
   task: Task;
   projects: Project[];
-  onSave: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null }) => Promise<void> | void;
+  onSave: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence }) => Promise<void> | void;
   onAddSubtask: (taskId: string, title: string) => Promise<boolean>;
   onToggleSubtask: (subtaskId: string, done: boolean) => void;
   onDeleteSubtask: (subtaskId: string) => void;
+  onAddComment: (taskId: string, text: string) => Promise<boolean>;
+  onDeleteComment: (commentId: string) => void;
   onClose: () => void;
 }
 
-export function EditTaskModal({ task, projects, onSave, onAddSubtask, onToggleSubtask, onDeleteSubtask, onClose }: EditTaskModalProps) {
+export function EditTaskModal({ task, projects, onSave, onAddSubtask, onToggleSubtask, onDeleteSubtask, onAddComment, onDeleteComment, onClose }: EditTaskModalProps) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
   const [priority, setPriority] = useState<Priority>(task.priority);
   const [projectId, setProjectId] = useState<string>(task.projectId ?? '');
   const [dueDate, setDueDate] = useState(task.dueDate ? task.dueDate.slice(0, 10) : '');
+  const [recurrence, setRecurrence] = useState<Recurrence>(task.recurrence);
   const [isSaving, setIsSaving] = useState(false);
   const [newSubtask, setNewSubtask] = useState('');
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [isAddingComment, setIsAddingComment] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +39,7 @@ export function EditTaskModal({ task, projects, onSave, onAddSubtask, onToggleSu
         priority,
         projectId: projectId || null,
         dueDate: dueDate || null,
+        recurrence,
       });
     } finally {
       setIsSaving(false);
@@ -104,18 +110,33 @@ export function EditTaskModal({ task, projects, onSave, onAddSubtask, onToggleSu
               />
             </div>
           </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Project</label>
-            <select
-              value={projectId}
-              onChange={e => setProjectId(e.target.value)}
-              className="w-full cursor-pointer appearance-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
-            >
-              <option value="">No Project</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Project</label>
+              <select
+                value={projectId}
+                onChange={e => setProjectId(e.target.value)}
+                className="w-full cursor-pointer appearance-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+              >
+                <option value="">No Project</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Repeat</label>
+              <select
+                value={recurrence}
+                onChange={e => setRecurrence(e.target.value as Recurrence)}
+                className="w-full cursor-pointer appearance-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+              >
+                <option value="none">No Repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
           </div>
           {/* Subtasks */}
           <div>
@@ -178,6 +199,68 @@ export function EditTaskModal({ task, projects, onSave, onAddSubtask, onToggleSu
                 className="rounded-md border border-[var(--border-soft)] p-1.5 text-[var(--text-faint)] transition hover:border-[var(--border-strong)] hover:text-[var(--accent)] disabled:opacity-40"
               >
                 <Plus size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* Comments */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <MessageSquare size={12} className="text-[var(--text-faint)]" />
+              <label className="text-xs font-medium text-[var(--text-muted)]">Comments</label>
+            </div>
+            <div className="space-y-2 max-h-32 overflow-y-auto">
+              {task.comments.map(c => (
+                <div key={c.id} className="flex items-start gap-2 group">
+                  <div className="flex-1 rounded-md bg-[var(--surface-muted)] px-2.5 py-1.5">
+                    <p className="text-sm text-[var(--text-secondary)]">{c.text}</p>
+                    <p className="text-[9px] text-[var(--text-faint)] mt-0.5">
+                      {new Date(c.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteComment(c.id)}
+                    className="p-0.5 mt-1 text-[var(--text-faint)] opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              ))}
+              {task.comments.length === 0 && (
+                <p className="text-xs text-[var(--text-faint)] py-1">No comments yet</p>
+              )}
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="text"
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                onKeyDown={async e => {
+                  if (e.key === 'Enter' && newComment.trim() && !isAddingComment) {
+                    e.preventDefault();
+                    setIsAddingComment(true);
+                    const ok = await onAddComment(task.id, newComment.trim());
+                    if (ok) setNewComment('');
+                    setIsAddingComment(false);
+                  }
+                }}
+                placeholder="Add a comment..."
+                className="flex-1 rounded-md border border-[var(--border-soft)] bg-[var(--surface-muted)] px-2.5 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+              />
+              <button
+                type="button"
+                disabled={!newComment.trim() || isAddingComment}
+                onClick={async () => {
+                  if (!newComment.trim() || isAddingComment) return;
+                  setIsAddingComment(true);
+                  const ok = await onAddComment(task.id, newComment.trim());
+                  if (ok) setNewComment('');
+                  setIsAddingComment(false);
+                }}
+                className="rounded-md border border-[var(--border-soft)] p-1.5 text-[var(--text-faint)] transition hover:border-[var(--border-strong)] hover:text-[var(--accent)] disabled:opacity-40"
+              >
+                <Send size={14} />
               </button>
             </div>
           </div>

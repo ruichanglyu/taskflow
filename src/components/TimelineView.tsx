@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Task, Project } from '../types';
 import { cn } from '../utils/cn';
@@ -6,6 +6,7 @@ import { cn } from '../utils/cn';
 interface TimelineViewProps {
   tasks: Task[];
   projects: Project[];
+  onUpdateDueDate?: (id: string, dueDate: string | null) => Promise<boolean>;
 }
 
 const priorityColor: Record<string, string> = {
@@ -32,9 +33,11 @@ function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-export function TimelineView({ tasks, projects }: TimelineViewProps) {
+export function TimelineView({ tasks, projects, onUpdateDueDate }: TimelineViewProps) {
   const today = startOfDay(new Date());
   const [offsetWeeks, setOffsetWeeks] = useState(0);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const DAYS_VISIBLE = 28;
   const rangeStart = addDays(today, offsetWeeks * 7 - 7);
@@ -65,12 +68,20 @@ export function TimelineView({ tasks, projects }: TimelineViewProps) {
 
   const tasksWithoutDates = tasks.filter(t => !t.dueDate);
 
+  const handleDragStart = useCallback((taskId: string) => {
+    setDraggingId(taskId);
+  }, []);
+
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)]">Timeline</h1>
-          <p className="mt-1 text-[var(--text-muted)]">See your tasks on a Gantt-style timeline</p>
+          <p className="mt-1 text-[var(--text-muted)]">
+            Gantt-style timeline
+            {onUpdateDueDate && <span className="ml-1 text-xs text-[var(--text-faint)]">· Drag bar ends to reschedule</span>}
+          </p>
         </div>
         <div className="flex items-center gap-1.5">
           <button
@@ -151,6 +162,7 @@ export function TimelineView({ tasks, projects }: TimelineViewProps) {
                 ? Math.round((task.subtasks.filter(s => s.done).length / task.subtasks.length) * 100)
                 : null;
               const barColor = project?.color ?? priorityColor[task.priority] ?? '#6366f1';
+              const isDragging = draggingId === task.id;
 
               return (
                 <div key={task.id} className="flex items-center border-b border-[var(--border-soft)] last:border-b-0 hover:bg-[var(--surface-muted)] transition-colors">
@@ -173,9 +185,12 @@ export function TimelineView({ tasks, projects }: TimelineViewProps) {
                           {task.subtasks.filter(s => s.done).length}/{task.subtasks.length} subtasks
                         </span>
                       )}
+                      {task.recurrence !== 'none' && (
+                        <span className="text-[10px] text-indigo-400">⟳ {task.recurrence}</span>
+                      )}
                     </div>
                   </div>
-                  <div className="flex flex-1 min-w-0 relative" style={{ height: 48 }}>
+                  <div ref={gridRef} className="flex flex-1 min-w-0 relative" style={{ height: 48 }}>
                     {/* Weekend backgrounds */}
                     {days.map((day, i) => {
                       const isWeekend = day.getDay() === 0 || day.getDay() === 6;
@@ -196,7 +211,11 @@ export function TimelineView({ tasks, projects }: TimelineViewProps) {
                     )}
                     {/* Task bar */}
                     <div
-                      className="absolute top-2.5 rounded-full transition-all"
+                      className={cn(
+                        'absolute top-2.5 rounded-full transition-all group/bar',
+                        onUpdateDueDate && 'cursor-grab',
+                        isDragging && 'cursor-grabbing opacity-70'
+                      )}
                       style={{
                         left: `${(barStart / DAYS_VISIBLE) * 100}%`,
                         width: `${(barWidth / DAYS_VISIBLE) * 100}%`,
@@ -204,11 +223,46 @@ export function TimelineView({ tasks, projects }: TimelineViewProps) {
                         backgroundColor: task.status === 'done' ? '#10b981' : barColor,
                         opacity: task.status === 'done' ? 0.6 : 0.85,
                       }}
-                    />
+                    >
+                      {/* Drag handle on the right end */}
+                      {onUpdateDueDate && task.status !== 'done' && (
+                        <div
+                          className="absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white border-2 opacity-0 group-hover/bar:opacity-100 transition-opacity cursor-ew-resize"
+                          style={{ borderColor: barColor }}
+                          onMouseDown={e => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDragStart(task.id);
+
+                            const onMove = (_: MouseEvent) => {
+                              // visual only
+                            };
+                            const onUp = (ue: MouseEvent) => {
+                              window.removeEventListener('mousemove', onMove);
+                              window.removeEventListener('mouseup', onUp);
+                              // Calculate new date from mouse position
+                              if (gridRef.current) {
+                                const rect = gridRef.current.getBoundingClientRect();
+                                const x = ue.clientX - rect.left;
+                                const dayIndex = Math.floor((x / rect.width) * DAYS_VISIBLE);
+                                const clampedIndex = Math.max(0, Math.min(DAYS_VISIBLE - 1, dayIndex));
+                                const newDueDate = addDays(rangeStart, clampedIndex);
+                                setDraggingId(null);
+                                onUpdateDueDate(task.id, newDueDate.toISOString());
+                              } else {
+                                setDraggingId(null);
+                              }
+                            };
+                            window.addEventListener('mousemove', onMove);
+                            window.addEventListener('mouseup', onUp);
+                          }}
+                        />
+                      )}
+                    </div>
                     {/* Subtask progress overlay */}
                     {subtaskProgress !== null && subtaskProgress > 0 && task.status !== 'done' && (
                       <div
-                        className="absolute top-2.5 rounded-full"
+                        className="absolute top-2.5 rounded-full pointer-events-none"
                         style={{
                           left: `${(barStart / DAYS_VISIBLE) * 100}%`,
                           width: `${((barWidth / DAYS_VISIBLE) * subtaskProgress) / 100 * 100}%`,

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Plus, Trash2, ChevronDown, Search, Filter, Pencil } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, Search, Filter, Pencil, Repeat, MessageSquare } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { Task, Project, TaskStatus, Priority } from '../types';
+import { Task, Project, TaskStatus, Priority, Recurrence } from '../types';
 import { cn } from '../utils/cn';
 import { AddTaskModal } from './AddTaskModal';
 import { EditTaskModal } from './EditTaskModal';
@@ -9,13 +9,15 @@ import { EditTaskModal } from './EditTaskModal';
 interface TaskBoardProps {
   tasks: Task[];
   projects: Project[];
-  onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null) => void;
+  onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence) => void;
   onUpdateStatus: (id: string, status: TaskStatus) => void;
-  onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null }) => Promise<boolean>;
+  onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence }) => Promise<boolean>;
   onDeleteTask: (id: string) => void;
   onAddSubtask: (taskId: string, title: string) => Promise<boolean>;
   onToggleSubtask: (subtaskId: string, done: boolean) => void;
   onDeleteSubtask: (subtaskId: string) => void;
+  onAddComment: (taskId: string, text: string) => Promise<boolean>;
+  onDeleteComment: (commentId: string) => void;
 }
 
 const statusColumns: { status: TaskStatus; label: string; color: string; dotColor: string }[] = [
@@ -135,12 +137,24 @@ function TaskCard({
             {dueLabel}
           </span>
         )}
+
+        {task.recurrence !== 'none' && (
+          <span className="flex items-center gap-0.5 rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-400">
+            <Repeat size={9} /> {task.recurrence}
+          </span>
+        )}
+
+        {task.comments.length > 0 && (
+          <span className="flex items-center gap-0.5 rounded-full bg-gray-700/50 px-2 py-0.5 text-[10px] font-medium text-gray-400">
+            <MessageSquare size={9} /> {task.comments.length}
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onUpdateTask, onDeleteTask, onAddSubtask, onToggleSubtask, onDeleteSubtask }: TaskBoardProps) {
+export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onUpdateTask, onDeleteTask, onAddSubtask, onToggleSubtask, onDeleteSubtask, onAddComment, onDeleteComment }: TaskBoardProps) {
   const [showModal, setShowModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [search, setSearch] = useState('');
@@ -279,7 +293,7 @@ export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onUpdate
       {showModal && (
         <AddTaskModal
           projects={projects}
-          onAdd={(title, desc, priority, projectId, dueDate) => { onAddTask(title, desc, priority, projectId, dueDate); setShowModal(false); }}
+          onAdd={(title, desc, priority, projectId, dueDate, recurrence) => { onAddTask(title, desc, priority, projectId, dueDate, recurrence); setShowModal(false); }}
           onClose={() => setShowModal(false)}
         />
       )}
@@ -292,6 +306,8 @@ export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onUpdate
           onAddSubtask={onAddSubtask}
           onToggleSubtask={onToggleSubtask}
           onDeleteSubtask={onDeleteSubtask}
+          onAddComment={onAddComment}
+          onDeleteComment={onDeleteComment}
           onClose={() => setEditingTask(null)}
         />
       )}

@@ -1,14 +1,16 @@
-import { useState } from 'react';
-import { LogOut, Menu } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { LogOut, Menu, Search } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { View } from '../types';
 import { useStore } from '../hooks/useStore';
+import { useNotifications } from '../hooks/useNotifications';
 import { Sidebar } from './Sidebar';
 import { Dashboard } from './Dashboard';
 import { TaskBoard } from './TaskBoard';
 import { ProjectList } from './ProjectList';
 import { CalendarView } from './CalendarView';
 import { TimelineView } from './TimelineView';
+import { GlobalSearch } from './GlobalSearch';
 import { supabase } from '../lib/supabase';
 import { ThemeSwitcher } from './ThemeSwitcher';
 
@@ -19,7 +21,26 @@ interface AppShellProps {
 export function AppShell({ user }: AppShellProps) {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const store = useStore(user.id);
+  const { requestPermission } = useNotifications(store.tasks);
+
+  // Request notification permission on first load
+  useEffect(() => {
+    requestPermission();
+  }, [requestPermission]);
+
+  // Global keyboard shortcut: Cmd/Ctrl+K for search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   const handleSignOut = async () => {
     if (!supabase) return;
@@ -45,6 +66,17 @@ export function AppShell({ user }: AppShellProps) {
           >
             <Menu size={22} />
           </button>
+
+          {/* Search trigger */}
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="hidden sm:flex items-center gap-2 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-sm text-[var(--text-faint)] transition hover:border-[var(--border-strong)]"
+          >
+            <Search size={14} />
+            <span>Search...</span>
+            <kbd className="ml-4 rounded border border-[var(--border-soft)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-faint)]">⌘K</kbd>
+          </button>
+
           <div className="flex-1" />
           <div className="hidden items-center gap-2 rounded-full bg-[var(--surface-muted)] px-3 py-1.5 sm:flex">
             <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
@@ -103,6 +135,8 @@ export function AppShell({ user }: AppShellProps) {
               onAddSubtask={store.addSubtask}
               onToggleSubtask={store.toggleSubtask}
               onDeleteSubtask={store.deleteSubtask}
+              onAddComment={store.addComment}
+              onDeleteComment={store.deleteComment}
             />
           )}
           {currentView === 'projects' && (
@@ -117,12 +151,25 @@ export function AppShell({ user }: AppShellProps) {
             <CalendarView userId={user.id} />
           )}
           {currentView === 'timeline' && (
-            <TimelineView tasks={store.tasks} projects={store.projects} />
+            <TimelineView
+              tasks={store.tasks}
+              projects={store.projects}
+              onUpdateDueDate={store.updateTaskDueDate}
+            />
           )}
             </>
           )}
         </main>
       </div>
+
+      {searchOpen && (
+        <GlobalSearch
+          tasks={store.tasks}
+          projects={store.projects}
+          onClose={() => setSearchOpen(false)}
+          onNavigate={(view) => { setCurrentView(view); setSearchOpen(false); }}
+        />
+      )}
     </div>
   );
 }

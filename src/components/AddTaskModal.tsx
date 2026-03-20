@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
-import { Project, Priority } from '../types';
+import { Project, Priority, Recurrence } from '../types';
 import { cn } from '../utils/cn';
 
 interface AddTaskModalProps {
   projects: Project[];
-  onAdd: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null) => void;
+  onAdd: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence) => void;
   onClose: () => void;
 }
 
@@ -15,11 +15,12 @@ export function AddTaskModal({ projects, onAdd, onClose }: AddTaskModalProps) {
   const [priority, setPriority] = useState<Priority>('medium');
   const [projectId, setProjectId] = useState<string>('');
   const [dueDate, setDueDate] = useState('');
+  const [recurrence, setRecurrence] = useState<Recurrence>('none');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onAdd(title.trim(), description.trim(), priority, projectId || null, dueDate || null);
+    onAdd(title.trim(), description.trim(), priority, projectId || null, dueDate || null, recurrence);
   };
 
   return (
@@ -86,18 +87,33 @@ export function AddTaskModal({ projects, onAdd, onClose }: AddTaskModalProps) {
               />
             </div>
           </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Project</label>
-            <select
-              value={projectId}
-              onChange={e => setProjectId(e.target.value)}
-              className="w-full cursor-pointer appearance-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
-            >
-              <option value="">No Project</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Project</label>
+              <select
+                value={projectId}
+                onChange={e => setProjectId(e.target.value)}
+                className="w-full cursor-pointer appearance-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+              >
+                <option value="">No Project</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Repeat</label>
+              <select
+                value={recurrence}
+                onChange={e => setRecurrence(e.target.value as Recurrence)}
+                className="w-full cursor-pointer appearance-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+              >
+                <option value="none">No Repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
           </div>
           <div className="flex gap-3 pt-2">
             <button

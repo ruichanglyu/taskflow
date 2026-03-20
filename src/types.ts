@@ -1,5 +1,6 @@
 export type Priority = 'low' | 'medium' | 'high';
 export type TaskStatus = 'todo' | 'in-progress' | 'done';
+export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
 export type View = 'dashboard' | 'tasks' | 'projects' | 'calendar' | 'timeline';
 
 export interface Subtask {
@@ -8,6 +9,13 @@ export interface Subtask {
   title: string;
   done: boolean;
   position: number;
+}
+
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  text: string;
+  createdAt: string;
 }
 
 export interface Task {
@@ -19,7 +27,9 @@ export interface Task {
   projectId: string | null;
   createdAt: string;
   dueDate: string | null;
+  recurrence: Recurrence;
   subtasks: Subtask[];
+  comments: TaskComment[];
 }
 
 export interface Project {

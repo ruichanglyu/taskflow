@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Task, Project, Subtask, TaskStatus, Priority } from '../types';
+import { Task, Project, Subtask, TaskComment, TaskStatus, Priority, Recurrence } from '../types';
 import { supabase } from '../lib/supabase';
 
 const PROJECT_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
@@ -40,6 +40,13 @@ interface SubtaskRow {
   position: number;
 }
 
+interface CommentRow {
+  id: string;
+  task_id: string;
+  text: string;
+  created_at: string;
+}
+
 interface TaskRow {
   id: string;
   title: string;
@@ -49,6 +56,7 @@ interface TaskRow {
   project_id: string | null;
   created_at: string;
   due_date: string | null;
+  recurrence?: string;
 }
 
 function mapProject(row: ProjectRow): Project {
@@ -71,7 +79,16 @@ function mapSubtask(row: SubtaskRow): Subtask {
   };
 }
 
-function mapTask(row: TaskRow, subtasks: Subtask[] = []): Task {
+function mapComment(row: CommentRow): TaskComment {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    text: row.text,
+    createdAt: row.created_at,
+  };
+}
+
+function mapTask(row: TaskRow, subtasks: Subtask[] = [], comments: TaskComment[] = []): Task {
   return {
     id: row.id,
     title: row.title,
@@ -81,7 +98,9 @@ function mapTask(row: TaskRow, subtasks: Subtask[] = []): Task {
     projectId: row.project_id,
     createdAt: row.created_at,
     dueDate: row.due_date,
+    recurrence: (row.recurrence as Recurrence) ?? 'none',
     subtasks,
+    comments,
   };
 }
 
@@ -102,15 +121,15 @@ const seedProjects: Project[] = [
 ];
 
 const seedTasks: Task[] = [
-  { id: 't1', title: 'Design homepage mockup', description: 'Create wireframes and high-fidelity mockups for the new homepage', status: 'done', priority: 'high', projectId: 'p1', createdAt: new Date(Date.now() - 6 * 86400000).toISOString(), dueDate: new Date(Date.now() - 1 * 86400000).toISOString(), subtasks: [] },
-  { id: 't2', title: 'Set up CI/CD pipeline', description: 'Configure GitHub Actions for automated testing and deployment', status: 'in-progress', priority: 'high', projectId: 'p1', createdAt: new Date(Date.now() - 5 * 86400000).toISOString(), dueDate: new Date(Date.now() + 2 * 86400000).toISOString(), subtasks: [] },
-  { id: 't3', title: 'User authentication flow', description: 'Implement login, signup, and password reset', status: 'in-progress', priority: 'high', projectId: 'p2', createdAt: new Date(Date.now() - 4 * 86400000).toISOString(), dueDate: new Date(Date.now() + 3 * 86400000).toISOString(), subtasks: [] },
-  { id: 't4', title: 'Design system components', description: 'Build reusable UI components library', status: 'todo', priority: 'medium', projectId: 'p1', createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), dueDate: new Date(Date.now() + 5 * 86400000).toISOString(), subtasks: [] },
-  { id: 't5', title: 'Payment gateway integration', description: 'Integrate Stripe for payment processing', status: 'todo', priority: 'high', projectId: 'p3', createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), dueDate: new Date(Date.now() + 7 * 86400000).toISOString(), subtasks: [] },
-  { id: 't6', title: 'Write unit tests', description: 'Add comprehensive test coverage for core modules', status: 'todo', priority: 'medium', projectId: 'p2', createdAt: new Date(Date.now() - 1 * 86400000).toISOString(), dueDate: new Date(Date.now() + 10 * 86400000).toISOString(), subtasks: [] },
-  { id: 't7', title: 'Performance optimization', description: 'Audit and optimize page load times and bundle size', status: 'todo', priority: 'low', projectId: 'p1', createdAt: new Date().toISOString(), dueDate: null, subtasks: [] },
-  { id: 't8', title: 'Push notifications', description: 'Implement push notification service for mobile', status: 'todo', priority: 'medium', projectId: 'p2', createdAt: new Date().toISOString(), dueDate: new Date(Date.now() + 14 * 86400000).toISOString(), subtasks: [] },
-  { id: 't9', title: 'API documentation', description: 'Write comprehensive API docs with examples', status: 'done', priority: 'low', projectId: 'p3', createdAt: new Date(Date.now() - 10 * 86400000).toISOString(), dueDate: new Date(Date.now() - 3 * 86400000).toISOString(), subtasks: [] },
+  { id: 't1', title: 'Design homepage mockup', description: 'Create wireframes and high-fidelity mockups for the new homepage', status: 'done', priority: 'high', projectId: 'p1', createdAt: new Date(Date.now() - 6 * 86400000).toISOString(), dueDate: new Date(Date.now() - 1 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
+  { id: 't2', title: 'Set up CI/CD pipeline', description: 'Configure GitHub Actions for automated testing and deployment', status: 'in-progress', priority: 'high', projectId: 'p1', createdAt: new Date(Date.now() - 5 * 86400000).toISOString(), dueDate: new Date(Date.now() + 2 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
+  { id: 't3', title: 'User authentication flow', description: 'Implement login, signup, and password reset', status: 'in-progress', priority: 'high', projectId: 'p2', createdAt: new Date(Date.now() - 4 * 86400000).toISOString(), dueDate: new Date(Date.now() + 3 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
+  { id: 't4', title: 'Design system components', description: 'Build reusable UI components library', status: 'todo', priority: 'medium', projectId: 'p1', createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), dueDate: new Date(Date.now() + 5 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
+  { id: 't5', title: 'Payment gateway integration', description: 'Integrate Stripe for payment processing', status: 'todo', priority: 'high', projectId: 'p3', createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), dueDate: new Date(Date.now() + 7 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
+  { id: 't6', title: 'Write unit tests', description: 'Add comprehensive test coverage for core modules', status: 'todo', priority: 'medium', projectId: 'p2', createdAt: new Date(Date.now() - 1 * 86400000).toISOString(), dueDate: new Date(Date.now() + 10 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
+  { id: 't7', title: 'Performance optimization', description: 'Audit and optimize page load times and bundle size', status: 'todo', priority: 'low', projectId: 'p1', createdAt: new Date().toISOString(), dueDate: null, recurrence: 'none', subtasks: [], comments: [] },
+  { id: 't8', title: 'Push notifications', description: 'Implement push notification service for mobile', status: 'todo', priority: 'medium', projectId: 'p2', createdAt: new Date().toISOString(), dueDate: new Date(Date.now() + 14 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
+  { id: 't9', title: 'API documentation', description: 'Write comprehensive API docs with examples', status: 'done', priority: 'low', projectId: 'p3', createdAt: new Date(Date.now() - 10 * 86400000).toISOString(), dueDate: new Date(Date.now() - 3 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
 ];
 
 export function useStore(userId: string) {
@@ -139,24 +158,29 @@ export function useStore(userId: string) {
     setError(null);
 
     try {
-      const [{ data: projectRows, error: projectError }, { data: taskRows, error: taskError }, { data: subtaskRows, error: subtaskError }] = await Promise.all([
+      const [{ data: projectRows, error: projectError }, { data: taskRows, error: taskError }, { data: subtaskRows, error: subtaskError }, { data: commentRows, error: commentError }] = await Promise.all([
         supabase
           .from('projects')
           .select('id, name, description, color, created_at')
           .order('created_at', { ascending: false }),
         supabase
           .from('tasks')
-          .select('id, title, description, status, priority, project_id, created_at, due_date')
+          .select('id, title, description, status, priority, project_id, created_at, due_date, recurrence')
           .order('created_at', { ascending: false }),
         supabase
           .from('subtasks')
           .select('id, task_id, title, done, position')
           .order('position', { ascending: true }),
+        supabase
+          .from('task_comments')
+          .select('id, task_id, text, created_at')
+          .order('created_at', { ascending: true }),
       ]);
 
       if (projectError) throw projectError;
       if (taskError) throw taskError;
       if (subtaskError) throw subtaskError;
+      if (commentError) throw commentError;
 
       const allSubtasks = (subtaskRows ?? []).map(mapSubtask);
       const subtasksByTask = new Map<string, Subtask[]>();
@@ -166,8 +190,16 @@ export function useStore(userId: string) {
         subtasksByTask.set(st.taskId, list);
       }
 
+      const allComments = (commentRows ?? []).map(mapComment);
+      const commentsByTask = new Map<string, TaskComment[]>();
+      for (const c of allComments) {
+        const list = commentsByTask.get(c.taskId) ?? [];
+        list.push(c);
+        commentsByTask.set(c.taskId, list);
+      }
+
       let nextProjects = (projectRows ?? []).map(mapProject);
-      let nextTasks = (taskRows ?? []).map(row => mapTask(row, subtasksByTask.get(row.id) ?? []));
+      let nextTasks = (taskRows ?? []).map(row => mapTask(row, subtasksByTask.get(row.id) ?? [], commentsByTask.get(row.id) ?? []));
 
       if (nextProjects.length === 0 && nextTasks.length === 0) {
         const storedProjects = getStoredSnapshot<Project[]>(STORAGE_KEY_PROJECTS, userId);
@@ -251,7 +283,7 @@ export function useStore(userId: string) {
     void loadData();
   }, [loadData]);
 
-  const addTask = useCallback(async (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null) => {
+  const addTask = useCallback(async (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence = 'none') => {
     if (!supabase) return;
 
     setError(null);
@@ -267,8 +299,9 @@ export function useStore(userId: string) {
           priority,
           project_id: projectId,
           due_date: dueDate,
+          recurrence,
         })
-        .select('id, title, description, status, priority, project_id, created_at, due_date')
+        .select('id, title, description, status, priority, project_id, created_at, due_date, recurrence')
         .single();
 
       if (insertError) throw insertError;
@@ -283,12 +316,44 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, projects, userId]);
 
+  const spawnNextRecurrence = useCallback(async (task: Task) => {
+    if (!supabase || task.recurrence === 'none' || !task.dueDate) return;
+    const due = new Date(task.dueDate);
+    if (task.recurrence === 'daily') due.setDate(due.getDate() + 1);
+    else if (task.recurrence === 'weekly') due.setDate(due.getDate() + 7);
+    else if (task.recurrence === 'monthly') due.setMonth(due.getMonth() + 1);
+
+    const { data, error: insertError } = await supabase
+      .from('tasks')
+      .insert({
+        user_id: userId,
+        title: task.title,
+        description: task.description,
+        status: 'todo',
+        priority: task.priority,
+        project_id: task.projectId,
+        due_date: due.toISOString(),
+        recurrence: task.recurrence,
+      })
+      .select('id, title, description, status, priority, project_id, created_at, due_date, recurrence')
+      .single();
+
+    if (!insertError && data) {
+      setTasks(prev => {
+        const nextTasks = [mapTask(data), ...prev];
+        persistLocalSnapshot(projects, nextTasks);
+        return nextTasks;
+      });
+    }
+  }, [persistLocalSnapshot, projects, userId]);
+
   const updateTaskStatus = useCallback(async (id: string, status: TaskStatus) => {
     if (!supabase) return;
 
     setError(null);
 
     try {
+      const task = tasks.find(t => t.id === id);
       const { error: updateError } = await supabase
         .from('tasks')
         .update({ status })
@@ -298,16 +363,21 @@ export function useStore(userId: string) {
       if (updateError) throw updateError;
 
       setTasks(prev => {
-        const nextTasks = prev.map(task => task.id === id ? { ...task, status } : task);
+        const nextTasks = prev.map(t => t.id === id ? { ...t, status } : t);
         persistLocalSnapshot(projects, nextTasks);
         return nextTasks;
       });
+
+      // Spawn next occurrence when recurring task is marked done
+      if (status === 'done' && task && task.recurrence !== 'none') {
+        await spawnNextRecurrence(task);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update task.');
     }
-  }, [persistLocalSnapshot, projects, userId]);
+  }, [persistLocalSnapshot, projects, tasks, userId, spawnNextRecurrence]);
 
-  const updateTask = useCallback(async (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null }): Promise<boolean> => {
+  const updateTask = useCallback(async (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence }): Promise<boolean> => {
     if (!supabase) return false;
 
     setError(null);
@@ -319,6 +389,7 @@ export function useStore(userId: string) {
       if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
       if (updates.projectId !== undefined) dbUpdates.project_id = updates.projectId;
       if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
+      if (updates.recurrence !== undefined) dbUpdates.recurrence = updates.recurrence;
 
       const { error: updateError } = await supabase
         .from('tasks')
@@ -501,5 +572,74 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, projects, userId]);
 
-  return { tasks, projects, isLoading, error, clearError, loadData, addTask, updateTask, updateTaskStatus, deleteTask, addProject, deleteProject, addSubtask, toggleSubtask, deleteSubtask };
+  const addComment = useCallback(async (taskId: string, text: string): Promise<boolean> => {
+    if (!supabase) return false;
+    setError(null);
+    try {
+      const { data, error: insertError } = await supabase
+        .from('task_comments')
+        .insert({ task_id: taskId, user_id: userId, text })
+        .select('id, task_id, text, created_at')
+        .single();
+      if (insertError) throw insertError;
+      setTasks(prev => {
+        const nextTasks = prev.map(t =>
+          t.id === taskId ? { ...t, comments: [...t.comments, mapComment(data)] } : t
+        );
+        persistLocalSnapshot(projects, nextTasks);
+        return nextTasks;
+      });
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add comment.');
+      return false;
+    }
+  }, [persistLocalSnapshot, projects, userId]);
+
+  const deleteComment = useCallback(async (commentId: string) => {
+    if (!supabase) return;
+    setError(null);
+    try {
+      const { error: deleteError } = await supabase
+        .from('task_comments')
+        .delete()
+        .eq('id', commentId)
+        .eq('user_id', userId);
+      if (deleteError) throw deleteError;
+      setTasks(prev => {
+        const nextTasks = prev.map(t => ({
+          ...t,
+          comments: t.comments.filter(c => c.id !== commentId),
+        }));
+        persistLocalSnapshot(projects, nextTasks);
+        return nextTasks;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete comment.');
+    }
+  }, [persistLocalSnapshot, projects, userId]);
+
+  const updateTaskDueDate = useCallback(async (id: string, dueDate: string | null): Promise<boolean> => {
+    if (!supabase) return false;
+    setError(null);
+    try {
+      const { error: updateError } = await supabase
+        .from('tasks')
+        .update({ due_date: dueDate })
+        .eq('id', id)
+        .eq('user_id', userId);
+      if (updateError) throw updateError;
+      setTasks(prev => {
+        const nextTasks = prev.map(task => task.id === id ? { ...task, dueDate } : task);
+        persistLocalSnapshot(projects, nextTasks);
+        return nextTasks;
+      });
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update due date.');
+      return false;
+    }
+  }, [persistLocalSnapshot, projects, userId]);
+
+  return { tasks, projects, isLoading, error, clearError, loadData, addTask, updateTask, updateTaskStatus, deleteTask, addProject, deleteProject, addSubtask, toggleSubtask, deleteSubtask, addComment, deleteComment, updateTaskDueDate };
 }

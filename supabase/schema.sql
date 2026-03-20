@@ -21,6 +21,23 @@ create table if not exists public.tasks (
   created_at timestamptz not null default timezone('utc', now())
 );
 
+-- Add recurrence column to tasks (idempotent)
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'tasks' and column_name = 'recurrence') then
+    alter table public.tasks add column recurrence text not null default 'none' check (recurrence in ('none', 'daily', 'weekly', 'monthly'));
+  end if;
+end $$;
+
+create table if not exists public.task_comments (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  text text not null,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists task_comments_task_id_idx on public.task_comments(task_id);
+
 create table if not exists public.subtasks (
   id uuid primary key default gen_random_uuid(),
   task_id uuid not null references public.tasks(id) on delete cascade,
@@ -128,6 +145,30 @@ with check (auth.uid() = user_id);
 
 create policy "Users can delete their own subtasks"
 on public.subtasks
+for delete
+to authenticated
+using (auth.uid() = user_id);
+
+alter table public.task_comments enable row level security;
+
+drop policy if exists "Users can read their own comments" on public.task_comments;
+drop policy if exists "Users can insert their own comments" on public.task_comments;
+drop policy if exists "Users can delete their own comments" on public.task_comments;
+
+create policy "Users can read their own comments"
+on public.task_comments
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can insert their own comments"
+on public.task_comments
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can delete their own comments"
+on public.task_comments
 for delete
 to authenticated
 using (auth.uid() = user_id);

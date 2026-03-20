@@ -275,6 +275,39 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, projects, userId]);
 
+  const updateTask = useCallback(async (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null }): Promise<boolean> => {
+    if (!supabase) return false;
+
+    setError(null);
+
+    try {
+      const dbUpdates: Record<string, unknown> = {};
+      if (updates.title !== undefined) dbUpdates.title = updates.title;
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
+      if (updates.projectId !== undefined) dbUpdates.project_id = updates.projectId;
+      if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
+
+      const { error: updateError } = await supabase
+        .from('tasks')
+        .update(dbUpdates)
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      if (updateError) throw updateError;
+
+      setTasks(prev => {
+        const nextTasks = prev.map(task => task.id === id ? { ...task, ...updates } : task);
+        persistLocalSnapshot(projects, nextTasks);
+        return nextTasks;
+      });
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update task.');
+      return false;
+    }
+  }, [persistLocalSnapshot, projects, userId]);
+
   const deleteTask = useCallback(async (id: string) => {
     if (!supabase) return;
 
@@ -364,5 +397,5 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, userId]);
 
-  return { tasks, projects, isLoading, error, clearError, loadData, addTask, updateTaskStatus, deleteTask, addProject, deleteProject };
+  return { tasks, projects, isLoading, error, clearError, loadData, addTask, updateTask, updateTaskStatus, deleteTask, addProject, deleteProject };
 }

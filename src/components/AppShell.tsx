@@ -32,6 +32,8 @@ export function AppShell({ user }: AppShellProps) {
         onViewChange={setCurrentView}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        userEmail={user.email}
+        userName={user.user_metadata.full_name}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -95,6 +97,7 @@ export function AppShell({ user }: AppShellProps) {
               projects={store.projects}
               onAddTask={store.addTask}
               onUpdateStatus={store.updateTaskStatus}
+              onUpdateTask={store.updateTask}
               onDeleteTask={store.deleteTask}
             />
           )}

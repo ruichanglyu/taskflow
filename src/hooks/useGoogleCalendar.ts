@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  createGoogleCalendarEvent,
+  deleteGoogleCalendarEvent,
   fetchGoogleCalendarEvents,
   fetchGoogleCalendars,
   GOOGLE_CALENDAR_SCOPE,
@@ -8,6 +10,7 @@ import {
   googleClientId,
   isGoogleCalendarConfigured,
   loadGoogleIdentityScript,
+  NewGoogleCalendarEvent,
 } from '../lib/googleCalendar';
 
 const STORAGE_KEY_PREFIX = 'taskflow_google_calendar';
@@ -155,6 +158,44 @@ export function useGoogleCalendar(userId: string) {
     }
   }, [accessToken]);
 
+  const createEvent = useCallback(async (event: NewGoogleCalendarEvent): Promise<boolean> => {
+    if (!accessToken || !selectedCalendarId) return false;
+
+    setError(null);
+
+    try {
+      const created = await createGoogleCalendarEvent(accessToken, selectedCalendarId, event);
+      setEvents(prev => {
+        const next = [...prev, created];
+        next.sort((a, b) => {
+          const aTime = a.start?.dateTime || a.start?.date || '';
+          const bTime = b.start?.dateTime || b.start?.date || '';
+          return aTime.localeCompare(bTime);
+        });
+        return next;
+      });
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create event.');
+      return false;
+    }
+  }, [accessToken, selectedCalendarId]);
+
+  const deleteEvent = useCallback(async (eventId: string): Promise<boolean> => {
+    if (!accessToken || !selectedCalendarId) return false;
+
+    setError(null);
+
+    try {
+      await deleteGoogleCalendarEvent(accessToken, selectedCalendarId, eventId);
+      setEvents(prev => prev.filter(e => e.id !== eventId));
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete event.');
+      return false;
+    }
+  }, [accessToken, selectedCalendarId]);
+
   return {
     isConfigured: isGoogleCalendarConfigured,
     isConnected: Boolean(accessToken),
@@ -168,5 +209,7 @@ export function useGoogleCalendar(userId: string) {
     disconnect,
     refresh,
     chooseCalendar,
+    createEvent,
+    deleteEvent,
   };
 }

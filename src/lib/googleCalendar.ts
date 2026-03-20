@@ -1,4 +1,4 @@
-export const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+export const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
 export const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 export const isGoogleCalendarConfigured = Boolean(googleClientId);
 
@@ -93,10 +93,13 @@ export interface GoogleCalendarEvent {
   };
 }
 
-async function googleFetch<T>(path: string, accessToken: string) {
+async function googleFetch<T>(path: string, accessToken: string, options?: RequestInit) {
   const response = await fetch(`https://www.googleapis.com/calendar/v3${path}`, {
+    ...options,
     headers: {
       Authorization: `Bearer ${accessToken}`,
+      ...(options?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...options?.headers,
     },
   });
 
@@ -105,12 +108,45 @@ async function googleFetch<T>(path: string, accessToken: string) {
     throw new Error(errorText || 'Google Calendar request failed.');
   }
 
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
 export async function fetchGoogleCalendars(accessToken: string) {
   const data = await googleFetch<{ items?: GoogleCalendarListItem[] }>('/users/me/calendarList', accessToken);
   return data.items ?? [];
+}
+
+export interface NewGoogleCalendarEvent {
+  summary: string;
+  description?: string;
+  location?: string;
+  start: { dateTime: string; timeZone?: string } | { date: string };
+  end: { dateTime: string; timeZone?: string } | { date: string };
+}
+
+export async function createGoogleCalendarEvent(
+  accessToken: string,
+  calendarId: string,
+  event: NewGoogleCalendarEvent
+): Promise<GoogleCalendarEvent> {
+  return googleFetch<GoogleCalendarEvent>(
+    `/calendars/${encodeURIComponent(calendarId)}/events`,
+    accessToken,
+    { method: 'POST', body: JSON.stringify(event) }
+  );
+}
+
+export async function deleteGoogleCalendarEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string
+): Promise<void> {
+  await googleFetch<void>(
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    accessToken,
+    { method: 'DELETE' }
+  );
 }
 
 export async function fetchGoogleCalendarEvents(accessToken: string, calendarId: string) {

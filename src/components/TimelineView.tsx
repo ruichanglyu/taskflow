@@ -37,7 +37,7 @@ function startOfDay(date: Date) {
 export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate }: TimelineViewProps) {
   const today = startOfDay(new Date());
   const [offsetWeeks, setOffsetWeeks] = useState(0);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragState, setDragState] = useState<{ taskId: string; dayIndex: number } | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
   const DAYS_VISIBLE = 28;
@@ -69,8 +69,12 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
 
   const tasksWithoutDates = tasks.filter(t => !t.dueDate);
 
-  const handleDragStart = useCallback((taskId: string) => {
-    setDraggingId(taskId);
+  const getDayIndexFromMouse = useCallback((clientX: number) => {
+    if (!gridRef.current) return null;
+    const rect = gridRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const dayIndex = Math.floor((x / rect.width) * DAYS_VISIBLE);
+    return Math.max(0, Math.min(DAYS_VISIBLE - 1, dayIndex));
   }, []);
 
 
@@ -173,13 +177,18 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
           <>
             {timelineTasks.map(({ task, start, end, project }) => {
               const barStart = Math.max(0, daysBetween(rangeStart, start));
-              const barEnd = Math.min(DAYS_VISIBLE, daysBetween(rangeStart, end) + 1);
+              const storedBarEnd = Math.min(DAYS_VISIBLE, daysBetween(rangeStart, end) + 1);
+              const previewDayIndex = dragState?.taskId === task.id ? Math.max(barStart, dragState.dayIndex) : null;
+              const barEnd = previewDayIndex !== null ? previewDayIndex + 1 : storedBarEnd;
               const barWidth = Math.max(1, barEnd - barStart);
               const subtaskProgress = task.subtasks.length > 0
                 ? Math.round((task.subtasks.filter(s => s.done).length / task.subtasks.length) * 100)
                 : null;
               const barColor = project?.color ?? priorityColor[task.priority] ?? '#6366f1';
-              const isDragging = draggingId === task.id;
+              const isDragging = dragState?.taskId === task.id;
+              const previewDateLabel = previewDayIndex !== null
+                ? formatShortDate(addDays(rangeStart, previewDayIndex))
+                : null;
 
               return (
                 <div key={task.id} className="flex items-center border-b border-[var(--border-soft)] last:border-b-0 hover:bg-[var(--surface-muted)] transition-colors">
@@ -229,7 +238,7 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
                     {/* Task bar */}
                     <div
                       className={cn(
-                        'absolute top-2.5 rounded-full transition-all group/bar',
+                        'absolute top-2.5 rounded-full group/bar',
                         onUpdateDueDate && 'cursor-grab',
                         isDragging && 'cursor-grabbing opacity-70'
                       )}
@@ -241,6 +250,11 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
                         opacity: task.status === 'done' ? 0.6 : 0.85,
                       }}
                     >
+                      {previewDateLabel && (
+                        <div className="absolute -top-8 right-0 rounded-md border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2 py-1 text-[10px] font-medium text-[var(--text-primary)] shadow-lg">
+                          {previewDateLabel}
+                        </div>
+                      )}
                       {/* Drag handle on the right end */}
                       {onUpdateDueDate && task.status !== 'done' && (
                         <div
@@ -249,26 +263,29 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
                           onMouseDown={e => {
                             e.preventDefault();
                             e.stopPropagation();
-                            handleDragStart(task.id);
+                            const initialDayIndex = getDayIndexFromMouse(e.clientX);
+                            setDragState({
+                              taskId: task.id,
+                              dayIndex: initialDayIndex !== null ? Math.max(barStart, initialDayIndex) : storedBarEnd - 1,
+                            });
 
-                            const onMove = (_: MouseEvent) => {
-                              // visual only
+                            const onMove = (moveEvent: MouseEvent) => {
+                              const nextDayIndex = getDayIndexFromMouse(moveEvent.clientX);
+                              if (nextDayIndex === null) return;
+                              setDragState({
+                                taskId: task.id,
+                                dayIndex: Math.max(barStart, nextDayIndex),
+                              });
                             };
                             const onUp = (ue: MouseEvent) => {
                               window.removeEventListener('mousemove', onMove);
                               window.removeEventListener('mouseup', onUp);
                               // Calculate new date from mouse position
-                              if (gridRef.current) {
-                                const rect = gridRef.current.getBoundingClientRect();
-                                const x = ue.clientX - rect.left;
-                                const dayIndex = Math.floor((x / rect.width) * DAYS_VISIBLE);
-                                const clampedIndex = Math.max(0, Math.min(DAYS_VISIBLE - 1, dayIndex));
-                                const newDueDate = addDays(rangeStart, clampedIndex);
-                                setDraggingId(null);
-                                onUpdateDueDate(task.id, newDueDate.toISOString());
-                              } else {
-                                setDraggingId(null);
-                              }
+                              const nextDayIndex = getDayIndexFromMouse(ue.clientX);
+                              const clampedIndex = Math.max(barStart, nextDayIndex ?? storedBarEnd - 1);
+                              const newDueDate = addDays(rangeStart, clampedIndex);
+                              setDragState(null);
+                              onUpdateDueDate(task.id, `${newDueDate.getFullYear()}-${String(newDueDate.getMonth() + 1).padStart(2, '0')}-${String(newDueDate.getDate()).padStart(2, '0')}`);
                             };
                             window.addEventListener('mousemove', onMove);
                             window.addEventListener('mouseup', onUp);

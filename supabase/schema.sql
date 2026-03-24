@@ -275,16 +275,36 @@ create unique index if not exists projects_canvas_course_unique
   on public.projects(user_id, canvas_course_id)
   where canvas_course_id is not null;
 
--- Canvas connections (per-user credentials)
+-- Canvas connections (per-user OAuth tokens — stored server-side only)
 create table if not exists public.canvas_connections (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   base_url text not null,
-  api_token text not null,
+  access_token text not null,
+  refresh_token text,
+  token_expires_at timestamptz,
+  canvas_user_id text,
   last_synced_at timestamptz,
   created_at timestamptz not null default timezone('utc', now()),
   unique(user_id)
 );
+
+-- Migration: if table exists with old api_token column, add new columns
+do $$ begin
+  -- Add access_token if missing (rename from api_token handled by app logic)
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'canvas_connections' and column_name = 'access_token') then
+    alter table public.canvas_connections add column access_token text not null default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'canvas_connections' and column_name = 'refresh_token') then
+    alter table public.canvas_connections add column refresh_token text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'canvas_connections' and column_name = 'token_expires_at') then
+    alter table public.canvas_connections add column token_expires_at timestamptz;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'canvas_connections' and column_name = 'canvas_user_id') then
+    alter table public.canvas_connections add column canvas_user_id text;
+  end if;
+end $$;
 
 alter table public.canvas_connections enable row level security;
 

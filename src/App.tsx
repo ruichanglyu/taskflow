@@ -11,6 +11,26 @@ function isRecoveryLink() {
   return hashParams.get('type') === 'recovery' || queryParams.get('type') === 'recovery';
 }
 
+// Handle Canvas OAuth callback: /canvas/callback?code=...&state=...
+// Rewrite to root with canvas_code/canvas_state params so the SPA hook picks them up.
+function handleCanvasCallback() {
+  if (window.location.pathname === '/canvas/callback') {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+    if (code && state) {
+      const newParams = new URLSearchParams({ canvas_code: code, canvas_state: state });
+      window.history.replaceState({}, '', `/?${newParams.toString()}`);
+    } else {
+      // No code — just go home
+      window.history.replaceState({}, '', '/');
+    }
+  }
+}
+
+// Run immediately on load
+handleCanvasCallback();
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);

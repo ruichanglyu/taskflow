@@ -5,7 +5,7 @@ import {
   fetchCanvasCourses,
   fetchCanvasAssignments,
   fetchCanvasQuizzes,
-  validateCanvasConnection,
+  exchangeOAuthCode,
   CanvasCourse,
   CanvasAssignment,
   CanvasQuiz,
@@ -21,40 +21,20 @@ export interface SyncResult {
   errors: string[];
 }
 
-// --- Connection storage (isolated behind this hook — swap implementation later) ---
+// --- Connection storage (isolated — swap implementation later) ---
 
 async function loadConnection(userId: string): Promise<CanvasConnection | null> {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from('canvas_connections')
-    .select('id, base_url, last_synced_at, created_at')
+    .select('id, base_url, canvas_user_id, last_synced_at, created_at')
     .eq('user_id', userId)
     .maybeSingle();
   if (error || !data) return null;
   return {
     id: data.id,
     baseUrl: data.base_url,
-    lastSyncedAt: data.last_synced_at,
-    createdAt: data.created_at,
-  };
-}
-
-async function saveConnection(userId: string, baseUrl: string, apiToken: string): Promise<CanvasConnection | null> {
-  if (!supabase) return null;
-  // Upsert: one connection per user
-  const { data, error } = await supabase
-    .from('canvas_connections')
-    .upsert({
-      user_id: userId,
-      base_url: baseUrl.replace(/\/+$/, ''),
-      api_token: apiToken,
-    }, { onConflict: 'user_id' })
-    .select('id, base_url, last_synced_at, created_at')
-    .single();
-  if (error || !data) throw new Error(error?.message ?? 'Failed to save connection');
-  return {
-    id: data.id,
-    baseUrl: data.base_url,
+    canvasUserId: data.canvas_user_id,
     lastSyncedAt: data.last_synced_at,
     createdAt: data.created_at,
   };
@@ -100,7 +80,6 @@ function parseDueDate(dueAt: string): { date: string; time: string | null } {
   const date = d.toISOString().slice(0, 10);
   const hours = d.getHours();
   const minutes = d.getMinutes();
-  // If it's exactly midnight, treat as date-only
   const time = (hours === 0 && minutes === 0) ? null : `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
   return { date, time };
 }
@@ -124,28 +103,29 @@ export function useCanvas(userId: string, existingProjects: Project[]) {
     });
   }, [userId]);
 
-  const connect = useCallback(async (baseUrl: string, apiToken: string): Promise<boolean> => {
-    setError(null);
-    try {
-      const conn = await saveConnection(userId, baseUrl, apiToken);
-      setConnection(conn);
+  // Handle OAuth callback: check URL for ?canvas_code=...&canvas_state=...
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('canvas_code');
+    const stateStr = params.get('canvas_state');
 
-      // Validate the connection works
-      const result = await validateCanvasConnection();
-      if (!result.valid) {
-        // Roll back
-        await removeConnection(userId);
-        setConnection(null);
-        setError(result.error ?? 'Could not connect to Canvas. Check your URL and token.');
-        return false;
+    if (!code || !stateStr) return;
+
+    // Clean the URL immediately
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, '', cleanUrl);
+
+    // Exchange the code for tokens
+    (async () => {
+      try {
+        const state = JSON.parse(atob(stateStr)) as { baseUrl: string };
+        const conn = await exchangeOAuthCode(code, state.baseUrl);
+        setConnection(conn);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Canvas OAuth failed');
       }
-
-      return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to connect Canvas');
-      return false;
-    }
-  }, [userId]);
+    })();
+  }, []);
 
   const disconnect = useCallback(async () => {
     setError(null);
@@ -178,7 +158,6 @@ export function useCanvas(userId: string, existingProjects: Project[]) {
           courseToProjectId.set(course.id, existingProject.id);
           result.coursesMatched++;
         } else {
-          // Create new project for this Canvas course
           const { data, error: insertError } = await supabase
             .from('projects')
             .insert({
@@ -234,7 +213,6 @@ export function useCanvas(userId: string, existingProjects: Project[]) {
     error,
     lastSyncResult,
     clearError,
-    connect,
     disconnect,
     sync,
   };
@@ -255,14 +233,11 @@ async function syncCourseItems(
     fetchCanvasQuizzes(course.id),
   ]);
 
-  // Build a set of quiz assignment IDs to avoid double-importing
-  // (Canvas creates an assignment for each quiz too)
   const quizAssignmentNames = new Set(quizzes.map(q => q.title));
 
   // Sync assignments
   for (const assignment of assignments) {
-    if (!assignment.due_at) continue; // Skip items with no due date
-    // Skip if this is actually a quiz (will be imported from quizzes endpoint)
+    if (!assignment.due_at) continue;
     if (assignment.is_quiz_assignment || quizAssignmentNames.has(assignment.name)) continue;
 
     const sourceType: DeadlineSource = 'canvas_assignment';
@@ -321,7 +296,6 @@ async function upsertDeadline(
 ) {
   if (!supabase) return;
 
-  // Check if a deadline with this source already exists
   const { data: existing } = await supabase
     .from('deadlines')
     .select('id')
@@ -331,8 +305,7 @@ async function upsertDeadline(
     .maybeSingle();
 
   if (existing) {
-    // Update: only sync Canvas-controlled fields (title, due date, time, url, project)
-    // Preserve: status, notes, linked tasks
+    // Update Canvas-controlled fields only; preserve status, notes, linked tasks
     const { error: updateError } = await supabase
       .from('deadlines')
       .update({
@@ -352,7 +325,6 @@ async function upsertDeadline(
       result.deadlinesUpdated++;
     }
   } else {
-    // Insert new deadline
     const { error: insertError } = await supabase
       .from('deadlines')
       .insert({

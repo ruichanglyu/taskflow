@@ -210,7 +210,6 @@ export function AppShell({ user }: AppShellProps) {
           isSyncing={canvasStore.isSyncing}
           error={canvasStore.error}
           lastSyncResult={canvasStore.lastSyncResult}
-          onConnect={canvasStore.connect}
           onDisconnect={canvasStore.disconnect}
           onSync={handleCanvasSync}
           onClose={() => setCanvasOpen(false)}

@@ -64,6 +64,7 @@ export interface Project {
 export interface CanvasConnection {
   id: string;
   baseUrl: string;
+  canvasUserId: string | null;
   lastSyncedAt: string | null;
   createdAt: string;
 }

@@ -263,8 +263,8 @@ function CourseDetailModal({ project, tasks, deadlines, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-start justify-between border-b border-[var(--border-soft)] px-6 py-5">
+      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="shrink-0 flex items-start justify-between border-b border-[var(--border-soft)] px-6 py-5">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ backgroundColor: `${project.color}20` }}>
               <FolderOpen size={22} style={{ color: project.color }} />
@@ -279,7 +279,7 @@ function CourseDetailModal({ project, tasks, deadlines, onClose }: {
           </button>
         </div>
 
-        <div className="space-y-6 overflow-y-auto p-6">
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-6">
           <div className="grid gap-4 md:grid-cols-4">
             <SummaryStat label="Upcoming deadlines" value={upcomingDeadlines.length} icon={<CalendarClock size={15} />} tone="default" />
             <SummaryStat label="Overdue" value={overdueDeadlines.length} icon={<AlertTriangle size={15} />} tone="danger" />
@@ -301,7 +301,7 @@ function CourseDetailModal({ project, tasks, deadlines, onClose }: {
                   {sortedDeadlines.length === 0 ? (
                     <EmptyState text="No deadlines for this course yet." />
                   ) : (
-                    sortedDeadlines.slice(0, 8).map(deadline => {
+                    sortedDeadlines.map(deadline => {
                       const overdue = deadlineDate(deadline) < today && deadline.status !== 'done' && deadline.status !== 'missed';
                       return (
                         <div key={deadline.id} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
@@ -362,7 +362,7 @@ function CourseDetailModal({ project, tasks, deadlines, onClose }: {
                   ) : activeTasks.length === 0 ? (
                     <EmptyState text="All tasks for this course are completed." />
                   ) : (
-                    activeTasks.slice(0, 8).map(task => (
+                    activeTasks.map(task => (
                       <div key={task.id} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">

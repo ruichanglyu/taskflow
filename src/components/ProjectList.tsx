@@ -24,6 +24,7 @@ function deadlineDate(deadline: Deadline) {
 export function ProjectList({ projects, tasks, deadlines, onAddProject, onDeleteProject }: ProjectListProps) {
   const [showForm, setShowForm] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState<Project | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const today = startOfToday();
@@ -130,7 +131,7 @@ export function ProjectList({ projects, tasks, deadlines, onAddProject, onDelete
                   </div>
                 </div>
                 <button
-                  onClick={e => { e.stopPropagation(); onDeleteProject(project.id); }}
+                  onClick={e => { e.stopPropagation(); setConfirmDeleteProject(project); }}
                   className="p-1 text-[var(--text-faint)] opacity-0 transition-all group-hover:opacity-100 hover:text-red-400"
                 >
                   <Trash2 size={14} />
@@ -235,6 +236,58 @@ export function ProjectList({ projects, tasks, deadlines, onAddProject, onDelete
           onClose={() => setSelectedProjectId(null)}
         />
       )}
+
+      {confirmDeleteProject && (
+        <DeleteCourseConfirmModal
+          project={confirmDeleteProject}
+          onCancel={() => setConfirmDeleteProject(null)}
+          onConfirm={() => {
+            onDeleteProject(confirmDeleteProject.id);
+            setConfirmDeleteProject(null);
+            if (selectedProjectId === confirmDeleteProject.id) {
+              setSelectedProjectId(null);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeleteCourseConfirmModal({ project, onCancel, onConfirm }: {
+  project: Project;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
+      <div className="w-full max-w-md rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="border-b border-[var(--border-soft)] px-5 py-4">
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Delete course?</h3>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            You’re about to remove <span className="font-medium text-[var(--text-primary)]">{project.name}</span>.
+          </p>
+        </div>
+        <div className="px-5 py-4 text-sm text-[var(--text-secondary)]">
+          Tasks in this course will lose their course association. This action can’t be undone from the app.
+        </div>
+        <div className="flex gap-3 border-t border-[var(--border-soft)] px-5 py-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 rounded-lg border border-[var(--border-soft)] py-2.5 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="flex-1 rounded-lg bg-red-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-red-400"
+          >
+            Delete Course
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,18 +1,30 @@
 import { useState } from 'react';
-import { Plus, Trash2, FolderOpen } from 'lucide-react';
-import { Task, Project } from '../types';
+import { Plus, Trash2, FolderOpen, CalendarClock, AlertTriangle, Target } from 'lucide-react';
+import { Task, Project, Deadline } from '../types';
 
 interface ProjectListProps {
   projects: Project[];
   tasks: Task[];
+  deadlines: Deadline[];
   onAddProject: (name: string, description: string) => Promise<string | null> | void;
   onDeleteProject: (id: string) => void;
 }
 
-export function ProjectList({ projects, tasks, onAddProject, onDeleteProject }: ProjectListProps) {
+function startOfToday() {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return now;
+}
+
+function deadlineDate(deadline: Deadline) {
+  return new Date(`${deadline.dueDate}T00:00:00`);
+}
+
+export function ProjectList({ projects, tasks, deadlines, onAddProject, onDeleteProject }: ProjectListProps) {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const today = startOfToday();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,10 +93,20 @@ export function ProjectList({ projects, tasks, onAddProject, onDeleteProject }: 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {projects.map(project => {
           const projectTasks = tasks.filter(t => t.projectId === project.id);
+          const projectDeadlines = deadlines
+            .filter(d => d.projectId === project.id)
+            .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || (a.dueTime ?? '').localeCompare(b.dueTime ?? ''));
           const done = projectTasks.filter(t => t.status === 'done').length;
           const inProgress = projectTasks.filter(t => t.status === 'in-progress').length;
           const todo = projectTasks.filter(t => t.status === 'todo').length;
           const progress = projectTasks.length > 0 ? Math.round((done / projectTasks.length) * 100) : 0;
+          const activeDeadlines = projectDeadlines.filter(d => d.status !== 'done' && d.status !== 'missed');
+          const overdueDeadlines = projectDeadlines.filter(d => {
+            if (d.status === 'done' || d.status === 'missed') return false;
+            return deadlineDate(d) < today;
+          });
+          const upcomingDeadlines = activeDeadlines.filter(d => deadlineDate(d) >= today);
+          const nextDeadline = upcomingDeadlines[0] ?? null;
 
           return (
             <div key={project.id} className="group rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 transition-all hover:border-[var(--border-strong)]">
@@ -131,6 +153,52 @@ export function ProjectList({ projects, tasks, onAddProject, onDeleteProject }: 
                 <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full bg-emerald-400" />
                   <span className="text-xs text-[var(--text-faint)]">{done} done</span>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)]">
+                    <Target size={13} />
+                    Deadline Snapshot
+                  </div>
+                  <span className="text-[10px] text-[var(--text-faint)]">
+                    {projectDeadlines.length} total
+                  </span>
+                </div>
+
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2">
+                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[var(--text-faint)]">
+                      <CalendarClock size={11} />
+                      Upcoming
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{upcomingDeadlines.length}</div>
+                  </div>
+                  <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2">
+                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[var(--text-faint)]">
+                      <AlertTriangle size={11} />
+                      Overdue
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-red-400">{overdueDeadlines.length}</div>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">Next deadline</div>
+                  {nextDeadline ? (
+                    <div className="mt-1">
+                      <div className="text-sm font-medium text-[var(--text-primary)]">{nextDeadline.title}</div>
+                      <div className="mt-0.5 text-xs text-[var(--text-faint)]">
+                        {new Date(`${nextDeadline.dueDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {nextDeadline.dueTime ? ` · ${nextDeadline.dueTime}` : ''}
+                      </div>
+                    </div>
+                  ) : projectDeadlines.length > 0 ? (
+                    <div className="mt-1 text-xs text-[var(--text-faint)]">No active deadlines right now.</div>
+                  ) : (
+                    <div className="mt-1 text-xs text-[var(--text-faint)]">No deadlines for this course yet.</div>
+                  )}
                 </div>
               </div>
 

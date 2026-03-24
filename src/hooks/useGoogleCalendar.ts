@@ -29,6 +29,9 @@ export function useGoogleCalendar(userId: string) {
   const [error, setError] = useState<string | null>(null);
 
   const calendarStorageKey = useMemo(() => getStorageKey(userId, 'selected-calendar'), [userId]);
+  const tokenStorageKey = useMemo(() => getStorageKey(userId, 'access-token'), [userId]);
+  const tokenExpiryStorageKey = useMemo(() => getStorageKey(userId, 'access-token-expiry'), [userId]);
+  const connectedStorageKey = useMemo(() => getStorageKey(userId, 'connected'), [userId]);
 
   useEffect(() => {
     const storedCalendarId = localStorage.getItem(calendarStorageKey);
@@ -38,10 +41,36 @@ export function useGoogleCalendar(userId: string) {
   }, [calendarStorageKey]);
 
   useEffect(() => {
+    const storedToken = localStorage.getItem(tokenStorageKey);
+    const storedExpiry = localStorage.getItem(tokenExpiryStorageKey);
+    if (!storedToken || !storedExpiry) {
+      return;
+    }
+
+    const expiresAt = Number(storedExpiry);
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      localStorage.removeItem(tokenStorageKey);
+      localStorage.removeItem(tokenExpiryStorageKey);
+      return;
+    }
+
+    setAccessToken(storedToken);
+  }, [tokenExpiryStorageKey, tokenStorageKey]);
+
+  useEffect(() => {
     if (selectedCalendarId) {
       localStorage.setItem(calendarStorageKey, selectedCalendarId);
     }
   }, [calendarStorageKey, selectedCalendarId]);
+
+  useEffect(() => {
+    if (accessToken) {
+      localStorage.setItem(tokenStorageKey, accessToken);
+      localStorage.setItem(connectedStorageKey, 'true');
+    } else {
+      localStorage.removeItem(tokenStorageKey);
+    }
+  }, [accessToken, connectedStorageKey, tokenStorageKey]);
 
   const loadCalendarData = useCallback(async (token: string, nextCalendarId?: string) => {
     setIsLoading(true);
@@ -74,6 +103,70 @@ export function useGoogleCalendar(userId: string) {
     }
   }, [selectedCalendarId]);
 
+  const requestAccessToken = useCallback(async (prompt: '' | 'consent', silent = false) => {
+    if (!isGoogleCalendarConfigured || !googleClientId) {
+      throw new Error('Google Calendar is not configured yet. Add VITE_GOOGLE_CLIENT_ID first.');
+    }
+
+    await loadGoogleIdentityScript();
+
+    return new Promise<string>((resolve, reject) => {
+      const tokenClient = window.google?.accounts.oauth2.initTokenClient({
+        client_id: googleClientId,
+        scope: GOOGLE_CALENDAR_SCOPE,
+        callback: response => {
+          if (response.error || !response.access_token) {
+            reject(new Error(response.error || 'Google sign-in failed.'));
+            return;
+          }
+
+          const expiresIn = response.expires_in ?? 3600;
+          const expiresAt = Date.now() + expiresIn * 1000;
+          localStorage.setItem(tokenExpiryStorageKey, String(expiresAt));
+          setAccessToken(response.access_token);
+          resolve(response.access_token);
+        },
+        error_callback: error => {
+          reject(new Error(error.type || 'Google sign-in failed.'));
+        },
+      });
+
+      tokenClient?.requestAccessToken({ prompt });
+    }).catch(err => {
+      if (silent) {
+        return Promise.reject(err);
+      }
+      throw err;
+    });
+  }, [tokenExpiryStorageKey]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    void loadCalendarData(accessToken);
+  }, [accessToken, loadCalendarData]);
+
+  useEffect(() => {
+    const shouldReconnect = localStorage.getItem(connectedStorageKey) === 'true';
+    if (!shouldReconnect || accessToken || !isGoogleCalendarConfigured) return;
+
+    let cancelled = false;
+
+    void requestAccessToken('', true)
+      .then(token => {
+        if (cancelled) return;
+        return loadCalendarData(token);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        localStorage.removeItem(tokenStorageKey);
+        localStorage.removeItem(tokenExpiryStorageKey);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, connectedStorageKey, isGoogleCalendarConfigured, loadCalendarData, requestAccessToken, tokenExpiryStorageKey, tokenStorageKey]);
+
   const connect = useCallback(async () => {
     if (!isGoogleCalendarConfigured || !googleClientId) {
       setError('Google Calendar is not configured yet. Add VITE_GOOGLE_CLIENT_ID first.');
@@ -84,40 +177,14 @@ export function useGoogleCalendar(userId: string) {
     setError(null);
 
     try {
-      await loadGoogleIdentityScript();
-
-      await new Promise<void>((resolve, reject) => {
-        const tokenClient = window.google?.accounts.oauth2.initTokenClient({
-          client_id: googleClientId,
-          scope: GOOGLE_CALENDAR_SCOPE,
-          callback: async response => {
-            if (response.error || !response.access_token) {
-              reject(new Error(response.error || 'Google sign-in failed.'));
-              return;
-            }
-
-            setAccessToken(response.access_token);
-
-            try {
-              await loadCalendarData(response.access_token);
-              resolve();
-            } catch (err) {
-              reject(err);
-            }
-          },
-          error_callback: error => {
-            reject(new Error(error.type || 'Google sign-in failed.'));
-          },
-        });
-
-        tokenClient?.requestAccessToken({ prompt: 'consent' });
-      });
+      const token = await requestAccessToken('consent');
+      await loadCalendarData(token);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect Google Calendar.');
     } finally {
       setIsConnecting(false);
     }
-  }, [loadCalendarData]);
+  }, [loadCalendarData, requestAccessToken]);
 
   const disconnect = useCallback(() => {
     if (accessToken && window.google?.accounts.oauth2) {
@@ -129,8 +196,11 @@ export function useGoogleCalendar(userId: string) {
     setEvents([]);
     setSelectedCalendarId('');
     localStorage.removeItem(calendarStorageKey);
+    localStorage.removeItem(tokenStorageKey);
+    localStorage.removeItem(tokenExpiryStorageKey);
+    localStorage.removeItem(connectedStorageKey);
     setError(null);
-  }, [accessToken, calendarStorageKey]);
+  }, [accessToken, calendarStorageKey, connectedStorageKey, tokenExpiryStorageKey, tokenStorageKey]);
 
   const refresh = useCallback(async () => {
     if (!accessToken) return;

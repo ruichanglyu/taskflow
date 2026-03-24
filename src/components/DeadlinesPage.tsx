@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Upload, ChevronDown, ChevronUp, Filter, StickyNote, Link2, Trash2, X, Pencil, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, Upload, ChevronDown, ChevronUp, Filter, StickyNote, Link2, Trash2, X, Pencil, CheckCircle2, AlertCircle, Search } from 'lucide-react';
 import { Deadline, DeadlineStatus, DeadlineType, Project, Task } from '../types';
 import { cn } from '../utils/cn';
 
@@ -263,6 +263,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
   const [detailId, setDetailId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>('dueDate');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [search, setSearch] = useState('');
   const [filterCourse, setFilterCourse] = useState<string>('');
   const [filterType, setFilterType] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
@@ -286,6 +287,18 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
 
   const filtered = useMemo(() => {
     let result = [...deadlines];
+    const searchTerm = search.trim().toLowerCase();
+    if (searchTerm) {
+      result = result.filter(d => {
+        const projectName = projects.find(p => p.id === d.projectId)?.name.toLowerCase() ?? '';
+        return (
+          d.title.toLowerCase().includes(searchTerm) ||
+          d.notes.toLowerCase().includes(searchTerm) ||
+          d.type.toLowerCase().includes(searchTerm) ||
+          projectName.includes(searchTerm)
+        );
+      });
+    }
     if (filterCourse) result = result.filter(d => d.projectId === filterCourse);
     if (filterType) result = result.filter(d => d.type === filterType);
     if (filterStatus) result = result.filter(d => d.status === filterStatus);
@@ -308,10 +321,16 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
     });
 
     return result;
-  }, [deadlines, filterCourse, filterType, filterStatus, sortField, sortDir, projects]);
+  }, [deadlines, search, filterCourse, filterType, filterStatus, sortField, sortDir, projects]);
 
-  const activeFilters = [filterCourse, filterType, filterStatus].filter(Boolean).length;
+  const activeFilters = [search, filterCourse, filterType, filterStatus].filter(Boolean).length;
   const detailDeadline = detailId ? deadlines.find(d => d.id === detailId) : null;
+  const upcomingCount = deadlines.filter(d => {
+    const days = daysUntil(d.dueDate);
+    return d.status !== 'done' && d.status !== 'missed' && days >= 0;
+  }).length;
+  const overdueCount = deadlines.filter(d => daysUntil(d.dueDate) < 0 && d.status !== 'done' && d.status !== 'missed').length;
+  const inProgressCount = deadlines.filter(d => d.status === 'in-progress').length;
 
   const handleImport = async (preview: ImportPreview) => {
     const projectIdsByCourse = new Map<string, string | null>();
@@ -430,6 +449,42 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
         </div>
       )}
 
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+          <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">Upcoming</div>
+          <div className="mt-1 text-lg font-semibold text-[var(--text-primary)]">{upcomingCount}</div>
+        </div>
+        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+          <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">In progress</div>
+          <div className="mt-1 text-lg font-semibold text-blue-400">{inProgressCount}</div>
+        </div>
+        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+          <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">Overdue</div>
+          <div className="mt-1 text-lg font-semibold text-red-400">{overdueCount}</div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search titles, notes, type, or course..."
+            className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] py-2.5 pl-9 pr-4 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+          />
+        </div>
+        {activeFilters > 0 && (
+          <button
+            onClick={() => { setSearch(''); setFilterCourse(''); setFilterType(''); setFilterStatus(''); }}
+            className="rounded-xl border border-[var(--border-soft)] px-4 py-2.5 text-sm text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
       {/* Filters */}
       {showFilters && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-3">
@@ -463,14 +518,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
-          {activeFilters > 0 && (
-            <button
-              onClick={() => { setFilterCourse(''); setFilterType(''); setFilterStatus(''); }}
-              className="text-xs text-[var(--text-faint)] hover:text-[var(--accent)] transition"
-            >
-              Clear all
-            </button>
-          )}
+          {activeFilters > 0 && <span className="text-xs text-[var(--text-faint)]">Refine the list with filters above.</span>}
         </div>
       )}
 
@@ -478,8 +526,8 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
       <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border-soft)] bg-[var(--surface-muted)]">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-[var(--border-soft)] bg-[var(--surface-muted)]/95 backdrop-blur">
                 <th className="w-10 px-3 py-2.5" />
                 <th
                   className="px-3 py-2.5 text-left text-xs font-medium text-[var(--text-muted)] cursor-pointer select-none"

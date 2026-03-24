@@ -283,8 +283,8 @@ export function useStore(userId: string) {
     void loadData();
   }, [loadData]);
 
-  const addTask = useCallback(async (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence = 'none') => {
-    if (!supabase) return;
+  const addTask = useCallback(async (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence = 'none'): Promise<string | null> => {
+    if (!supabase) return null;
 
     setError(null);
 
@@ -311,8 +311,10 @@ export function useStore(userId: string) {
         persistLocalSnapshot(projects, nextTasks);
         return nextTasks;
       });
+      return data.id as string;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create task.');
+      return null;
     }
   }, [persistLocalSnapshot, projects, userId]);
 

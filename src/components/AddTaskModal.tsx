@@ -89,13 +89,13 @@ export function AddTaskModal({ projects, onAdd, onClose }: AddTaskModalProps) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Project</label>
+              <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Course</label>
               <select
                 value={projectId}
                 onChange={e => setProjectId(e.target.value)}
                 className="w-full cursor-pointer appearance-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
               >
-                <option value="">No Project</option>
+                <option value="">No Course</option>
                 {projects.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}

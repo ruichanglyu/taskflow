@@ -27,15 +27,15 @@ export function ProjectList({ projects, tasks, onAddProject, onDeleteProject }: 
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Projects</h1>
-          <p className="mt-1 text-[var(--text-muted)]">Organize your work into projects</p>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Courses</h1>
+          <p className="mt-1 text-[var(--text-muted)]">Organize your work by course</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
           className="self-start rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors"
           style={{ backgroundColor: 'var(--accent-strong)' }}
         >
-          <Plus size={16} /> New Project
+          <Plus size={16} /> New Course
         </button>
       </div>
 

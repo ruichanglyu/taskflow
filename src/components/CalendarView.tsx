@@ -69,21 +69,25 @@ function getEventDateKey(event: GoogleCalendarEvent): string | null {
 
 interface CalendarViewProps {
   userId: string;
+  deadlines?: import('../types').Deadline[];
 }
 
 function DayPanel({
   dateStr,
   events,
+  deadlines = [],
   onDelete,
   deletingId,
   onCreateEvent,
 }: {
   dateStr: string;
   events: GoogleCalendarEvent[];
+  deadlines?: import('../types').Deadline[];
   onDelete: (id: string) => void;
   deletingId: string | null;
   onCreateEvent: () => void;
 }) {
+  const dayDeadlines = deadlines.filter(d => d.dueDate === dateStr);
   const dateLabel = new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
@@ -104,12 +108,29 @@ function DayPanel({
         </button>
       </div>
 
-      {events.length === 0 ? (
+      {events.length === 0 && dayDeadlines.length === 0 ? (
         <div className="flex min-h-[120px] items-center justify-center rounded-xl border border-dashed border-[var(--border-soft)] text-sm text-[var(--text-faint)]">
           No events this day
         </div>
       ) : (
         <div className="space-y-2">
+          {dayDeadlines.map(dl => (
+            <div
+              key={dl.id}
+              className="flex items-start gap-3 rounded-xl border border-orange-400/20 bg-orange-400/5 p-3"
+            >
+              <div className="mt-0.5 flex h-8 w-1 shrink-0 rounded-full bg-orange-400" />
+              <div className="min-w-0 flex-1">
+                <h4 className="text-sm font-medium text-[var(--text-primary)] truncate">
+                  {dl.title}
+                </h4>
+                <p className="text-xs text-orange-400/80">
+                  {dl.type.charAt(0).toUpperCase() + dl.type.slice(1)} deadline
+                  {dl.dueTime ? ` · ${dl.dueTime}` : ''}
+                </p>
+              </div>
+            </div>
+          ))}
           {events.map(event => (
             <div
               key={event.id}
@@ -155,7 +176,7 @@ function DayPanel({
   );
 }
 
-export function CalendarView({ userId }: CalendarViewProps) {
+export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
   const calendar = useGoogleCalendar(userId);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -328,6 +349,7 @@ export function CalendarView({ userId }: CalendarViewProps) {
             year={year}
             month={month}
             events={calendar.events}
+            deadlines={deadlines}
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
             onPrevMonth={handlePrevMonth}
@@ -362,6 +384,7 @@ export function CalendarView({ userId }: CalendarViewProps) {
             <DayPanel
               dateStr={selectedDate}
               events={selectedDayEvents}
+              deadlines={deadlines}
               onDelete={id => void handleDelete(id)}
               deletingId={deletingId}
               onCreateEvent={() => handleCreateFromDate(selectedDate)}

@@ -301,11 +301,11 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
         </div>
       </div>
 
-      {/* Projects Overview */}
+      {/* Courses Overview */}
       <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
         <div className="flex items-center gap-2 mb-4">
           <FolderKanban size={18} className="text-indigo-400" />
-          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Projects Overview</h3>
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Courses Overview</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map(project => {
@@ -330,7 +330,7 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
             );
           })}
           {projects.length === 0 && (
-            <p className="col-span-full py-4 text-center text-sm text-[var(--text-faint)]">No projects yet</p>
+            <p className="col-span-full py-4 text-center text-sm text-[var(--text-faint)]">No courses yet</p>
           )}
         </div>
       </div>

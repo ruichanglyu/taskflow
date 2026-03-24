@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Plus, Trash2, ChevronDown, Search, Filter, Pencil, Repeat, MessageSquare } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, Search, Filter, Pencil, Repeat, MessageSquare, Target } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { Task, Project, TaskStatus, Priority, Recurrence } from '../types';
+import { Task, Project, Deadline, TaskStatus, Priority, Recurrence } from '../types';
 import { cn } from '../utils/cn';
 import { AddTaskModal } from './AddTaskModal';
 import { EditTaskModal } from './EditTaskModal';
@@ -9,6 +9,7 @@ import { EditTaskModal } from './EditTaskModal';
 interface TaskBoardProps {
   tasks: Task[];
   projects: Project[];
+  deadlines?: Deadline[];
   onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence) => void;
   onUpdateStatus: (id: string, status: TaskStatus) => void;
   onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence }) => Promise<boolean>;
@@ -35,12 +36,14 @@ const priorityBadge = (p: Priority) => {
 function TaskCard({
   task,
   projects,
+  deadline,
   onUpdateStatus,
   onEdit,
   onDelete,
 }: {
   task: Task;
   projects: Project[];
+  deadline?: Deadline;
   onUpdateStatus: (id: string, status: TaskStatus) => void;
   onEdit: (task: Task) => void;
   onDelete: (id: string) => void;
@@ -149,12 +152,18 @@ function TaskCard({
             <MessageSquare size={9} /> {task.comments.length}
           </span>
         )}
+
+        {deadline && (
+          <span className="flex items-center gap-0.5 rounded-full bg-orange-500/10 px-2 py-0.5 text-[10px] font-medium text-orange-400" title={`Linked to: ${deadline.title}`}>
+            <Target size={9} /> {deadline.title}
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onUpdateTask, onDeleteTask, onAddSubtask, onToggleSubtask, onDeleteSubtask, onAddComment, onDeleteComment }: TaskBoardProps) {
+export function TaskBoard({ tasks, projects, deadlines = [], onAddTask, onUpdateStatus, onUpdateTask, onDeleteTask, onAddSubtask, onToggleSubtask, onDeleteSubtask, onAddComment, onDeleteComment }: TaskBoardProps) {
   const [showModal, setShowModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [search, setSearch] = useState('');
@@ -225,7 +234,7 @@ export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onUpdate
             onChange={e => setFilterProject(e.target.value)}
             className="cursor-pointer appearance-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
           >
-            <option value="all">All Projects</option>
+            <option value="all">All Courses</option>
             {projects.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -267,6 +276,7 @@ export function TaskBoard({ tasks, projects, onAddTask, onUpdateStatus, onUpdate
                               <TaskCard
                                 task={task}
                                 projects={projects}
+                                deadline={deadlines.find(d => d.linkedTaskIds.includes(task.id))}
                                 onUpdateStatus={onUpdateStatus}
                                 onEdit={setEditingTask}
                                 onDelete={onDeleteTask}

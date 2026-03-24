@@ -137,12 +137,14 @@ export function AppShell({ user }: AppShellProps) {
               onDelete={deadlineStore.deleteDeadline}
               onLinkTask={deadlineStore.linkTask}
               onUnlinkTask={deadlineStore.unlinkTask}
+              onCreateTask={async (title, desc, projId, dueDate) => store.addTask(title, desc, 'medium', projId, dueDate)}
             />
           )}
           {currentView === 'tasks' && (
             <TaskBoard
               tasks={store.tasks}
               projects={store.projects}
+              deadlines={deadlineStore.deadlines}
               onAddTask={store.addTask}
               onUpdateStatus={store.updateTaskStatus}
               onUpdateTask={store.updateTask}
@@ -163,12 +165,13 @@ export function AppShell({ user }: AppShellProps) {
             />
           )}
           {currentView === 'calendar' && (
-            <CalendarView userId={user.id} />
+            <CalendarView userId={user.id} deadlines={deadlineStore.deadlines} />
           )}
           {currentView === 'timeline' && (
             <TimelineView
               tasks={store.tasks}
               projects={store.projects}
+              deadlines={deadlineStore.deadlines}
               onUpdateDueDate={store.updateTaskDueDate}
             />
           )}

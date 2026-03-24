@@ -15,7 +15,7 @@ const navItems: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
   { view: 'deadlines', label: 'Deadlines', icon: <Target size={20} /> },
   { view: 'tasks', label: 'Tasks', icon: <CheckSquare size={20} /> },
-  { view: 'projects', label: 'Projects', icon: <FolderKanban size={20} /> },
+  { view: 'projects', label: 'Courses', icon: <FolderKanban size={20} /> },
   { view: 'calendar', label: 'Calendar', icon: <CalendarDays size={20} /> },
   { view: 'timeline', label: 'Timeline', icon: <GanttChart size={20} /> },
 ];

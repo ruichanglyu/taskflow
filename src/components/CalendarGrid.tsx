@@ -1,12 +1,14 @@
 import { useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { GoogleCalendarEvent } from '../lib/googleCalendar';
+import { Deadline } from '../types';
 import { cn } from '../utils/cn';
 
 interface CalendarGridProps {
   year: number;
   month: number;
   events: GoogleCalendarEvent[];
+  deadlines?: Deadline[];
   selectedDate: string | null;
   onSelectDate: (date: string) => void;
   onPrevMonth: () => void;
@@ -35,6 +37,7 @@ export function CalendarGrid({
   year,
   month,
   events,
+  deadlines = [],
   selectedDate,
   onSelectDate,
   onPrevMonth,
@@ -64,6 +67,16 @@ export function CalendarGrid({
     }
     return map;
   }, [events]);
+
+  const deadlinesByDate = useMemo(() => {
+    const map = new Map<string, Deadline[]>();
+    for (const dl of deadlines) {
+      const existing = map.get(dl.dueDate);
+      if (existing) existing.push(dl);
+      else map.set(dl.dueDate, [dl]);
+    }
+    return map;
+  }, [deadlines]);
 
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDayOfWeek(year, month);
@@ -141,6 +154,7 @@ export function CalendarGrid({
       <div className="grid grid-cols-7">
         {cells.map(({ day, dateStr, isCurrentMonth }) => {
           const dayEvents = eventsByDate.get(dateStr) ?? [];
+          const dayDeadlines = deadlinesByDate.get(dateStr) ?? [];
           const isToday = dateStr === todayStr;
           const isSelected = dateStr === selectedDate;
 
@@ -166,20 +180,27 @@ export function CalendarGrid({
                 {day}
               </span>
 
-              {/* Event dots */}
-              {dayEvents.length > 0 && (
+              {/* Deadline + event markers */}
+              {(dayDeadlines.length > 0 || dayEvents.length > 0) && (
                 <div className="flex items-center gap-0.5">
-                  {dayEvents.slice(0, 3).map((_, i) => (
+                  {dayDeadlines.slice(0, 2).map((dl, i) => (
                     <div
-                      key={i}
+                      key={`dl-${i}`}
+                      className="h-1.5 w-1.5 rotate-45 bg-orange-400"
+                      title={dl.title}
+                    />
+                  ))}
+                  {dayEvents.slice(0, 3 - Math.min(dayDeadlines.length, 2)).map((_, i) => (
+                    <div
+                      key={`ev-${i}`}
                       className={cn(
                         'h-1.5 w-1.5 rounded-full',
                         isSelected ? 'bg-[var(--accent)]' : 'bg-indigo-400'
                       )}
                     />
                   ))}
-                  {dayEvents.length > 3 && (
-                    <span className="text-[8px] text-[var(--text-faint)]">+{dayEvents.length - 3}</span>
+                  {dayEvents.length + dayDeadlines.length > 3 && (
+                    <span className="text-[8px] text-[var(--text-faint)]">+{dayEvents.length + dayDeadlines.length - 3}</span>
                   )}
                 </div>
               )}

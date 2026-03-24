@@ -12,6 +12,7 @@ interface DeadlinesPageProps {
   onDelete: (id: string) => void;
   onLinkTask: (deadlineId: string, taskId: string) => Promise<boolean>;
   onUnlinkTask: (deadlineId: string, taskId: string) => void;
+  onCreateTask: (title: string, description: string, projectId: string | null, dueDate: string | null) => Promise<string | null>;
 }
 
 type SortField = 'dueDate' | 'title' | 'type' | 'status' | 'course';
@@ -56,7 +57,7 @@ function daysUntil(dateStr: string) {
   return Math.ceil((due.getTime() - now.getTime()) / 86400000);
 }
 
-export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onUpdate, onDelete, onLinkTask, onUnlinkTask }: DeadlinesPageProps) {
+export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onUpdate, onDelete, onLinkTask, onUnlinkTask, onCreateTask }: DeadlinesPageProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>('dueDate');
@@ -373,6 +374,13 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onUpdate, onD
           }}
           onLinkTask={(taskId) => onLinkTask(detailDeadline.id, taskId)}
           onUnlinkTask={(taskId) => onUnlinkTask(detailDeadline.id, taskId)}
+          onCreateTask={async (title) => {
+            const taskId = await onCreateTask(title, '', detailDeadline.projectId, detailDeadline.dueDate);
+            if (taskId) {
+              await onLinkTask(detailDeadline.id, taskId);
+            }
+            return !!taskId;
+          }}
           onClose={() => setDetailId(null)}
         />
       )}
@@ -490,13 +498,14 @@ function AddDeadlineModal({ projects, onAdd, onClose }: {
 
 /* ─── Deadline Detail Modal ─── */
 
-function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, onUnlinkTask, onClose }: {
+function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, onUnlinkTask, onCreateTask, onClose }: {
   deadline: Deadline;
   projects: Project[];
   tasks: Task[];
   onUpdate: (updates: Partial<Pick<Deadline, 'title' | 'projectId' | 'status' | 'type' | 'dueDate' | 'dueTime' | 'notes'>>) => Promise<boolean>;
   onLinkTask: (taskId: string) => Promise<boolean>;
   onUnlinkTask: (taskId: string) => void;
+  onCreateTask: (title: string) => Promise<boolean>;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(deadline.title);
@@ -508,6 +517,8 @@ function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, 
   const [notes, setNotes] = useState(deadline.notes);
   const [isSaving, setIsSaving] = useState(false);
   const [linkDropdown, setLinkDropdown] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
 
   const linkedTasks = tasks.filter(t => deadline.linkedTaskIds.includes(t.id));
   const availableTasks = tasks.filter(t => !deadline.linkedTaskIds.includes(t.id));
@@ -650,6 +661,39 @@ function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, 
                   </div>
                 )}
               </div>
+            </div>
+            {/* Create new linked task */}
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                type="text"
+                value={newTaskTitle}
+                onChange={e => setNewTaskTitle(e.target.value)}
+                onKeyDown={async e => {
+                  if (e.key === 'Enter' && newTaskTitle.trim() && !isCreatingTask) {
+                    e.preventDefault();
+                    setIsCreatingTask(true);
+                    const ok = await onCreateTask(newTaskTitle.trim());
+                    if (ok) setNewTaskTitle('');
+                    setIsCreatingTask(false);
+                  }
+                }}
+                placeholder="Create a linked task..."
+                className="flex-1 rounded-md border border-[var(--border-soft)] bg-[var(--surface-muted)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+              />
+              <button
+                type="button"
+                disabled={!newTaskTitle.trim() || isCreatingTask}
+                onClick={async () => {
+                  if (!newTaskTitle.trim() || isCreatingTask) return;
+                  setIsCreatingTask(true);
+                  const ok = await onCreateTask(newTaskTitle.trim());
+                  if (ok) setNewTaskTitle('');
+                  setIsCreatingTask(false);
+                }}
+                className="rounded-md border border-[var(--border-soft)] p-1.5 text-[var(--text-faint)] transition hover:border-[var(--border-strong)] hover:text-[var(--accent)] disabled:opacity-40"
+              >
+                <Plus size={12} />
+              </button>
             </div>
             <div className="space-y-1.5">
               {linkedTasks.map(t => (

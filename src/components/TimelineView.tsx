@@ -1,11 +1,12 @@
 import { useMemo, useState, useRef, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { Task, Project } from '../types';
+import { Task, Project, Deadline } from '../types';
 import { cn } from '../utils/cn';
 
 interface TimelineViewProps {
   tasks: Task[];
   projects: Project[];
+  deadlines?: Deadline[];
   onUpdateDueDate?: (id: string, dueDate: string | null) => Promise<boolean>;
 }
 
@@ -33,7 +34,7 @@ function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-export function TimelineView({ tasks, projects, onUpdateDueDate }: TimelineViewProps) {
+export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate }: TimelineViewProps) {
   const today = startOfDay(new Date());
   const [offsetWeeks, setOffsetWeeks] = useState(0);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -141,6 +142,22 @@ export function TimelineView({ tasks, projects, onUpdateDueDate }: TimelineViewP
                   )}>
                     {day.getDate()}
                   </span>
+                  {/* Deadline diamonds */}
+                  {deadlines.some(dl => {
+                    const dlDate = dl.dueDate; // YYYY-MM-DD
+                    const dayStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+                    return dlDate === dayStr && dl.status !== 'done' && dl.status !== 'missed';
+                  }) && (
+                    <div className="w-2 h-2 rotate-45 bg-orange-400 mx-auto mt-0.5" title={
+                      deadlines
+                        .filter(dl => {
+                          const dayStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+                          return dl.dueDate === dayStr;
+                        })
+                        .map(dl => dl.title)
+                        .join(', ')
+                    } />
+                  )}
                 </div>
               );
             })}

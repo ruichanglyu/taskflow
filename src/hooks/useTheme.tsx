@@ -1,36 +1,26 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 
-export type ThemeId = 'midnight' | 'blush' | 'ocean' | 'paper';
-
-interface ThemeDefinition {
-  id: ThemeId;
-  label: string;
-}
+export type ThemeId = 'dark' | 'light';
 
 interface ThemeContextValue {
   theme: ThemeId;
   setTheme: (theme: ThemeId) => void;
-  themes: ThemeDefinition[];
 }
 
 const STORAGE_KEY = 'taskflow_theme';
-
-const THEMES: ThemeDefinition[] = [
-  { id: 'midnight', label: 'Midnight' },
-  { id: 'blush', label: 'Blush' },
-  { id: 'ocean', label: 'Ocean' },
-  { id: 'paper', label: 'Paper' },
-];
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function getInitialTheme(): ThemeId {
   const storedTheme = localStorage.getItem(STORAGE_KEY);
-  if (storedTheme === 'midnight' || storedTheme === 'blush' || storedTheme === 'ocean' || storedTheme === 'paper') {
+  if (storedTheme === 'dark' || storedTheme === 'light') {
     return storedTheme;
   }
-
-  return 'midnight';
+  // Respect system preference
+  if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+    return 'light';
+  }
+  return 'dark';
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -42,7 +32,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [theme]);
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, themes: THEMES }}>
+    <ThemeContext.Provider value={{ theme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );

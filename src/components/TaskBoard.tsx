@@ -22,7 +22,7 @@ interface TaskBoardProps {
 }
 
 const statusColumns: { status: TaskStatus; label: string; color: string; dotColor: string }[] = [
-  { status: 'todo', label: 'To Do', color: 'border-gray-600', dotColor: 'bg-gray-400' },
+  { status: 'todo', label: 'To Do', color: 'border-[var(--border-strong)]', dotColor: 'bg-[var(--text-faint)]' },
   { status: 'in-progress', label: 'In Progress', color: 'border-blue-600', dotColor: 'bg-blue-400' },
   { status: 'done', label: 'Done', color: 'border-emerald-600', dotColor: 'bg-emerald-400' },
 ];
@@ -30,7 +30,7 @@ const statusColumns: { status: TaskStatus; label: string; color: string; dotColo
 const priorityBadge = (p: Priority) => {
   if (p === 'high') return 'bg-red-500/10 text-red-400 border-red-500/20';
   if (p === 'medium') return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
-  return 'bg-gray-500/10 text-gray-400 border-gray-500/20';
+  return 'bg-[var(--surface-muted)] text-[var(--text-faint)] border-[var(--border-soft)]';
 };
 
 function TaskCard({
@@ -83,8 +83,8 @@ function TaskCard({
                     key={col.status}
                     onClick={() => { onUpdateStatus(task.id, col.status); setShowMenu(false); }}
                     className={cn(
-                      'w-full text-left px-3 py-1.5 text-xs hover:bg-gray-700 transition-colors',
-                      task.status === col.status ? 'text-[var(--accent)] bg-[var(--accent-soft)]' : 'text-[var(--text-secondary)] hover:bg-[var(--surface-muted)]'
+                      'w-full text-left px-3 py-1.5 text-xs transition-colors',
+                      task.status === col.status ? 'text-[var(--accent)] bg-[var(--accent-soft)]' : 'text-[var(--text-secondary)] hover:bg-[var(--surface-strong)]'
                     )}
                   >
                     {col.label}
@@ -136,7 +136,7 @@ function TaskCard({
         )}
 
         {dueLabel && (
-          <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded-full', isOverdue ? 'bg-red-500/10 text-red-400' : 'bg-gray-700/50 text-gray-400')}>
+          <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded-full', isOverdue ? 'bg-red-500/10 text-red-400' : 'bg-[var(--surface-strong)] text-[var(--text-faint)]')}>
             {dueLabel}
           </span>
         )}
@@ -148,9 +148,10 @@ function TaskCard({
         )}
 
         {task.comments.length > 0 && (
-          <span className="flex items-center gap-0.5 rounded-full bg-gray-700/50 px-2 py-0.5 text-[10px] font-medium text-gray-400">
+          <span className="flex items-center gap-0.5 rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-faint)]">
             <MessageSquare size={9} /> {task.comments.length}
           </span>
+
         )}
 
         {deadline && (

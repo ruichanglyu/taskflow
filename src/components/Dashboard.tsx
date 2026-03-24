@@ -90,13 +90,13 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
   const statusColor = (status: string) => {
     if (status === 'done') return 'text-emerald-400 bg-emerald-400/10';
     if (status === 'in-progress') return 'text-blue-400 bg-blue-400/10';
-    return 'text-gray-400 bg-gray-400/10';
+    return 'text-[var(--text-faint)] bg-[var(--surface-muted)]';
   };
 
   const priorityColor = (p: string) => {
     if (p === 'high') return 'text-red-400';
     if (p === 'medium') return 'text-yellow-400';
-    return 'text-gray-500';
+    return 'text-[var(--text-faint)]';
   };
 
   return (
@@ -187,7 +187,7 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-gray-400 font-medium">Low</span>
+                <span className="text-xs text-[var(--text-faint)] font-medium">Low</span>
               </div>
               <MiniBar value={priorityDist.low} max={tasks.length} color="#6b7280" />
             </div>

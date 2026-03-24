@@ -94,7 +94,7 @@ export function ProjectList({ projects, tasks, onAddProject, onDeleteProject }: 
                     <FolderOpen size={20} style={{ color: project.color }} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-white">{project.name}</h3>
+                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">{project.name}</h3>
                     <p className="mt-0.5 text-xs text-[var(--text-faint)]">{project.description || 'No description'}</p>
                   </div>
                 </div>
@@ -121,7 +121,7 @@ export function ProjectList({ projects, tasks, onAddProject, onDeleteProject }: 
 
               <div className="mt-4 flex gap-3 border-t border-[var(--border-soft)] pt-3">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-gray-400" />
+                  <div className="w-2 h-2 rounded-full bg-[var(--text-faint)]" />
                   <span className="text-xs text-[var(--text-faint)]">{todo} todo</span>
                 </div>
                 <div className="flex items-center gap-1.5">

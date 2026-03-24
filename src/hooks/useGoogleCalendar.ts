@@ -110,7 +110,7 @@ export function useGoogleCalendar(userId: string) {
           },
         });
 
-        tokenClient.requestAccessToken({ prompt: 'consent' });
+        tokenClient?.requestAccessToken({ prompt: 'consent' });
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect Google Calendar.');

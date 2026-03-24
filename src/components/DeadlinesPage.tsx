@@ -19,7 +19,7 @@ type SortField = 'dueDate' | 'title' | 'type' | 'status' | 'course';
 type SortDir = 'asc' | 'desc';
 
 const STATUS_OPTIONS: { value: DeadlineStatus; label: string; color: string }[] = [
-  { value: 'not-started', label: 'Not Started', color: 'text-gray-400 bg-gray-400/10' },
+  { value: 'not-started', label: 'Not Started', color: 'text-[var(--text-faint)] bg-[var(--surface-muted)]' },
   { value: 'in-progress', label: 'In Progress', color: 'text-blue-400 bg-blue-400/10' },
   { value: 'done', label: 'Done', color: 'text-emerald-400 bg-emerald-400/10' },
   { value: 'missed', label: 'Missed', color: 'text-red-400 bg-red-400/10' },
@@ -702,7 +702,7 @@ function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, 
                   <div className="flex items-center gap-2">
                     <span className={cn(
                       'text-[9px] font-medium px-1.5 py-0.5 rounded-full',
-                      t.status === 'done' ? 'text-emerald-400 bg-emerald-400/10' : t.status === 'in-progress' ? 'text-blue-400 bg-blue-400/10' : 'text-gray-400 bg-gray-400/10'
+                      t.status === 'done' ? 'text-emerald-400 bg-emerald-400/10' : t.status === 'in-progress' ? 'text-blue-400 bg-blue-400/10' : 'text-[var(--text-faint)] bg-[var(--surface-muted)]'
                     )}>
                       {t.status === 'in-progress' ? 'In Progress' : t.status === 'todo' ? 'To Do' : 'Done'}
                     </span>

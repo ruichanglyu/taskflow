@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Trash2, FolderOpen, CalendarClock, AlertTriangle, Target, X, ArrowRight, Clock3, ListTodo } from 'lucide-react';
+import { Plus, Trash2, FolderOpen, Target, X, ArrowRight, Clock3, ListTodo } from 'lucide-react';
 import { Task, Project, Deadline } from '../types';
 import { cn } from '../utils/cn';
 
@@ -49,10 +49,9 @@ export function ProjectList({ projects, tasks, deadlines, onAddProject, onDelete
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="self-start rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors"
-          style={{ backgroundColor: 'var(--accent-strong)' }}
+          className="inline-flex items-center gap-2 self-start rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3.5 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)]"
         >
-          <Plus size={16} /> New Course
+          <Plus size={15} /> New Course
         </button>
       </div>
 
@@ -106,10 +105,6 @@ export function ProjectList({ projects, tasks, deadlines, onAddProject, onDelete
           const todo = projectTasks.filter(t => t.status === 'todo').length;
           const progress = projectTasks.length > 0 ? Math.round((done / projectTasks.length) * 100) : 0;
           const activeDeadlines = projectDeadlines.filter(d => d.status !== 'done' && d.status !== 'missed');
-          const overdueDeadlines = projectDeadlines.filter(d => {
-            if (d.status === 'done' || d.status === 'missed') return false;
-            return deadlineDate(d) < today;
-          });
           const upcomingDeadlines = activeDeadlines.filter(d => deadlineDate(d) >= today);
           const nextDeadline = upcomingDeadlines[0] ?? null;
 
@@ -177,27 +172,10 @@ export function ProjectList({ projects, tasks, deadlines, onAddProject, onDelete
                   </span>
                 </div>
 
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2">
-                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[var(--text-faint)]">
-                      <CalendarClock size={11} />
-                      Upcoming
-                    </div>
-                    <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{upcomingDeadlines.length}</div>
-                  </div>
-                  <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2">
-                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[var(--text-faint)]">
-                      <AlertTriangle size={11} />
-                      Overdue
-                    </div>
-                    <div className="mt-1 text-sm font-semibold text-red-400">{overdueDeadlines.length}</div>
-                  </div>
-                </div>
-
-                <div className="mt-3 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2">
+                <div className="mt-3 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5">
                   <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">Next deadline</div>
                   {nextDeadline ? (
-                    <div className="mt-1">
+                    <div className="mt-1.5">
                       <div className="text-sm font-medium text-[var(--text-primary)]">{nextDeadline.title}</div>
                       <div className="mt-0.5 text-xs text-[var(--text-faint)]">
                         {new Date(`${nextDeadline.dueDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -205,9 +183,9 @@ export function ProjectList({ projects, tasks, deadlines, onAddProject, onDelete
                       </div>
                     </div>
                   ) : projectDeadlines.length > 0 ? (
-                    <div className="mt-1 text-xs text-[var(--text-faint)]">No active deadlines right now.</div>
+                    <div className="mt-1.5 text-xs text-[var(--text-faint)]">No active deadlines right now.</div>
                   ) : (
-                    <div className="mt-1 text-xs text-[var(--text-faint)]">No deadlines for this course yet.</div>
+                    <div className="mt-1.5 text-xs text-[var(--text-faint)]">No deadlines for this course yet.</div>
                   )}
                 </div>
               </div>

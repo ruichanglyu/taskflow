@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, FolderOpen, Target, X, ArrowRight, Clock3, ListTodo, Search } from 'lucide-react';
+import { Plus, Trash2, FolderOpen, Target, X, ArrowRight, Clock3, ListTodo, Search, CalendarClock, AlertTriangle } from 'lucide-react';
 import { Task, Project, Deadline } from '../types';
 import { cn } from '../utils/cn';
 

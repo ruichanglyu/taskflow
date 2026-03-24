@@ -147,6 +147,7 @@ export function AppShell({ user }: AppShellProps) {
               projects={store.projects}
               tasks={store.tasks}
               onAdd={deadlineStore.addDeadline}
+              onAddProject={store.addProject}
               onUpdate={deadlineStore.updateDeadline}
               onDelete={deadlineStore.deleteDeadline}
               onLinkTask={deadlineStore.linkTask}

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, ChevronDown, ChevronUp, Filter, StickyNote, Link2, Trash2, X, Pencil } from 'lucide-react';
+import { Plus, Upload, ChevronDown, ChevronUp, Filter, StickyNote, Link2, Trash2, X, Pencil, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Deadline, DeadlineStatus, DeadlineType, Project, Task } from '../types';
 import { cn } from '../utils/cn';
 
@@ -8,6 +8,7 @@ interface DeadlinesPageProps {
   projects: Project[];
   tasks: Task[];
   onAdd: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string) => Promise<boolean>;
+  onAddProject: (name: string, description: string) => Promise<string | null> | void;
   onUpdate: (id: string, updates: Partial<Pick<Deadline, 'title' | 'projectId' | 'status' | 'type' | 'dueDate' | 'dueTime' | 'notes'>>) => Promise<boolean>;
   onDelete: (id: string) => void;
   onLinkTask: (deadlineId: string, taskId: string) => Promise<boolean>;
@@ -17,6 +18,23 @@ interface DeadlinesPageProps {
 
 type SortField = 'dueDate' | 'title' | 'type' | 'status' | 'course';
 type SortDir = 'asc' | 'desc';
+type ImportStatus = 'idle' | 'success' | 'error';
+
+interface ParsedImportRow {
+  title: string;
+  course: string;
+  dueDate: string;
+  dueTime: string | null;
+  status: DeadlineStatus;
+  type: DeadlineType;
+  notes: string;
+}
+
+interface ImportPreview {
+  fileName: string;
+  rows: ParsedImportRow[];
+  skippedRows: string[];
+}
 
 const STATUS_OPTIONS: { value: DeadlineStatus; label: string; color: string }[] = [
   { value: 'not-started', label: 'Not Started', color: 'text-[var(--text-faint)] bg-[var(--surface-muted)]' },
@@ -57,8 +75,191 @@ function daysUntil(dateStr: string) {
   return Math.ceil((due.getTime() - now.getTime()) / 86400000);
 }
 
-export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onUpdate, onDelete, onLinkTask, onUnlinkTask, onCreateTask }: DeadlinesPageProps) {
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const next = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        cell += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      row.push(cell);
+      cell = '';
+      continue;
+    }
+
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') i++;
+      row.push(cell);
+      if (row.some(value => value.length > 0)) {
+        rows.push(row);
+      }
+      row = [];
+      cell = '';
+      continue;
+    }
+
+    cell += char;
+  }
+
+  row.push(cell);
+  if (row.some(value => value.length > 0)) {
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+function normalizeHeader(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function normalizeStatus(value: string): DeadlineStatus {
+  const status = value.trim().toLowerCase();
+  if (status === 'done') return 'done';
+  if (status === 'missed') return 'missed';
+  if (status === 'in progress' || status === 'in-progress') return 'in-progress';
+  return 'not-started';
+}
+
+function normalizeType(value: string): DeadlineType {
+  const type = value.trim().toLowerCase();
+  if (type === 'assignment') return 'assignment';
+  if (type === 'exam') return 'exam';
+  if (type === 'quiz') return 'quiz';
+  if (type === 'lab') return 'lab';
+  if (type === 'project') return 'project';
+  return 'other';
+}
+
+function normalizeDate(value: string): string | null {
+  const raw = value.trim();
+  if (!raw) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+
+  const [, month, day, year] = match;
+  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+}
+
+function normalizeTime(value: string): { dueTime: string | null; notePrefix: string | null } {
+  const raw = value.trim();
+  if (!raw) return { dueTime: null, notePrefix: null };
+
+  if (raw.toLowerCase() === 'in class') {
+    return { dueTime: null, notePrefix: 'In class' };
+  }
+
+  const normalized = raw
+    .replace(/\s+/g, ' ')
+    .replace(/(\d)(AM|PM)$/i, '$1 $2')
+    .trim()
+    .toUpperCase();
+
+  const match = normalized.match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/);
+  if (!match) {
+    return { dueTime: null, notePrefix: raw };
+  }
+
+  let hours = Number(match[1]);
+  const minutes = match[2];
+  const period = match[3];
+
+  if (hours === 12) {
+    hours = period === 'AM' ? 0 : 12;
+  } else if (period === 'PM') {
+    hours += 12;
+  }
+
+  return {
+    dueTime: `${String(hours).padStart(2, '0')}:${minutes}`,
+    notePrefix: null,
+  };
+}
+
+function buildDeadlineSignature(course: string, title: string, dueDate: string, dueTime: string | null) {
+  return [
+    course.trim().toLowerCase(),
+    title.trim().toLowerCase(),
+    dueDate,
+    dueTime ?? '',
+  ].join('::');
+}
+
+function parseDeadlineCsv(fileName: string, text: string): ImportPreview {
+  const rows = parseCsv(text);
+  if (rows.length === 0) {
+    throw new Error('The CSV file is empty.');
+  }
+
+  const headers = rows[0].map(normalizeHeader);
+  const required = ['status', 'course', 'date', 'time', 'title', 'type', 'notes'];
+  const missing = required.filter(key => !headers.includes(key));
+
+  if (missing.length > 0) {
+    throw new Error(`Missing required columns: ${missing.join(', ')}`);
+  }
+
+  const indexOf = (name: string) => headers.indexOf(name);
+  const parsedRows: ParsedImportRow[] = [];
+  const skippedRows: string[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const title = (row[indexOf('title')] ?? '').trim();
+    const course = (row[indexOf('course')] ?? '').trim();
+    const rawDate = row[indexOf('date')] ?? '';
+    const rawTime = row[indexOf('time')] ?? '';
+    const rawNotes = (row[indexOf('notes')] ?? '').trim();
+
+    if (!title && !course && !rawDate) {
+      continue;
+    }
+
+    const dueDate = normalizeDate(rawDate);
+    if (!title || !dueDate) {
+      skippedRows.push(`Row ${i + 1}: missing title or invalid date`);
+      continue;
+    }
+
+    const { dueTime, notePrefix } = normalizeTime(rawTime);
+    const notes = [notePrefix, rawNotes].filter(Boolean).join('\n');
+
+    parsedRows.push({
+      title,
+      course,
+      dueDate,
+      dueTime,
+      status: normalizeStatus(row[indexOf('status')] ?? ''),
+      type: normalizeType(row[indexOf('type')] ?? ''),
+      notes,
+    });
+  }
+
+  return { fileName, rows: parsedRows, skippedRows };
+}
+
+export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject, onUpdate, onDelete, onLinkTask, onUnlinkTask, onCreateTask }: DeadlinesPageProps) {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>('dueDate');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -66,6 +267,8 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onUpdate, onD
   const [filterType, setFilterType] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
+  const [importStatus, setImportStatus] = useState<ImportStatus>('idle');
+  const [importMessage, setImportMessage] = useState<string | null>(null);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -110,6 +313,65 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onUpdate, onD
   const activeFilters = [filterCourse, filterType, filterStatus].filter(Boolean).length;
   const detailDeadline = detailId ? deadlines.find(d => d.id === detailId) : null;
 
+  const handleImport = async (preview: ImportPreview) => {
+    const projectIdsByCourse = new Map<string, string | null>();
+    const existingProjectsByName = new Map(
+      projects.map(project => [project.name.trim().toLowerCase(), project.id] as const)
+    );
+    const existingSignatures = new Set(
+      deadlines.map(deadline => {
+        const courseName = projects.find(project => project.id === deadline.projectId)?.name ?? '';
+        return buildDeadlineSignature(courseName, deadline.title, deadline.dueDate, deadline.dueTime);
+      })
+    );
+
+    let importedCount = 0;
+    let createdCourses = 0;
+    let skippedDuplicates = 0;
+
+    for (const row of preview.rows) {
+      const normalizedCourse = row.course.trim().toLowerCase();
+      let projectId: string | null = null;
+
+      if (normalizedCourse) {
+        if (projectIdsByCourse.has(normalizedCourse)) {
+          projectId = projectIdsByCourse.get(normalizedCourse) ?? null;
+        } else if (existingProjectsByName.has(normalizedCourse)) {
+          projectId = existingProjectsByName.get(normalizedCourse) ?? null;
+          projectIdsByCourse.set(normalizedCourse, projectId);
+        } else {
+          const createdProjectId = await onAddProject(row.course.trim(), '');
+          if (createdProjectId) {
+            projectId = createdProjectId;
+            projectIdsByCourse.set(normalizedCourse, createdProjectId);
+            existingProjectsByName.set(normalizedCourse, createdProjectId);
+            createdCourses++;
+          }
+        }
+      }
+
+      const signature = buildDeadlineSignature(row.course, row.title, row.dueDate, row.dueTime);
+      if (existingSignatures.has(signature)) {
+        skippedDuplicates++;
+        continue;
+      }
+
+      const ok = await onAdd(row.title, projectId, row.type, row.dueDate, row.dueTime, row.notes);
+      if (ok) {
+        importedCount++;
+        existingSignatures.add(signature);
+      }
+    }
+
+    const parts = [`Imported ${importedCount} deadlines`];
+    if (createdCourses > 0) parts.push(`created ${createdCourses} courses`);
+    if (skippedDuplicates > 0) parts.push(`skipped ${skippedDuplicates} duplicates`);
+    if (preview.skippedRows.length > 0) parts.push(`ignored ${preview.skippedRows.length} invalid rows`);
+
+    setImportStatus(importedCount > 0 ? 'success' : 'error');
+    setImportMessage(parts.join(' • '));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -131,6 +393,13 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onUpdate, onD
             Filters{activeFilters > 0 && ` (${activeFilters})`}
           </button>
           <button
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+          >
+            <Upload size={14} />
+            Import CSV
+          </button>
+          <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-medium text-[var(--accent-contrast)] cursor-pointer"
             style={{ backgroundColor: 'var(--accent-strong)' }}
@@ -140,6 +409,26 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onUpdate, onD
           </button>
         </div>
       </div>
+
+      {importMessage && (
+        <div
+          className={cn(
+            'flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm',
+            importStatus === 'success'
+              ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+              : 'border-amber-400/20 bg-amber-400/10 text-amber-100'
+          )}
+        >
+          {importStatus === 'success' ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> : <AlertCircle size={16} className="mt-0.5 shrink-0" />}
+          <div className="flex-1">{importMessage}</div>
+          <button
+            onClick={() => { setImportMessage(null); setImportStatus('idle'); }}
+            className="text-xs opacity-80 transition hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       {showFilters && (
@@ -370,6 +659,15 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onUpdate, onD
         />
       )}
 
+      {showImportModal && (
+        <ImportDeadlinesModal
+          existingDeadlines={deadlines}
+          existingProjects={projects}
+          onImport={handleImport}
+          onClose={() => setShowImportModal(false)}
+        />
+      )}
+
       {/* Detail Modal */}
       {detailDeadline && (
         <DeadlineDetailModal
@@ -391,6 +689,197 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onUpdate, onD
           onClose={() => setDetailId(null)}
         />
       )}
+    </div>
+  );
+}
+
+function ImportDeadlinesModal({ existingDeadlines, existingProjects, onImport, onClose }: {
+  existingDeadlines: Deadline[];
+  existingProjects: Project[];
+  onImport: (preview: ImportPreview) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [isParsing, setIsParsing] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const existingSignatures = useMemo(() => {
+    return new Set(
+      existingDeadlines.map(deadline => {
+        const courseName = existingProjects.find(project => project.id === deadline.projectId)?.name ?? '';
+        return buildDeadlineSignature(courseName, deadline.title, deadline.dueDate, deadline.dueTime);
+      })
+    );
+  }, [existingDeadlines, existingProjects]);
+
+  const duplicateCount = useMemo(() => {
+    if (!preview) return 0;
+    return preview.rows.filter(row =>
+      existingSignatures.has(buildDeadlineSignature(row.course, row.title, row.dueDate, row.dueTime))
+    ).length;
+  }, [existingSignatures, preview]);
+
+  const handleFile = async (file: File | null) => {
+    if (!file) return;
+    setIsParsing(true);
+    setError(null);
+
+    try {
+      const text = await file.text();
+      setPreview(parseDeadlineCsv(file.name, text));
+    } catch (err) {
+      setPreview(null);
+      setError(err instanceof Error ? err.message : 'Could not parse the CSV file.');
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!preview) return;
+    setIsImporting(true);
+    setError(null);
+
+    try {
+      await onImport(preview);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Import failed.');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="w-full max-w-3xl rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Import Deadlines from CSV</h2>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">Upload your semester tracker and we’ll map it into Deadlines and Courses.</p>
+          </div>
+          <button onClick={onClose} className="text-[var(--text-faint)] transition hover:text-[var(--text-primary)]">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <label className="block rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-6 text-center transition hover:border-[var(--accent)]">
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={e => void handleFile(e.target.files?.[0] ?? null)}
+            />
+            <Upload size={20} className="mx-auto mb-2 text-[var(--text-faint)]" />
+            <div className="text-sm font-medium text-[var(--text-primary)]">Choose a CSV file</div>
+            <div className="mt-1 text-xs text-[var(--text-faint)]">Expected columns: Status, Course, Date, Time, Title, Type, Notes</div>
+          </label>
+
+          {isParsing && (
+            <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-muted)]">
+              Reading your file...
+            </div>
+          )}
+
+          {error && (
+            <div className="rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+              {error}
+            </div>
+          )}
+
+          {preview && (
+            <>
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+                  <div className="text-xs text-[var(--text-faint)]">File</div>
+                  <div className="mt-1 truncate text-sm font-medium text-[var(--text-primary)]">{preview.fileName}</div>
+                </div>
+                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+                  <div className="text-xs text-[var(--text-faint)]">Rows ready</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{preview.rows.length}</div>
+                </div>
+                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+                  <div className="text-xs text-[var(--text-faint)]">Duplicates</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{duplicateCount}</div>
+                </div>
+                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+                  <div className="text-xs text-[var(--text-faint)]">Invalid rows</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{preview.skippedRows.length}</div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)]">
+                <div className="border-b border-[var(--border-soft)] px-4 py-3 text-sm font-medium text-[var(--text-primary)]">
+                  Preview
+                </div>
+                <div className="max-h-72 overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[var(--border-soft)] bg-[var(--surface-muted)] text-left text-xs text-[var(--text-muted)]">
+                        <th className="px-3 py-2">Course</th>
+                        <th className="px-3 py-2">Date</th>
+                        <th className="px-3 py-2">Time</th>
+                        <th className="px-3 py-2">Title</th>
+                        <th className="px-3 py-2">Type</th>
+                        <th className="px-3 py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.rows.slice(0, 8).map((row, index) => (
+                        <tr key={`${row.title}-${index}`} className="border-b border-[var(--border-soft)] last:border-b-0">
+                          <td className="px-3 py-2 text-[var(--text-secondary)]">{row.course || '—'}</td>
+                          <td className="px-3 py-2 text-[var(--text-secondary)]">{formatDate(row.dueDate)}</td>
+                          <td className="px-3 py-2 text-[var(--text-faint)]">{row.dueTime ? formatTime(row.dueTime) : '—'}</td>
+                          <td className="px-3 py-2 text-[var(--text-primary)]">{row.title}</td>
+                          <td className="px-3 py-2 text-[var(--text-faint)] uppercase">{row.type}</td>
+                          <td className="px-3 py-2 text-[var(--text-faint)]">{statusMeta(row.status).label}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {preview.rows.length > 8 && (
+                  <div className="border-t border-[var(--border-soft)] px-4 py-2 text-xs text-[var(--text-faint)]">
+                    Showing 8 of {preview.rows.length} rows.
+                  </div>
+                )}
+              </div>
+
+              {preview.skippedRows.length > 0 && (
+                <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+                  <div className="font-medium">Some rows will be skipped</div>
+                  <ul className="mt-2 space-y-1 text-xs text-amber-100/90">
+                    {preview.skippedRows.slice(0, 5).map(message => (
+                      <li key={message}>{message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="flex gap-3 border-t border-[var(--border-soft)] px-5 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-[var(--border-soft)] py-2.5 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleImport()}
+            disabled={!preview || isImporting}
+            className="flex-1 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ backgroundColor: 'var(--accent-strong)' }}
+          >
+            {isImporting ? 'Importing...' : 'Import Deadlines'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

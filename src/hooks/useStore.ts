@@ -439,8 +439,8 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, projects, userId]);
 
-  const addProject = useCallback(async (name: string, description: string) => {
-    if (!supabase) return;
+  const addProject = useCallback(async (name: string, description: string): Promise<string | null> => {
+    if (!supabase) return null;
 
     setError(null);
 
@@ -463,8 +463,10 @@ export function useStore(userId: string) {
         persistLocalSnapshot(nextProjects, tasks);
         return nextProjects;
       });
+      return data.id as string;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create project.');
+      return null;
     }
   }, [persistLocalSnapshot, projects.length, tasks, userId]);
 

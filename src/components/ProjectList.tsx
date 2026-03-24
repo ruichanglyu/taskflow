@@ -5,7 +5,7 @@ import { Task, Project } from '../types';
 interface ProjectListProps {
   projects: Project[];
   tasks: Task[];
-  onAddProject: (name: string, description: string) => void;
+  onAddProject: (name: string, description: string) => Promise<string | null> | void;
   onDeleteProject: (id: string) => void;
 }
 
@@ -14,10 +14,10 @@ export function ProjectList({ projects, tasks, onAddProject, onDeleteProject }: 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onAddProject(name.trim(), description.trim());
+    await onAddProject(name.trim(), description.trim());
     setName('');
     setDescription('');
     setShowForm(false);

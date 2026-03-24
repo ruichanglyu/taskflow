@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Plus, Trash2, FolderOpen, Target, X, ArrowRight, Clock3, ListTodo } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Plus, Trash2, FolderOpen, Target, X, ArrowRight, Clock3, ListTodo, Search } from 'lucide-react';
 import { Task, Project, Deadline } from '../types';
 import { cn } from '../utils/cn';
 
@@ -7,9 +7,14 @@ interface ProjectListProps {
   projects: Project[];
   tasks: Task[];
   deadlines: Deadline[];
+  initialProjectId?: string | null;
   onAddProject: (name: string, description: string) => Promise<string | null> | void;
   onDeleteProject: (id: string) => void;
+  onOpenTasks?: (projectId: string) => void;
+  onOpenDeadlines?: (projectId: string) => void;
 }
+
+type CourseSort = 'urgency' | 'alphabetical' | 'next-deadline';
 
 function startOfToday() {
   const now = new Date();
@@ -21,13 +26,19 @@ function deadlineDate(deadline: Deadline) {
   return new Date(`${deadline.dueDate}T00:00:00`);
 }
 
-export function ProjectList({ projects, tasks, deadlines, onAddProject, onDeleteProject }: ProjectListProps) {
+export function ProjectList({ projects, tasks, deadlines, initialProjectId = null, onAddProject, onDeleteProject, onOpenTasks, onOpenDeadlines }: ProjectListProps) {
   const [showForm, setShowForm] = useState(false);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState<Project | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<CourseSort>('urgency');
   const today = startOfToday();
+
+  useEffect(() => {
+    setSelectedProjectId(initialProjectId);
+  }, [initialProjectId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +50,32 @@ export function ProjectList({ projects, tasks, deadlines, onAddProject, onDelete
   };
 
   const selectedProject = selectedProjectId ? projects.find(project => project.id === selectedProjectId) ?? null : null;
+
+  const visibleProjects = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const withMeta = projects.map(project => {
+      const projectDeadlines = deadlines
+        .filter(d => d.projectId === project.id && d.status !== 'done' && d.status !== 'missed')
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || (a.dueTime ?? '').localeCompare(b.dueTime ?? ''));
+      const nextDeadline = projectDeadlines[0] ?? null;
+      return {
+        project,
+        nextDeadline,
+        urgency: nextDeadline ? deadlineDate(nextDeadline).getTime() : Number.MAX_SAFE_INTEGER,
+      };
+    }).filter(({ project }) => {
+      if (!term) return true;
+      return project.name.toLowerCase().includes(term) || project.description.toLowerCase().includes(term);
+    });
+
+    withMeta.sort((a, b) => {
+      if (sort === 'alphabetical') return a.project.name.localeCompare(b.project.name);
+      if (sort === 'next-deadline') return a.urgency - b.urgency;
+      return a.urgency - b.urgency || a.project.name.localeCompare(b.project.name);
+    });
+
+    return withMeta.map(item => item.project);
+  }, [deadlines, projects, search, sort]);
 
   return (
     <div className="space-y-6">
@@ -54,6 +91,28 @@ export function ProjectList({ projects, tasks, deadlines, onAddProject, onDelete
         >
           <Plus size={15} /> New Course
         </button>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search courses..."
+            className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] py-2.5 pl-9 pr-4 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+          />
+        </div>
+        <select
+          value={sort}
+          onChange={e => setSort(e.target.value as CourseSort)}
+          className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+        >
+          <option value="urgency">Sort by urgency</option>
+          <option value="alphabetical">Sort alphabetically</option>
+          <option value="next-deadline">Sort by next deadline</option>
+        </select>
       </div>
 
       {/* Add Project Form */}
@@ -96,7 +155,7 @@ export function ProjectList({ projects, tasks, deadlines, onAddProject, onDelete
 
       {/* Project Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {projects.map(project => {
+        {visibleProjects.map(project => {
           const projectTasks = tasks.filter(t => t.projectId === project.id);
           const projectDeadlines = deadlines
             .filter(d => d.projectId === project.id)
@@ -207,11 +266,19 @@ export function ProjectList({ projects, tasks, deadlines, onAddProject, onDelete
         )}
       </div>
 
+      {visibleProjects.length === 0 && (
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
+          No courses match your search yet.
+        </div>
+      )}
+
       {selectedProject && (
         <CourseDetailModal
           project={selectedProject}
           tasks={tasks.filter(task => task.projectId === selectedProject.id)}
           deadlines={deadlines.filter(deadline => deadline.projectId === selectedProject.id)}
+          onOpenTasks={onOpenTasks}
+          onOpenDeadlines={onOpenDeadlines}
           onClose={() => setSelectedProjectId(null)}
         />
       )}
@@ -271,10 +338,12 @@ function DeleteCourseConfirmModal({ project, onCancel, onConfirm }: {
   );
 }
 
-function CourseDetailModal({ project, tasks, deadlines, onClose }: {
+function CourseDetailModal({ project, tasks, deadlines, onOpenTasks, onOpenDeadlines, onClose }: {
   project: Project;
   tasks: Task[];
   deadlines: Deadline[];
+  onOpenTasks?: (projectId: string) => void;
+  onOpenDeadlines?: (projectId: string) => void;
   onClose: () => void;
 }) {
   const today = startOfToday();
@@ -304,6 +373,22 @@ function CourseDetailModal({ project, tasks, deadlines, onClose }: {
             <div>
               <h2 className="text-xl font-semibold text-[var(--text-primary)]">{project.name}</h2>
               <p className="mt-1 text-sm text-[var(--text-muted)]">{project.description || 'Course overview and workload snapshot'}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenDeadlines?.(project.id)}
+                  className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--accent)]"
+                >
+                  Open deadlines view
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenTasks?.(project.id)}
+                  className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--accent)]"
+                >
+                  Open tasks view
+                </button>
+              </div>
             </div>
           </div>
           <button onClick={onClose} className="rounded-full p-2 text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]">

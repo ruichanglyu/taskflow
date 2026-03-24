@@ -344,7 +344,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
         </div>
       ) : viewMode === 'month' ? (
         /* ── Month View ── */
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           <CalendarGrid
             year={year}
             month={month}
@@ -360,7 +360,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
 
           <div className="space-y-4">
             {/* Calendar picker */}
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 sm:p-5">
               <div className="flex items-center gap-2 mb-3">
                 <CalendarDays size={18} className="text-[var(--accent)]" />
                 <h2 className="text-sm font-semibold text-[var(--text-primary)]">Calendar</h2>

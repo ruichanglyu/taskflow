@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Upload, ChevronDown, ChevronUp, Filter, StickyNote, Link2, Trash2, X, Pencil, CheckCircle2, AlertCircle, Search } from 'lucide-react';
 import { Deadline, DeadlineStatus, DeadlineType, Project, Task } from '../types';
 import { cn } from '../utils/cn';
@@ -7,6 +7,8 @@ interface DeadlinesPageProps {
   deadlines: Deadline[];
   projects: Project[];
   tasks: Task[];
+  initialCourseFilter?: string | null;
+  initialDetailId?: string | null;
   onAdd: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string) => Promise<boolean>;
   onAddProject: (name: string, description: string) => Promise<string | null> | void;
   onUpdate: (id: string, updates: Partial<Pick<Deadline, 'title' | 'projectId' | 'status' | 'type' | 'dueDate' | 'dueTime' | 'notes'>>) => Promise<boolean>;
@@ -14,11 +16,15 @@ interface DeadlinesPageProps {
   onLinkTask: (deadlineId: string, taskId: string) => Promise<boolean>;
   onUnlinkTask: (deadlineId: string, taskId: string) => void;
   onCreateTask: (title: string, description: string, projectId: string | null, dueDate: string | null) => Promise<string | null>;
+  onNavigateToCourse?: (projectId: string) => void;
+  onNavigateToTasks?: (projectId: string) => void;
 }
 
 type SortField = 'dueDate' | 'title' | 'type' | 'status' | 'course';
 type SortDir = 'asc' | 'desc';
 type ImportStatus = 'idle' | 'success' | 'error';
+type DeadlineQuickFilter = 'all' | 'today' | 'this-week' | 'overdue';
+type DeadlineViewMode = 'table' | 'compact' | 'course';
 
 interface ParsedImportRow {
   title: string;
@@ -257,19 +263,21 @@ function parseDeadlineCsv(fileName: string, text: string): ImportPreview {
   return { fileName, rows: parsedRows, skippedRows };
 }
 
-export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject, onUpdate, onDelete, onLinkTask, onUnlinkTask, onCreateTask }: DeadlinesPageProps) {
+export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter = null, initialDetailId = null, onAdd, onAddProject, onUpdate, onDelete, onLinkTask, onUnlinkTask, onCreateTask, onNavigateToCourse, onNavigateToTasks }: DeadlinesPageProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(initialDetailId);
   const [sortField, setSortField] = useState<SortField>('dueDate');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [search, setSearch] = useState('');
-  const [filterCourse, setFilterCourse] = useState<string>('');
+  const [filterCourse, setFilterCourse] = useState<string>(initialCourseFilter ?? '');
   const [filterType, setFilterType] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
   const [importStatus, setImportStatus] = useState<ImportStatus>('idle');
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [quickFilter, setQuickFilter] = useState<DeadlineQuickFilter>('all');
+  const [viewMode, setViewMode] = useState<DeadlineViewMode>('table');
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -284,6 +292,14 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
     if (sortField !== field) return null;
     return sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
   };
+
+  useEffect(() => {
+    setFilterCourse(initialCourseFilter ?? '');
+  }, [initialCourseFilter]);
+
+  useEffect(() => {
+    setDetailId(initialDetailId);
+  }, [initialDetailId]);
 
   const filtered = useMemo(() => {
     let result = [...deadlines];
@@ -302,6 +318,15 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
     if (filterCourse) result = result.filter(d => d.projectId === filterCourse);
     if (filterType) result = result.filter(d => d.type === filterType);
     if (filterStatus) result = result.filter(d => d.status === filterStatus);
+    if (quickFilter !== 'all') {
+      result = result.filter(d => {
+        const days = daysUntil(d.dueDate);
+        if (quickFilter === 'today') return days === 0 && d.status !== 'done' && d.status !== 'missed';
+        if (quickFilter === 'this-week') return days >= 0 && days <= 7 && d.status !== 'done' && d.status !== 'missed';
+        if (quickFilter === 'overdue') return days < 0 && d.status !== 'done' && d.status !== 'missed';
+        return true;
+      });
+    }
 
     result.sort((a, b) => {
       let cmp = 0;
@@ -321,7 +346,16 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
     });
 
     return result;
-  }, [deadlines, search, filterCourse, filterType, filterStatus, sortField, sortDir, projects]);
+  }, [deadlines, search, filterCourse, filterType, filterStatus, quickFilter, sortField, sortDir, projects]);
+
+  const groupedByCourse = useMemo(() => {
+    return filtered.reduce<Record<string, Deadline[]>>((groups, deadline) => {
+      const key = projects.find(project => project.id === deadline.projectId)?.name ?? 'No Course';
+      groups[key] = groups[key] ?? [];
+      groups[key].push(deadline);
+      return groups;
+    }, {});
+  }, [filtered, projects]);
 
   const activeFilters = [search, filterCourse, filterType, filterStatus].filter(Boolean).length;
   const detailDeadline = detailId ? deadlines.find(d => d.id === detailId) : null;
@@ -477,12 +511,76 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
         </div>
         {activeFilters > 0 && (
           <button
-            onClick={() => { setSearch(''); setFilterCourse(''); setFilterType(''); setFilterStatus(''); }}
+            onClick={() => { setSearch(''); setFilterCourse(''); setFilterType(''); setFilterStatus(''); setQuickFilter('all'); }}
             className="rounded-xl border border-[var(--border-soft)] px-4 py-2.5 text-sm text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
           >
             Clear filters
           </button>
         )}
+      </div>
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {([
+            { value: 'all', label: 'All' },
+            { value: 'today', label: 'Today' },
+            { value: 'this-week', label: 'This Week' },
+            { value: 'overdue', label: 'Overdue' },
+          ] as { value: DeadlineQuickFilter; label: string }[]).map(option => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setQuickFilter(option.value)}
+              className={cn(
+                'rounded-full border px-3 py-1.5 text-xs font-medium transition',
+                quickFilter === option.value
+                  ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                  : 'border-[var(--border-soft)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]'
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setViewMode('table')}
+            className={cn(
+              'rounded-lg border px-3 py-1.5 text-xs font-medium transition',
+              viewMode === 'table'
+                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                : 'border-[var(--border-soft)] text-[var(--text-secondary)]'
+            )}
+          >
+            Table
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('compact')}
+            className={cn(
+              'rounded-lg border px-3 py-1.5 text-xs font-medium transition',
+              viewMode === 'compact'
+                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                : 'border-[var(--border-soft)] text-[var(--text-secondary)]'
+            )}
+          >
+            Compact
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('course')}
+            className={cn(
+              'rounded-lg border px-3 py-1.5 text-xs font-medium transition',
+              viewMode === 'course'
+                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                : 'border-[var(--border-soft)] text-[var(--text-secondary)]'
+            )}
+          >
+            By Course
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -522,8 +620,100 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
         </div>
       )}
 
+      {viewMode === 'course' ? (
+        <div className="space-y-4">
+          {Object.entries(groupedByCourse).length === 0 ? (
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
+              No deadlines match your filters.
+            </div>
+          ) : (
+            Object.entries(groupedByCourse).map(([courseName, courseDeadlines]) => (
+              <div key={courseName} className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)]">
+                <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-4 py-3">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--text-primary)]">{courseName}</div>
+                    <div className="mt-0.5 text-xs text-[var(--text-faint)]">{courseDeadlines.length} deadlines</div>
+                  </div>
+                  {courseDeadlines[0]?.projectId && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigateToCourse?.(courseDeadlines[0].projectId!)}
+                      className="text-xs font-medium text-[var(--accent)] transition hover:underline"
+                    >
+                      Open course
+                    </button>
+                  )}
+                </div>
+                <div className="divide-y divide-[var(--border-soft)]">
+                  {courseDeadlines.map(dl => (
+                    <button
+                      key={dl.id}
+                      type="button"
+                      onClick={() => setDetailId(dl.id)}
+                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-[var(--surface-muted)]"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-[var(--text-primary)]">{dl.title}</div>
+                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-[var(--text-faint)]">
+                          <span>{formatDate(dl.dueDate)}</span>
+                          {dl.dueTime && <span>{formatTime(dl.dueTime)}</span>}
+                          <span className="uppercase tracking-wide">{dl.type}</span>
+                        </div>
+                      </div>
+                      <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium', statusMeta(dl.status).color)}>
+                        {statusMeta(dl.status).label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      ) : (
+      <>
+      <div className="grid gap-3 md:hidden">
+        {filtered.length === 0 ? (
+          <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
+            {deadlines.length === 0 ? 'No deadlines yet. Click "Add Deadline" to get started.' : 'No deadlines match your filters.'}
+          </div>
+        ) : (
+          filtered.map(dl => {
+            const project = projects.find(p => p.id === dl.projectId);
+            const days = daysUntil(dl.dueDate);
+            const sm = statusMeta(dl.status);
+            const isOverdue = days < 0 && dl.status !== 'done' && dl.status !== 'missed';
+
+            return (
+              <button
+                key={dl.id}
+                type="button"
+                onClick={() => setDetailId(dl.id)}
+                className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 text-left transition hover:border-[var(--border-strong)]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{dl.title}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-faint)]">
+                      {project && <span>{project.name}</span>}
+                      <span className="uppercase tracking-wide">{dl.type}</span>
+                    </div>
+                  </div>
+                  <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', sm.color)}>{sm.label}</span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span className={cn(isOverdue ? 'text-red-400' : 'text-[var(--text-secondary)]')}>{formatDate(dl.dueDate)}</span>
+                  {dl.dueTime && <span className="text-[var(--text-faint)]">{formatTime(dl.dueTime)}</span>}
+                  {dl.linkedTaskIds.length > 0 && <span className="text-indigo-400">{dl.linkedTaskIds.length} linked</span>}
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
+
       {/* Table */}
-      <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] overflow-hidden">
+      <div className="hidden overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10">
@@ -585,6 +775,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
                       className={cn(
                         'border-b border-[var(--border-soft)] last:border-b-0 transition-colors hover:bg-[var(--surface-muted)] group',
                         dl.status === 'done' && 'opacity-60',
+                        viewMode === 'compact' && 'text-xs'
                       )}
                     >
                       <td className="px-3 py-2.5">
@@ -608,10 +799,14 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
                       </td>
                       <td className="px-3 py-2.5">
                         {project ? (
-                          <span className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+                          <button
+                            type="button"
+                            onClick={() => onNavigateToCourse?.(project.id)}
+                            className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] transition hover:text-[var(--accent)]"
+                          >
                             <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: project.color }} />
                             <span className="truncate max-w-[100px]">{project.name}</span>
-                          </span>
+                          </button>
                         ) : (
                           <span className="text-xs text-[var(--text-faint)]">—</span>
                         )}
@@ -661,10 +856,14 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
                       </td>
                       <td className="px-3 py-2.5">
                         {dl.linkedTaskIds.length > 0 ? (
-                          <span className="flex items-center gap-1 text-xs text-indigo-400">
+                          <button
+                            type="button"
+                            onClick={() => dl.projectId && onNavigateToTasks?.(dl.projectId)}
+                            className="flex items-center gap-1 text-xs text-indigo-400 transition hover:underline"
+                          >
                             <Link2 size={11} />
                             {dl.linkedTaskIds.length}
-                          </span>
+                          </button>
                         ) : (
                           <span className="text-xs text-[var(--text-faint)]">—</span>
                         )}
@@ -685,6 +884,8 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
           </table>
         </div>
       </div>
+      </>
+      )}
 
       {/* Summary footer */}
       <div className="flex flex-wrap gap-4 text-xs text-[var(--text-faint)]">
@@ -734,6 +935,8 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onAddProject,
             }
             return !!taskId;
           }}
+          onNavigateToCourse={onNavigateToCourse}
+          onNavigateToTasks={onNavigateToTasks}
           onClose={() => setDetailId(null)}
         />
       )}
@@ -1042,7 +1245,7 @@ function AddDeadlineModal({ projects, onAdd, onClose }: {
 
 /* ─── Deadline Detail Modal ─── */
 
-function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, onUnlinkTask, onCreateTask, onClose }: {
+function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, onUnlinkTask, onCreateTask, onNavigateToCourse, onNavigateToTasks, onClose }: {
   deadline: Deadline;
   projects: Project[];
   tasks: Task[];
@@ -1050,6 +1253,8 @@ function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, 
   onLinkTask: (taskId: string) => Promise<boolean>;
   onUnlinkTask: (taskId: string) => void;
   onCreateTask: (title: string) => Promise<boolean>;
+  onNavigateToCourse?: (projectId: string) => void;
+  onNavigateToTasks?: (projectId: string) => void;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(deadline.title);
@@ -1100,6 +1305,24 @@ function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, 
           <button onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-primary)]"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-4">
+          {project && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onNavigateToCourse?.(project.id)}
+                className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--accent)]"
+              >
+                Open course
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigateToTasks?.(project.id)}
+                className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--accent)]"
+              >
+                View course tasks
+              </button>
+            </div>
+          )}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Title</label>
             <input

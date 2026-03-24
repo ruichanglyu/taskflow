@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { LogOut, Menu, Search } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { LogOut, Menu, Search, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { View } from '../types';
 import { useStore } from '../hooks/useStore';
@@ -22,21 +22,49 @@ interface AppShellProps {
   user: User;
 }
 
+type ToastTone = 'success' | 'error' | 'info';
+
+interface Toast {
+  id: number;
+  tone: ToastTone;
+  title: string;
+  message?: string;
+}
+
 export function AppShell({ user }: AppShellProps) {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [canvasOpen, setCanvasOpen] = useState(false);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [projectFocusId, setProjectFocusId] = useState<string | null>(null);
+  const [deadlineFocusId, setDeadlineFocusId] = useState<string | null>(null);
+  const [taskProjectFilterId, setTaskProjectFilterId] = useState<string>('all');
   const store = useStore(user.id);
   const deadlineStore = useDeadlines(user.id);
   const canvasStore = useCanvas(user.id, store.projects);
   const { requestPermission } = useNotifications(store.tasks);
+
+  const pushToast = useCallback((tone: ToastTone, title: string, message?: string) => {
+    const id = Date.now() + Math.floor(Math.random() * 1000);
+    setToasts(prev => [...prev, { id, tone, title, message }]);
+    window.setTimeout(() => {
+      setToasts(prev => prev.filter(toast => toast.id !== id));
+    }, 4200);
+  }, []);
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  }, []);
 
   // After Canvas sync, reload deadlines + projects
   const handleCanvasSync = async () => {
     const result = await canvasStore.sync();
     if (result) {
       await Promise.all([deadlineStore.loadDeadlines(), store.loadData()]);
+      pushToast('success', 'Canvas sync complete', canvasStore.lastSyncResult ?? 'Courses and deadlines were refreshed.');
+    } else {
+      pushToast('error', 'Canvas sync failed', canvasStore.error ?? 'Please check your Canvas connection and try again.');
     }
   };
 
@@ -61,6 +89,127 @@ export function AppShell({ user }: AppShellProps) {
     if (!supabase) return;
     await supabase.auth.signOut();
   };
+
+  const openCourse = useCallback((projectId: string) => {
+    setProjectFocusId(projectId);
+    setCurrentView('projects');
+  }, []);
+
+  const openCourseTasks = useCallback((projectId: string) => {
+    setTaskProjectFilterId(projectId);
+    setCurrentView('tasks');
+  }, []);
+
+  const openCourseDeadlines = useCallback((projectId: string) => {
+    setDeadlineFocusId(null);
+    setProjectFocusId(projectId);
+    setCurrentView('deadlines');
+  }, []);
+
+  const openDeadline = useCallback((deadlineId: string) => {
+    const deadline = deadlineStore.deadlines.find(item => item.id === deadlineId);
+    if (deadline?.projectId) {
+      setProjectFocusId(deadline.projectId);
+    }
+    setDeadlineFocusId(deadlineId);
+    setCurrentView('deadlines');
+  }, [deadlineStore.deadlines]);
+
+  const handleAddDeadline = useCallback(async (...args: Parameters<typeof deadlineStore.addDeadline>) => {
+    const ok = await deadlineStore.addDeadline(...args);
+    if (ok) {
+      pushToast('success', 'Deadline added', 'Your deadline was added to the tracker.');
+    } else {
+      pushToast('error', 'Could not add deadline', deadlineStore.error ?? 'Please try again.');
+    }
+    return ok;
+  }, [deadlineStore, pushToast]);
+
+  const handleUpdateDeadline = useCallback(async (...args: Parameters<typeof deadlineStore.updateDeadline>) => {
+    const ok = await deadlineStore.updateDeadline(...args);
+    if (ok) {
+      pushToast('success', 'Deadline updated');
+    } else {
+      pushToast('error', 'Could not update deadline', deadlineStore.error ?? 'Please try again.');
+    }
+    return ok;
+  }, [deadlineStore, pushToast]);
+
+  const handleDeleteDeadline = useCallback(async (id: string) => {
+    await deadlineStore.deleteDeadline(id);
+    if (!deadlineStore.error) {
+      pushToast('success', 'Deadline deleted');
+    } else {
+      pushToast('error', 'Could not delete deadline', deadlineStore.error);
+    }
+  }, [deadlineStore, pushToast]);
+
+  const handleLinkTask = useCallback(async (...args: Parameters<typeof deadlineStore.linkTask>) => {
+    const ok = await deadlineStore.linkTask(...args);
+    if (ok) {
+      pushToast('success', 'Task linked', 'This deadline is now connected to a task.');
+    } else {
+      pushToast('error', 'Could not link task', deadlineStore.error ?? 'Please try again.');
+    }
+    return ok;
+  }, [deadlineStore, pushToast]);
+
+  const handleUnlinkTask = useCallback(async (...args: Parameters<typeof deadlineStore.unlinkTask>) => {
+    await deadlineStore.unlinkTask(...args);
+    if (!deadlineStore.error) {
+      pushToast('info', 'Task unlinked');
+    } else {
+      pushToast('error', 'Could not unlink task', deadlineStore.error);
+    }
+  }, [deadlineStore, pushToast]);
+
+  const handleAddTask = useCallback(async (...args: Parameters<typeof store.addTask>) => {
+    const taskId = await store.addTask(...args);
+    if (taskId) {
+      pushToast('success', 'Task created');
+    } else {
+      pushToast('error', 'Could not create task', store.error ?? 'Please try again.');
+    }
+    return taskId;
+  }, [store, pushToast]);
+
+  const handleUpdateTask = useCallback(async (...args: Parameters<typeof store.updateTask>) => {
+    const ok = await store.updateTask(...args);
+    if (ok) {
+      pushToast('success', 'Task updated');
+    } else {
+      pushToast('error', 'Could not update task', store.error ?? 'Please try again.');
+    }
+    return ok;
+  }, [store, pushToast]);
+
+  const handleDeleteTask = useCallback(async (id: string) => {
+    await store.deleteTask(id);
+    if (!store.error) {
+      pushToast('success', 'Task deleted');
+    } else {
+      pushToast('error', 'Could not delete task', store.error);
+    }
+  }, [store, pushToast]);
+
+  const handleAddProject = useCallback(async (...args: Parameters<typeof store.addProject>) => {
+    const projectId = await store.addProject(...args);
+    if (projectId) {
+      pushToast('success', 'Course created');
+    } else {
+      pushToast('error', 'Could not create course', store.error ?? 'Please try again.');
+    }
+    return projectId;
+  }, [store, pushToast]);
+
+  const handleDeleteProject = useCallback(async (id: string) => {
+    await store.deleteProject(id);
+    if (!store.error) {
+      pushToast('success', 'Course deleted');
+    } else {
+      pushToast('error', 'Could not delete course', store.error);
+    }
+  }, [store, pushToast]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text-primary)]">
@@ -146,13 +295,17 @@ export function AppShell({ user }: AppShellProps) {
               deadlines={deadlineStore.deadlines}
               projects={store.projects}
               tasks={store.tasks}
-              onAdd={deadlineStore.addDeadline}
-              onAddProject={store.addProject}
-              onUpdate={deadlineStore.updateDeadline}
-              onDelete={deadlineStore.deleteDeadline}
-              onLinkTask={deadlineStore.linkTask}
-              onUnlinkTask={deadlineStore.unlinkTask}
-              onCreateTask={async (title, desc, projId, dueDate) => store.addTask(title, desc, 'medium', projId, dueDate)}
+              initialCourseFilter={currentView === 'deadlines' ? projectFocusId : null}
+              initialDetailId={currentView === 'deadlines' ? deadlineFocusId : null}
+              onAdd={handleAddDeadline}
+              onAddProject={handleAddProject}
+              onUpdate={handleUpdateDeadline}
+              onDelete={handleDeleteDeadline}
+              onLinkTask={handleLinkTask}
+              onUnlinkTask={handleUnlinkTask}
+              onCreateTask={async (title, desc, projId, dueDate) => handleAddTask(title, desc, 'medium', projId, dueDate, 'none')}
+              onNavigateToCourse={openCourse}
+              onNavigateToTasks={openCourseTasks}
             />
           )}
           {currentView === 'tasks' && (
@@ -160,15 +313,17 @@ export function AppShell({ user }: AppShellProps) {
               tasks={store.tasks}
               projects={store.projects}
               deadlines={deadlineStore.deadlines}
-              onAddTask={store.addTask}
+              initialProjectFilter={currentView === 'tasks' ? taskProjectFilterId : 'all'}
+              onAddTask={handleAddTask}
               onUpdateStatus={store.updateTaskStatus}
-              onUpdateTask={store.updateTask}
-              onDeleteTask={store.deleteTask}
+              onUpdateTask={handleUpdateTask}
+              onDeleteTask={handleDeleteTask}
               onAddSubtask={store.addSubtask}
               onToggleSubtask={store.toggleSubtask}
               onDeleteSubtask={store.deleteSubtask}
               onAddComment={store.addComment}
               onDeleteComment={store.deleteComment}
+              onOpenDeadline={openDeadline}
             />
           )}
           {currentView === 'projects' && (
@@ -176,8 +331,11 @@ export function AppShell({ user }: AppShellProps) {
               projects={store.projects}
               tasks={store.tasks}
               deadlines={deadlineStore.deadlines}
-              onAddProject={store.addProject}
-              onDeleteProject={store.deleteProject}
+              initialProjectId={currentView === 'projects' ? projectFocusId : null}
+              onAddProject={handleAddProject}
+              onDeleteProject={handleDeleteProject}
+              onOpenTasks={openCourseTasks}
+              onOpenDeadlines={openCourseDeadlines}
             />
           )}
           {currentView === 'calendar' && (
@@ -218,6 +376,36 @@ export function AppShell({ user }: AppShellProps) {
           onClearError={canvasStore.clearError}
         />
       )}
+
+      <div className="pointer-events-none fixed right-4 top-20 z-[80] flex w-full max-w-sm flex-col gap-2 sm:right-6">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className="pointer-events-auto overflow-hidden rounded-2xl border shadow-xl backdrop-blur"
+            style={{
+              borderColor: toast.tone === 'error' ? 'rgba(248,113,113,0.2)' : toast.tone === 'success' ? 'rgba(52,211,153,0.2)' : 'rgba(99,102,241,0.2)',
+              backgroundColor: toast.tone === 'error' ? 'rgba(69,10,10,0.88)' : toast.tone === 'success' ? 'rgba(6,47,32,0.9)' : 'rgba(24,24,39,0.94)',
+            }}
+          >
+            <div className="flex items-start gap-3 px-4 py-3 text-sm">
+              <div className="mt-0.5 shrink-0">
+                {toast.tone === 'error' ? <AlertCircle size={16} className="text-rose-200" /> : <CheckCircle2 size={16} className={toast.tone === 'success' ? 'text-emerald-200' : 'text-indigo-200'} />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-white">{toast.title}</div>
+                {toast.message && <div className="mt-0.5 text-xs text-white/75">{toast.message}</div>}
+              </div>
+              <button
+                type="button"
+                onClick={() => dismissToast(toast.id)}
+                className="rounded-full p-1 text-white/60 transition hover:bg-white/10 hover:text-white"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

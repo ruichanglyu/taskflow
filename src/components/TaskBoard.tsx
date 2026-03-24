@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Trash2, ChevronDown, Search, Filter, Pencil, Repeat, MessageSquare, Target } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Task, Project, Deadline, TaskStatus, Priority, Recurrence } from '../types';
@@ -10,7 +10,8 @@ interface TaskBoardProps {
   tasks: Task[];
   projects: Project[];
   deadlines?: Deadline[];
-  onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence) => void;
+  initialProjectFilter?: string;
+  onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence) => Promise<string | null> | void;
   onUpdateStatus: (id: string, status: TaskStatus) => void;
   onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence }) => Promise<boolean>;
   onDeleteTask: (id: string) => void;
@@ -19,6 +20,7 @@ interface TaskBoardProps {
   onDeleteSubtask: (subtaskId: string) => void;
   onAddComment: (taskId: string, text: string) => Promise<boolean>;
   onDeleteComment: (commentId: string) => void;
+  onOpenDeadline?: (deadlineId: string) => void;
 }
 
 const statusColumns: { status: TaskStatus; label: string; color: string; dotColor: string }[] = [
@@ -40,6 +42,7 @@ function TaskCard({
   onUpdateStatus,
   onEdit,
   onDelete,
+  onOpenDeadline,
 }: {
   task: Task;
   projects: Project[];
@@ -47,6 +50,7 @@ function TaskCard({
   onUpdateStatus: (id: string, status: TaskStatus) => void;
   onEdit: (task: Task) => void;
   onDelete: (id: string) => void;
+  onOpenDeadline?: (deadlineId: string) => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const project = projects.find(p => p.id === task.projectId);
@@ -155,21 +159,30 @@ function TaskCard({
         )}
 
         {deadline && (
-          <span className="flex items-center gap-0.5 rounded-full bg-orange-500/10 px-2 py-0.5 text-[10px] font-medium text-orange-400" title={`Linked to: ${deadline.title}`}>
+          <button
+            type="button"
+            onClick={() => onOpenDeadline?.(deadline.id)}
+            className="flex items-center gap-0.5 rounded-full bg-orange-500/10 px-2 py-0.5 text-[10px] font-medium text-orange-400 transition hover:bg-orange-500/15"
+            title={`Linked to: ${deadline.title}`}
+          >
             <Target size={9} /> {deadline.title}
-          </span>
+          </button>
         )}
       </div>
     </div>
   );
 }
 
-export function TaskBoard({ tasks, projects, deadlines = [], onAddTask, onUpdateStatus, onUpdateTask, onDeleteTask, onAddSubtask, onToggleSubtask, onDeleteSubtask, onAddComment, onDeleteComment }: TaskBoardProps) {
+export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilter = 'all', onAddTask, onUpdateStatus, onUpdateTask, onDeleteTask, onAddSubtask, onToggleSubtask, onDeleteSubtask, onAddComment, onDeleteComment, onOpenDeadline }: TaskBoardProps) {
   const [showModal, setShowModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [search, setSearch] = useState('');
   const [filterPriority, setFilterPriority] = useState<Priority | 'all'>('all');
-  const [filterProject, setFilterProject] = useState<string>('all');
+  const [filterProject, setFilterProject] = useState<string>(initialProjectFilter);
+
+  useEffect(() => {
+    setFilterProject(initialProjectFilter);
+  }, [initialProjectFilter]);
 
   const filteredTasks = tasks.filter(t => {
     const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase()) || t.description.toLowerCase().includes(search.toLowerCase());
@@ -281,6 +294,7 @@ export function TaskBoard({ tasks, projects, deadlines = [], onAddTask, onUpdate
                                 onUpdateStatus={onUpdateStatus}
                                 onEdit={setEditingTask}
                                 onDelete={onDeleteTask}
+                                onOpenDeadline={onOpenDeadline}
                               />
                             </div>
                           )}
@@ -304,7 +318,10 @@ export function TaskBoard({ tasks, projects, deadlines = [], onAddTask, onUpdate
       {showModal && (
         <AddTaskModal
           projects={projects}
-          onAdd={(title, desc, priority, projectId, dueDate, recurrence) => { onAddTask(title, desc, priority, projectId, dueDate, recurrence); setShowModal(false); }}
+          onAdd={async (title, desc, priority, projectId, dueDate, recurrence) => {
+            const taskId = await onAddTask(title, desc, priority, projectId, dueDate, recurrence);
+            if (taskId) setShowModal(false);
+          }}
           onClose={() => setShowModal(false)}
         />
       )}

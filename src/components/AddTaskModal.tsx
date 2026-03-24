@@ -5,7 +5,7 @@ import { cn } from '../utils/cn';
 
 interface AddTaskModalProps {
   projects: Project[];
-  onAdd: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence) => void;
+  onAdd: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence) => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -16,11 +16,17 @@ export function AddTaskModal({ projects, onAdd, onClose }: AddTaskModalProps) {
   const [projectId, setProjectId] = useState<string>('');
   const [dueDate, setDueDate] = useState('');
   const [recurrence, setRecurrence] = useState<Recurrence>('none');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
-    onAdd(title.trim(), description.trim(), priority, projectId || null, dueDate || null, recurrence);
+    if (!title.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await onAdd(title.trim(), description.trim(), priority, projectId || null, dueDate || null, recurrence);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -125,11 +131,11 @@ export function AddTaskModal({ projects, onAdd, onClose }: AddTaskModalProps) {
             </button>
             <button
               type="submit"
-              disabled={!title.trim()}
+              disabled={!title.trim() || isSubmitting}
               className="flex-1 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
               style={{ backgroundColor: 'var(--accent-strong)' }}
             >
-              Create Task
+              {isSubmitting ? 'Creating...' : 'Create Task'}
             </button>
           </div>
         </form>

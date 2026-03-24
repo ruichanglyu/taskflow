@@ -49,7 +49,8 @@ export function ProjectList({ projects, tasks, deadlines, onAddProject, onDelete
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="inline-flex items-center gap-2 self-start rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3.5 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)]"
+          className="inline-flex items-center gap-2 self-start rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors"
+          style={{ backgroundColor: 'var(--accent-strong)' }}
         >
           <Plus size={15} /> New Course
         </button>

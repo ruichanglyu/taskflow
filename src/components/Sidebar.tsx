@@ -1,4 +1,4 @@
-import { LayoutDashboard, CheckSquare, FolderKanban, CalendarDays, GanttChart, Target, Zap, X } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, FolderKanban, CalendarDays, GanttChart, Target, Zap, X, GraduationCap } from 'lucide-react';
 import { View } from '../types';
 import { cn } from '../utils/cn';
 
@@ -9,6 +9,8 @@ interface SidebarProps {
   onClose: () => void;
   userEmail?: string;
   userName?: string;
+  canvasConnected?: boolean;
+  onCanvasClick?: () => void;
 }
 
 const navItems: { view: View; label: string; icon: React.ReactNode }[] = [
@@ -20,7 +22,7 @@ const navItems: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: 'timeline', label: 'Timeline', icon: <GanttChart size={20} /> },
 ];
 
-export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail, userName }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail, userName, canvasConnected, onCanvasClick }: SidebarProps) {
   const displayName = userName || (userEmail ? userEmail.split('@')[0] : 'User');
   const avatarInitial = displayName.charAt(0).toUpperCase();
   return (
@@ -67,6 +69,22 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail,
             </button>
           ))}
         </nav>
+
+        {/* Canvas integration */}
+        <div className="px-3 pb-3">
+          <button
+            onClick={onCanvasClick}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[var(--text-muted)] transition-all hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+          >
+            <GraduationCap size={20} />
+            <span className="flex-1 text-left">Canvas</span>
+            {canvasConnected ? (
+              <span className="h-2 w-2 rounded-full bg-emerald-400" title="Connected" />
+            ) : (
+              <span className="rounded-full bg-[var(--surface-muted)] px-1.5 py-0.5 text-[9px] text-[var(--text-faint)]">Setup</span>
+            )}
+          </button>
+        </div>
 
         {/* Footer */}
         <div className="border-t border-[var(--border-soft)] px-4 py-4">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Deadline, DeadlineStatus, DeadlineType } from '../types';
+import { Deadline, DeadlineSource, DeadlineStatus, DeadlineType } from '../types';
 import { supabase } from '../lib/supabase';
 
 interface DeadlineRow {
@@ -12,6 +12,10 @@ interface DeadlineRow {
   due_time: string | null;
   notes: string;
   created_at: string;
+  source_type?: string;
+  source_id?: string | null;
+  source_url?: string | null;
+  source_synced_at?: string | null;
 }
 
 interface DeadlineTaskRow {
@@ -31,8 +35,14 @@ function mapDeadline(row: DeadlineRow, linkedTaskIds: string[] = []): Deadline {
     notes: row.notes,
     createdAt: row.created_at,
     linkedTaskIds,
+    sourceType: (row.source_type as DeadlineSource) ?? 'manual',
+    sourceId: row.source_id ?? null,
+    sourceUrl: row.source_url ?? null,
+    sourceSyncedAt: row.source_synced_at ?? null,
   };
 }
+
+const DEADLINE_SELECT = 'id, project_id, title, status, type, due_date, due_time, notes, created_at, source_type, source_id, source_url, source_synced_at';
 
 export function useDeadlines(userId: string) {
   const [deadlines, setDeadlines] = useState<Deadline[]>([]);
@@ -54,7 +64,7 @@ export function useDeadlines(userId: string) {
       const [{ data: deadlineRows, error: dlError }, { data: linkRows, error: linkError }] = await Promise.all([
         supabase
           .from('deadlines')
-          .select('id, project_id, title, status, type, due_date, due_time, notes, created_at')
+          .select(DEADLINE_SELECT)
           .order('due_date', { ascending: true }),
         supabase
           .from('deadline_tasks')
@@ -90,22 +100,30 @@ export function useDeadlines(userId: string) {
     dueDate: string,
     dueTime: string | null,
     notes: string,
+    source?: { sourceType: DeadlineSource; sourceId: string; sourceUrl?: string },
   ): Promise<boolean> => {
     if (!supabase) return false;
     setError(null);
     try {
+      const row: Record<string, unknown> = {
+        user_id: userId,
+        project_id: projectId,
+        title,
+        type,
+        due_date: dueDate,
+        due_time: dueTime,
+        notes,
+      };
+      if (source) {
+        row.source_type = source.sourceType;
+        row.source_id = source.sourceId;
+        row.source_url = source.sourceUrl ?? null;
+        row.source_synced_at = new Date().toISOString();
+      }
       const { data, error: insertError } = await supabase
         .from('deadlines')
-        .insert({
-          user_id: userId,
-          project_id: projectId,
-          title,
-          type,
-          due_date: dueDate,
-          due_time: dueTime,
-          notes,
-        })
-        .select('id, project_id, title, status, type, due_date, due_time, notes, created_at')
+        .insert(row)
+        .select(DEADLINE_SELECT)
         .single();
 
       if (insertError) throw insertError;

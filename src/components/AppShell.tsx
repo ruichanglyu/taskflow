@@ -4,6 +4,7 @@ import { User } from '@supabase/supabase-js';
 import { View } from '../types';
 import { useStore } from '../hooks/useStore';
 import { useDeadlines } from '../hooks/useDeadlines';
+import { useCanvas } from '../hooks/useCanvas';
 import { useNotifications } from '../hooks/useNotifications';
 import { Sidebar } from './Sidebar';
 import { Dashboard } from './Dashboard';
@@ -13,6 +14,7 @@ import { ProjectList } from './ProjectList';
 import { CalendarView } from './CalendarView';
 import { TimelineView } from './TimelineView';
 import { GlobalSearch } from './GlobalSearch';
+import { CanvasConnect } from './CanvasConnect';
 import { supabase } from '../lib/supabase';
 import { ThemeSwitcher } from './ThemeSwitcher';
 
@@ -24,9 +26,19 @@ export function AppShell({ user }: AppShellProps) {
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [canvasOpen, setCanvasOpen] = useState(false);
   const store = useStore(user.id);
   const deadlineStore = useDeadlines(user.id);
+  const canvasStore = useCanvas(user.id, store.projects);
   const { requestPermission } = useNotifications(store.tasks);
+
+  // After Canvas sync, reload deadlines + projects
+  const handleCanvasSync = async () => {
+    const result = await canvasStore.sync();
+    if (result) {
+      await Promise.all([deadlineStore.loadDeadlines(), store.loadData()]);
+    }
+  };
 
   // Request notification permission on first load
   useEffect(() => {
@@ -59,6 +71,8 @@ export function AppShell({ user }: AppShellProps) {
         onClose={() => setSidebarOpen(false)}
         userEmail={user.email}
         userName={user.user_metadata.full_name}
+        canvasConnected={!!canvasStore.connection}
+        onCanvasClick={() => { setSidebarOpen(false); setCanvasOpen(true); }}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -106,11 +120,11 @@ export function AppShell({ user }: AppShellProps) {
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          {(store.error || deadlineStore.error) && (
+          {(store.error || deadlineStore.error || canvasStore.error) && (
             <div className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
-              <p>{store.error || deadlineStore.error}</p>
+              <p>{store.error || deadlineStore.error || canvasStore.error}</p>
               <button
-                onClick={() => { store.clearError(); deadlineStore.clearError(); }}
+                onClick={() => { store.clearError(); deadlineStore.clearError(); canvasStore.clearError(); }}
                 className="shrink-0 rounded-full border border-rose-300/20 px-2 py-1 text-xs text-rose-100 transition hover:bg-rose-300/10"
               >
                 Dismiss
@@ -187,6 +201,20 @@ export function AppShell({ user }: AppShellProps) {
           deadlines={deadlineStore.deadlines}
           onClose={() => setSearchOpen(false)}
           onNavigate={(view) => { setCurrentView(view); setSearchOpen(false); }}
+        />
+      )}
+
+      {canvasOpen && (
+        <CanvasConnect
+          connection={canvasStore.connection}
+          isSyncing={canvasStore.isSyncing}
+          error={canvasStore.error}
+          lastSyncResult={canvasStore.lastSyncResult}
+          onConnect={canvasStore.connect}
+          onDisconnect={canvasStore.disconnect}
+          onSync={handleCanvasSync}
+          onClose={() => setCanvasOpen(false)}
+          onClearError={canvasStore.clearError}
         />
       )}
     </div>

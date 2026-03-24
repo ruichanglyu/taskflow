@@ -296,9 +296,16 @@ export function DeadlinesPage({ deadlines, projects, tasks, onAdd, onUpdate, onD
                         {dl.dueTime ? formatTime(dl.dueTime) : '—'}
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className={cn('text-sm', dl.status === 'done' ? 'text-[var(--text-faint)] line-through' : 'text-[var(--text-primary)]')}>
-                          {dl.title}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn('text-sm', dl.status === 'done' ? 'text-[var(--text-faint)] line-through' : 'text-[var(--text-primary)]')}>
+                            {dl.title}
+                          </span>
+                          {dl.sourceType !== 'manual' && (
+                            <span className="shrink-0 rounded bg-orange-500/10 px-1.5 py-0.5 text-[9px] font-medium text-orange-400" title={dl.sourceUrl ?? undefined}>
+                              Canvas
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2.5">
                         <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-faint)]">

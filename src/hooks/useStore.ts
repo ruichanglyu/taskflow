@@ -30,6 +30,7 @@ interface ProjectRow {
   description: string;
   color: string;
   created_at: string;
+  canvas_course_id?: string | null;
 }
 
 interface SubtaskRow {
@@ -66,6 +67,7 @@ function mapProject(row: ProjectRow): Project {
     description: row.description,
     color: row.color,
     createdAt: row.created_at,
+    canvasCourseId: row.canvas_course_id ?? null,
   };
 }
 
@@ -115,9 +117,9 @@ function getStoredSnapshot<T>(baseKey: string, userId: string): T | null {
 
 // Seed data
 const seedProjects: Project[] = [
-  { id: 'p1', name: 'Website Redesign', description: 'Revamp the company website with modern design', color: '#6366f1', createdAt: new Date(Date.now() - 7 * 86400000).toISOString() },
-  { id: 'p2', name: 'Mobile App', description: 'Build the React Native mobile application', color: '#ec4899', createdAt: new Date(Date.now() - 14 * 86400000).toISOString() },
-  { id: 'p3', name: 'API Integration', description: 'Integrate third-party APIs and services', color: '#10b981', createdAt: new Date(Date.now() - 3 * 86400000).toISOString() },
+  { id: 'p1', name: 'Website Redesign', description: 'Revamp the company website with modern design', color: '#6366f1', createdAt: new Date(Date.now() - 7 * 86400000).toISOString(), canvasCourseId: null },
+  { id: 'p2', name: 'Mobile App', description: 'Build the React Native mobile application', color: '#ec4899', createdAt: new Date(Date.now() - 14 * 86400000).toISOString(), canvasCourseId: null },
+  { id: 'p3', name: 'API Integration', description: 'Integrate third-party APIs and services', color: '#10b981', createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), canvasCourseId: null },
 ];
 
 const seedTasks: Task[] = [
@@ -161,7 +163,7 @@ export function useStore(userId: string) {
       const [{ data: projectRows, error: projectError }, { data: taskRows, error: taskError }, { data: subtaskRows, error: subtaskError }, { data: commentRows, error: commentError }] = await Promise.all([
         supabase
           .from('projects')
-          .select('id, name, description, color, created_at')
+          .select('id, name, description, color, created_at, canvas_course_id')
           .order('created_at', { ascending: false }),
         supabase
           .from('tasks')
@@ -220,7 +222,7 @@ export function useStore(userId: string) {
                 created_at: project.createdAt,
               }))
             )
-            .select('id, name, description, color, created_at');
+            .select('id, name, description, color, created_at, canvas_course_id');
 
           if (importProjectError) throw importProjectError;
 
@@ -253,7 +255,7 @@ export function useStore(userId: string) {
           const [{ data: importedProjects, error: reloadedProjectError }, { data: importedTasks, error: reloadedTaskError }] = await Promise.all([
             supabase
               .from('projects')
-              .select('id, name, description, color, created_at')
+              .select('id, name, description, color, created_at, canvas_course_id')
               .order('created_at', { ascending: false }),
             supabase
               .from('tasks')
@@ -451,7 +453,7 @@ export function useStore(userId: string) {
           description,
           color: PROJECT_COLORS[projects.length % PROJECT_COLORS.length],
         })
-        .select('id, name, description, color, created_at')
+        .select('id, name, description, color, created_at, canvas_course_id')
         .single();
 
       if (insertError) throw insertError;

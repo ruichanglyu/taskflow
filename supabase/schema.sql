@@ -242,3 +242,70 @@ with check (exists (select 1 from public.deadlines where id = deadline_id and us
 create policy "Users can delete their own deadline_tasks"
 on public.deadline_tasks for delete to authenticated
 using (exists (select 1 from public.deadlines where id = deadline_id and user_id = auth.uid()));
+
+-- Canvas integration: source tracking on deadlines
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'deadlines' and column_name = 'source_type') then
+    alter table public.deadlines add column source_type text not null default 'manual';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'deadlines' and column_name = 'source_id') then
+    alter table public.deadlines add column source_id text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'deadlines' and column_name = 'source_url') then
+    alter table public.deadlines add column source_url text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'deadlines' and column_name = 'source_synced_at') then
+    alter table public.deadlines add column source_synced_at timestamptz;
+  end if;
+end $$;
+
+-- Unique: one Canvas item = one deadline per user
+create unique index if not exists deadlines_source_unique
+  on public.deadlines(user_id, source_type, source_id)
+  where source_type is not null and source_id is not null;
+
+-- Canvas course ID on projects
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'projects' and column_name = 'canvas_course_id') then
+    alter table public.projects add column canvas_course_id text;
+  end if;
+end $$;
+
+create unique index if not exists projects_canvas_course_unique
+  on public.projects(user_id, canvas_course_id)
+  where canvas_course_id is not null;
+
+-- Canvas connections (per-user credentials)
+create table if not exists public.canvas_connections (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  base_url text not null,
+  api_token text not null,
+  last_synced_at timestamptz,
+  created_at timestamptz not null default timezone('utc', now()),
+  unique(user_id)
+);
+
+alter table public.canvas_connections enable row level security;
+
+drop policy if exists "Users can read their own canvas_connections" on public.canvas_connections;
+drop policy if exists "Users can insert their own canvas_connections" on public.canvas_connections;
+drop policy if exists "Users can update their own canvas_connections" on public.canvas_connections;
+drop policy if exists "Users can delete their own canvas_connections" on public.canvas_connections;
+
+create policy "Users can read their own canvas_connections"
+on public.canvas_connections for select to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can insert their own canvas_connections"
+on public.canvas_connections for insert to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update their own canvas_connections"
+on public.canvas_connections for update to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can delete their own canvas_connections"
+on public.canvas_connections for delete to authenticated
+using (auth.uid() = user_id);

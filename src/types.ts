@@ -3,6 +3,7 @@ export type TaskStatus = 'todo' | 'in-progress' | 'done';
 export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
 export type DeadlineStatus = 'not-started' | 'in-progress' | 'done' | 'missed';
 export type DeadlineType = 'assignment' | 'exam' | 'quiz' | 'lab' | 'project' | 'other';
+export type DeadlineSource = 'manual' | 'canvas_assignment' | 'canvas_quiz';
 export type View = 'dashboard' | 'tasks' | 'projects' | 'calendar' | 'timeline' | 'deadlines';
 
 export interface Subtask {
@@ -45,6 +46,10 @@ export interface Deadline {
   notes: string;
   createdAt: string;
   linkedTaskIds: string[];
+  sourceType: DeadlineSource;
+  sourceId: string | null;
+  sourceUrl: string | null;
+  sourceSyncedAt: string | null;
 }
 
 export interface Project {
@@ -52,5 +57,13 @@ export interface Project {
   name: string;
   description: string;
   color: string;
+  createdAt: string;
+  canvasCourseId: string | null;
+}
+
+export interface CanvasConnection {
+  id: string;
+  baseUrl: string;
+  lastSyncedAt: string | null;
   createdAt: string;
 }

@@ -38,6 +38,7 @@ export function AppShell({ user }: AppShellProps) {
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [projectFocusId, setProjectFocusId] = useState<string | null>(null);
+  const [deadlineCourseFilterId, setDeadlineCourseFilterId] = useState<string | null>(null);
   const [deadlineFocusId, setDeadlineFocusId] = useState<string | null>(null);
   const [taskProjectFilterId, setTaskProjectFilterId] = useState<string>('all');
   const store = useStore(user.id);
@@ -90,6 +91,16 @@ export function AppShell({ user }: AppShellProps) {
     await supabase.auth.signOut();
   };
 
+  const handleViewChange = useCallback((view: View) => {
+    setCurrentView(view);
+    if (view !== 'projects') setProjectFocusId(null);
+    if (view !== 'deadlines') {
+      setDeadlineCourseFilterId(null);
+      setDeadlineFocusId(null);
+    }
+    if (view !== 'tasks') setTaskProjectFilterId('all');
+  }, []);
+
   const openCourse = useCallback((projectId: string) => {
     setProjectFocusId(projectId);
     setCurrentView('projects');
@@ -101,15 +112,15 @@ export function AppShell({ user }: AppShellProps) {
   }, []);
 
   const openCourseDeadlines = useCallback((projectId: string) => {
+    setDeadlineCourseFilterId(projectId);
     setDeadlineFocusId(null);
-    setProjectFocusId(projectId);
     setCurrentView('deadlines');
   }, []);
 
   const openDeadline = useCallback((deadlineId: string) => {
     const deadline = deadlineStore.deadlines.find(item => item.id === deadlineId);
     if (deadline?.projectId) {
-      setProjectFocusId(deadline.projectId);
+      setDeadlineCourseFilterId(deadline.projectId);
     }
     setDeadlineFocusId(deadlineId);
     setCurrentView('deadlines');
@@ -215,7 +226,7 @@ export function AppShell({ user }: AppShellProps) {
     <div className="flex h-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text-primary)]">
       <Sidebar
         currentView={currentView}
-        onViewChange={setCurrentView}
+        onViewChange={handleViewChange}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         userEmail={user.email}
@@ -295,7 +306,7 @@ export function AppShell({ user }: AppShellProps) {
               deadlines={deadlineStore.deadlines}
               projects={store.projects}
               tasks={store.tasks}
-              initialCourseFilter={currentView === 'deadlines' ? projectFocusId : null}
+              initialCourseFilter={currentView === 'deadlines' ? deadlineCourseFilterId : null}
               initialDetailId={currentView === 'deadlines' ? deadlineFocusId : null}
               onAdd={handleAddDeadline}
               onAddProject={handleAddProject}
@@ -360,7 +371,7 @@ export function AppShell({ user }: AppShellProps) {
           projects={store.projects}
           deadlines={deadlineStore.deadlines}
           onClose={() => setSearchOpen(false)}
-          onNavigate={(view) => { setCurrentView(view); setSearchOpen(false); }}
+          onNavigate={(view) => { handleViewChange(view); setSearchOpen(false); }}
         />
       )}
 

@@ -349,15 +349,23 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
   }, [deadlines, search, filterCourse, filterType, filterStatus, quickFilter, sortField, sortDir, projects]);
 
   const groupedByCourse = useMemo(() => {
-    return filtered.reduce<Record<string, Deadline[]>>((groups, deadline) => {
+    const groups = filtered.reduce<Record<string, Deadline[]>>((acc, deadline) => {
       const key = projects.find(project => project.id === deadline.projectId)?.name ?? 'No Course';
-      groups[key] = groups[key] ?? [];
-      groups[key].push(deadline);
-      return groups;
+      acc[key] = acc[key] ?? [];
+      acc[key].push(deadline);
+      return acc;
     }, {});
+
+    return Object.entries(groups)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([courseName, courseDeadlines]) => ({
+        courseName,
+        projectId: courseDeadlines[0]?.projectId ?? null,
+        deadlines: courseDeadlines,
+      }));
   }, [filtered, projects]);
 
-  const activeFilters = [search, filterCourse, filterType, filterStatus].filter(Boolean).length;
+  const activeFilters = [search, filterCourse, filterType, filterStatus, quickFilter !== 'all' ? quickFilter : ''].filter(Boolean).length;
   const detailDeadline = detailId ? deadlines.find(d => d.id === detailId) : null;
   const upcomingCount = deadlines.filter(d => {
     const days = daysUntil(d.dueDate);
@@ -622,22 +630,22 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
 
       {viewMode === 'course' ? (
         <div className="space-y-4">
-          {Object.entries(groupedByCourse).length === 0 ? (
+          {groupedByCourse.length === 0 ? (
             <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
               No deadlines match your filters.
             </div>
           ) : (
-            Object.entries(groupedByCourse).map(([courseName, courseDeadlines]) => (
-              <div key={courseName} className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)]">
+            groupedByCourse.map(group => (
+              <div key={group.courseName} className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)]">
                 <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-4 py-3">
                   <div>
-                    <div className="text-sm font-semibold text-[var(--text-primary)]">{courseName}</div>
-                    <div className="mt-0.5 text-xs text-[var(--text-faint)]">{courseDeadlines.length} deadlines</div>
+                    <div className="text-sm font-semibold text-[var(--text-primary)]">{group.courseName}</div>
+                    <div className="mt-0.5 text-xs text-[var(--text-faint)]">{group.deadlines.length} deadlines</div>
                   </div>
-                  {courseDeadlines[0]?.projectId && (
+                  {group.projectId && (
                     <button
                       type="button"
-                      onClick={() => onNavigateToCourse?.(courseDeadlines[0].projectId!)}
+                      onClick={() => onNavigateToCourse?.(group.projectId!)}
                       className="text-xs font-medium text-[var(--accent)] transition hover:underline"
                     >
                       Open course
@@ -645,7 +653,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                   )}
                 </div>
                 <div className="divide-y divide-[var(--border-soft)]">
-                  {courseDeadlines.map(dl => (
+                  {group.deadlines.map(dl => (
                     <button
                       key={dl.id}
                       type="button"
@@ -737,7 +745,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                 >
                   <span className="flex items-center gap-1">Date <SortIcon field="dueDate" /></span>
                 </th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-[var(--text-muted)]">Time</th>
+                {viewMode === 'table' && <th className="px-3 py-2.5 text-left text-xs font-medium text-[var(--text-muted)]">Time</th>}
                 <th
                   className="px-3 py-2.5 text-left text-xs font-medium text-[var(--text-muted)] cursor-pointer select-none"
                   onClick={() => handleSort('title')}
@@ -750,15 +758,15 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                 >
                   <span className="flex items-center gap-1">Type <SortIcon field="type" /></span>
                 </th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-[var(--text-muted)]">Notes</th>
-                <th className="px-3 py-2.5 text-left text-xs font-medium text-[var(--text-muted)]">Links</th>
+                {viewMode === 'table' && <th className="px-3 py-2.5 text-left text-xs font-medium text-[var(--text-muted)]">Notes</th>}
+                {viewMode === 'table' && <th className="px-3 py-2.5 text-left text-xs font-medium text-[var(--text-muted)]">Links</th>}
                 <th className="w-10 px-3 py-2.5" />
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-sm text-[var(--text-faint)]">
+                  <td colSpan={viewMode === 'table' ? 10 : 7} className="py-12 text-center text-sm text-[var(--text-faint)]">
                     {deadlines.length === 0 ? 'No deadlines yet. Click "Add Deadline" to get started.' : 'No deadlines match your filters.'}
                   </td>
                 </tr>
@@ -824,9 +832,11 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-[var(--text-faint)]">
-                        {dl.dueTime ? formatTime(dl.dueTime) : '—'}
-                      </td>
+                      {viewMode === 'table' && (
+                        <td className="px-3 py-2.5 text-xs text-[var(--text-faint)]">
+                          {dl.dueTime ? formatTime(dl.dueTime) : '—'}
+                        </td>
+                      )}
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1.5">
                           <span className={cn('text-sm', dl.status === 'done' ? 'text-[var(--text-faint)] line-through' : 'text-[var(--text-primary)]')}>
@@ -844,30 +854,34 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                           {dl.type}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5">
-                        {dl.notes ? (
-                          <span className="flex items-center gap-1 text-xs text-[var(--text-faint)]" title={dl.notes}>
-                            <StickyNote size={11} />
-                            <span className="truncate max-w-[120px]">{dl.notes}</span>
-                          </span>
-                        ) : (
-                          <span className="text-xs text-[var(--text-faint)]">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        {dl.linkedTaskIds.length > 0 ? (
-                          <button
-                            type="button"
-                            onClick={() => dl.projectId && onNavigateToTasks?.(dl.projectId)}
-                            className="flex items-center gap-1 text-xs text-indigo-400 transition hover:underline"
-                          >
-                            <Link2 size={11} />
-                            {dl.linkedTaskIds.length}
-                          </button>
-                        ) : (
-                          <span className="text-xs text-[var(--text-faint)]">—</span>
-                        )}
-                      </td>
+                      {viewMode === 'table' && (
+                        <td className="px-3 py-2.5">
+                          {dl.notes ? (
+                            <span className="flex items-center gap-1 text-xs text-[var(--text-faint)]" title={dl.notes}>
+                              <StickyNote size={11} />
+                              <span className="truncate max-w-[120px]">{dl.notes}</span>
+                            </span>
+                          ) : (
+                            <span className="text-xs text-[var(--text-faint)]">—</span>
+                          )}
+                        </td>
+                      )}
+                      {viewMode === 'table' && (
+                        <td className="px-3 py-2.5">
+                          {dl.linkedTaskIds.length > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => dl.projectId && onNavigateToTasks?.(dl.projectId)}
+                              className="flex items-center gap-1 text-xs text-indigo-400 transition hover:underline"
+                            >
+                              <Link2 size={11} />
+                              {dl.linkedTaskIds.length}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-[var(--text-faint)]">—</span>
+                          )}
+                        </td>
+                      )}
                       <td className="px-3 py-2.5">
                         <button
                           onClick={() => onDelete(dl.id)}

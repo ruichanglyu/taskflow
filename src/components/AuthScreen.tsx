@@ -102,9 +102,9 @@ export function AuthScreen() {
   };
 
   return (
-    <div className="min-h-screen text-[var(--text-primary)]" style={{ background: 'var(--bg-auth)' }}>
+    <div className="min-h-screen overflow-x-hidden text-[var(--text-primary)]" style={{ background: 'var(--bg-auth)' }}>
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center gap-10 px-6 py-12 lg:flex-row lg:items-center lg:gap-16">
-        <section className="max-w-xl">
+        <section className="w-full max-w-xl">
           <div className="mb-6 flex items-center justify-between gap-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--accent-soft)] px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-[var(--accent)]">
               <Rocket size={14} />
@@ -112,7 +112,7 @@ export function AuthScreen() {
             </div>
             <ThemeSwitcher />
           </div>
-          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
             Task management with real accounts, not just one browser.
           </h1>
           <p className="mt-4 max-w-lg text-base leading-7 text-[var(--text-secondary)]">

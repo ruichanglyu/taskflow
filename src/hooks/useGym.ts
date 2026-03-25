@@ -253,6 +253,16 @@ export function useGym(userId: string) {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, status, completedAt: now } : s));
   }, []);
 
+  const deleteSession = useCallback(async (id: string) => {
+    if (!supabase) return;
+    // Cascade deletes exercise_logs and set_logs via FK
+    await supabase.from('workout_sessions').delete().eq('id', id);
+    const logIds = exerciseLogs.filter(el => el.workoutSessionId === id).map(el => el.id);
+    setSessions(prev => prev.filter(s => s.id !== id));
+    setExerciseLogs(prev => prev.filter(el => el.workoutSessionId !== id));
+    setSetLogs(prev => prev.filter(sl => !logIds.includes(sl.workoutExerciseLogId)));
+  }, [exerciseLogs]);
+
   // --- Set Logs ---
   const updateSetLog = useCallback(async (id: string, updates: Partial<Pick<WorkoutSetLog, 'weight' | 'reps' | 'completed'>>): Promise<boolean> => {
     if (!supabase) return false;
@@ -298,7 +308,7 @@ export function useGym(userId: string) {
     addDayTemplate, updateDayTemplate, deleteDayTemplate,
     addExercise, updateExercise, deleteExercise,
     addDayExercise, updateDayExercise, deleteDayExercise,
-    startSession, completeSession, updateSetLog,
+    startSession, completeSession, deleteSession, updateSetLog,
     getLastPerformance,
   };
 }

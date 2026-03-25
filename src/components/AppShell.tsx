@@ -388,6 +388,7 @@ export function AppShell({ user }: AppShellProps) {
               onDeleteDayExercise={gym.deleteDayExercise}
               onStartSession={gym.startSession}
               onCompleteSession={gym.completeSession}
+              onDeleteSession={gym.deleteSession}
               onUpdateSetLog={gym.updateSetLog}
               getLastPerformance={gym.getLastPerformance}
             />

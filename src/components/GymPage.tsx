@@ -36,6 +36,7 @@ interface GymPageProps {
   onDeleteDayExercise: (id: string) => void;
   onStartSession: (planId: string, dayTemplateId: string) => Promise<string | null>;
   onCompleteSession: (id: string, status?: 'completed' | 'abandoned') => void;
+  onDeleteSession: (id: string) => void;
   onUpdateSetLog: (id: string, updates: Partial<Pick<WorkoutSetLog, 'weight' | 'reps' | 'completed'>>) => Promise<boolean>;
   getLastPerformance: (exerciseId: string, currentSessionId?: string) => WorkoutSetLog[];
 }
@@ -1036,20 +1037,28 @@ function HistoryTab(props: GymPageProps) {
 
           return (
             <div key={session.id} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] overflow-hidden">
-              <button onClick={() => setExpandedSession(isExpanded ? null : session.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">{dayName}</p>
-                    {session.status === 'abandoned' && <span className="rounded bg-red-400/10 px-1.5 py-0.5 text-[9px] text-red-400">Abandoned</span>}
+              <div className="flex items-center">
+                <button onClick={() => setExpandedSession(isExpanded ? null : session.id)} className="flex flex-1 items-center gap-3 px-4 py-3 text-left">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">{dayName}</p>
+                      {session.status === 'abandoned' && <span className="rounded bg-red-400/10 px-1.5 py-0.5 text-[9px] text-red-400">Abandoned</span>}
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      {new Date(session.startedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {duration !== null && <span> · {duration} min</span>}
+                      <span> · {logs.length} exercises</span>
+                    </p>
                   </div>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    {new Date(session.startedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                    {duration !== null && <span> · {duration} min</span>}
-                    <span> · {logs.length} exercises</span>
-                  </p>
-                </div>
-                {isExpanded ? <ChevronDown size={16} className="text-[var(--text-faint)]" /> : <ChevronRight size={16} className="text-[var(--text-faint)]" />}
-              </button>
+                  {isExpanded ? <ChevronDown size={16} className="text-[var(--text-faint)]" /> : <ChevronRight size={16} className="text-[var(--text-faint)]" />}
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); if (confirm('Delete this workout session?')) props.onDeleteSession(session.id); }}
+                  className="mr-3 p-1.5 text-[var(--text-faint)] hover:text-red-400 transition rounded-lg hover:bg-red-400/10"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
 
               {isExpanded && (
                 <div className="border-t border-[var(--border-soft)] px-4 py-3 space-y-3">

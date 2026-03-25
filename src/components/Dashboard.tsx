@@ -11,13 +11,13 @@ interface DashboardProps {
 
 function StatCard({ icon, label, value, color, bg }: { icon: React.ReactNode; label: string; value: number; color: string; bg: string }) {
   return (
-    <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 transition-colors hover:border-[var(--border-strong)]">
+    <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm transition-colors hover:border-[var(--border-strong)] hover:shadow-lg">
       <div className="flex items-center justify-between">
         <div>
-          <p className="mb-1 text-sm text-[var(--text-muted)]">{label}</p>
+          <p className="mb-1 text-xs font-medium uppercase tracking-[0.18em] text-[var(--text-faint)]">{label}</p>
           <p className="text-3xl font-bold text-[var(--text-primary)]">{value}</p>
         </div>
-        <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center', bg)}>
+        <div className={cn('flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm', bg)}>
           <span className={color}>{icon}</span>
         </div>
       </div>
@@ -101,9 +101,38 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Dashboard</h1>
-        <p className="mt-1 text-[var(--text-muted)]">Overview of your tasks and projects</p>
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(14,165,233,0.16),rgba(34,197,94,0.08)_42%,rgba(15,23,42,0.02)_100%)] p-6 shadow-[0_24px_80px_var(--shadow-color)]">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--accent)]">
+              Daily command center
+            </div>
+            <h1 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">
+              Keep school, schedule, and training moving in one place.
+            </h1>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--text-secondary)] sm:text-base">
+              This is your live snapshot: what needs attention, what is due next, and how much momentum you’ve built today.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[420px]">
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Tasks open</div>
+              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{todo.length + inProgress.length}</div>
+            </div>
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Courses</div>
+              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{projects.length}</div>
+            </div>
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Deadlines</div>
+              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{deadlines.length}</div>
+            </div>
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Done rate</div>
+              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{completionRate}%</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -116,7 +145,7 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Completion Progress */}
-        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp size={18} className="text-indigo-400" />
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Completion Rate</h3>
@@ -143,7 +172,7 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
         </div>
 
         {/* Weekly Activity Chart */}
-        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 size={18} className="text-indigo-400" />
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Weekly Activity</h3>
@@ -167,7 +196,7 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
         </div>
 
         {/* Priority Distribution */}
-        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <AlertCircle size={18} className="text-indigo-400" />
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Active by Priority</h3>
@@ -201,7 +230,7 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Tasks */}
-        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
           <h3 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">Recent Tasks</h3>
           <div className="space-y-3">
             {recentTasks.map(task => (
@@ -224,7 +253,7 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
         </div>
 
         {/* Upcoming Deadlines */}
-        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <Target size={18} className="text-indigo-400" />
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Upcoming Deadlines</h3>

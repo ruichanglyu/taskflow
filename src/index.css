@@ -2,50 +2,54 @@
 
 /* Dark theme (default) */
 :root, :root[data-theme="dark"] {
-  --bg-app: #0a0a0f;
-  --bg-app-soft: rgba(10, 10, 15, 0.85);
-  --bg-auth: radial-gradient(circle at top, rgba(99, 102, 241, 0.15), transparent 30%), linear-gradient(180deg, #0a0a0f 0%, #111118 100%);
-  --surface: #141419;
-  --surface-muted: rgba(30, 30, 40, 0.75);
-  --surface-strong: #0f0f14;
-  --surface-elevated: rgba(20, 20, 28, 0.92);
-  --border-soft: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.15);
-  --text-primary: #f0f0f3;
-  --text-secondary: #c8c8d0;
-  --text-muted: #8e8e9a;
-  --text-faint: #5c5c6a;
-  --accent: #818cf8;
-  --accent-strong: #6366f1;
-  --accent-soft: rgba(129, 140, 248, 0.14);
+  --bg-app: #080b11;
+  --bg-app-soft: rgba(13, 17, 28, 0.82);
+  --bg-auth: radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 24%), radial-gradient(circle at top right, rgba(249, 115, 22, 0.16), transparent 28%), linear-gradient(180deg, #080b11 0%, #0f1623 100%);
+  --surface: rgba(18, 24, 36, 0.92);
+  --surface-muted: rgba(25, 35, 51, 0.72);
+  --surface-strong: #0d1420;
+  --surface-elevated: rgba(19, 27, 42, 0.96);
+  --border-soft: rgba(166, 188, 255, 0.10);
+  --border-strong: rgba(166, 188, 255, 0.22);
+  --text-primary: #eef3ff;
+  --text-secondary: #d1dae9;
+  --text-muted: #97a6bd;
+  --text-faint: #627086;
+  --accent: #38bdf8;
+  --accent-strong: #0ea5e9;
+  --accent-soft: rgba(56, 189, 248, 0.16);
   --accent-contrast: #ffffff;
-  --sidebar-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  --avatar-gradient: linear-gradient(135deg, #6366f1 0%, #ec4899 100%);
-  --shadow-color: rgba(0, 0, 0, 0.4);
+  --sidebar-gradient: linear-gradient(135deg, #0ea5e9 0%, #22c55e 100%);
+  --avatar-gradient: linear-gradient(135deg, #0ea5e9 0%, #f97316 100%);
+  --shadow-color: rgba(4, 8, 16, 0.52);
+  --glow-accent: rgba(14, 165, 233, 0.22);
+  --glow-warm: rgba(249, 115, 22, 0.16);
 }
 
 /* Light theme */
 :root[data-theme="light"] {
-  --bg-app: #f5f5f7;
-  --bg-app-soft: rgba(245, 245, 247, 0.9);
-  --bg-auth: radial-gradient(circle at top, rgba(99, 102, 241, 0.1), transparent 30%), linear-gradient(180deg, #f8f8fa 0%, #eeeef2 100%);
-  --surface: #ffffff;
-  --surface-muted: rgba(0, 0, 0, 0.03);
-  --surface-strong: #f8f8fa;
-  --surface-elevated: rgba(255, 255, 255, 0.97);
-  --border-soft: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.15);
-  --text-primary: #1a1a1f;
-  --text-secondary: #3a3a42;
-  --text-muted: #6b6b76;
-  --text-faint: #9b9ba6;
-  --accent: #6366f1;
-  --accent-strong: #4f46e5;
-  --accent-soft: rgba(99, 102, 241, 0.1);
+  --bg-app: #eef4fb;
+  --bg-app-soft: rgba(244, 248, 253, 0.92);
+  --bg-auth: radial-gradient(circle at top left, rgba(14, 165, 233, 0.12), transparent 24%), radial-gradient(circle at top right, rgba(249, 115, 22, 0.10), transparent 28%), linear-gradient(180deg, #f6f9fd 0%, #e8eff7 100%);
+  --surface: rgba(255, 255, 255, 0.94);
+  --surface-muted: rgba(17, 24, 39, 0.04);
+  --surface-strong: #f7fbff;
+  --surface-elevated: rgba(255, 255, 255, 0.98);
+  --border-soft: rgba(23, 37, 84, 0.08);
+  --border-strong: rgba(23, 37, 84, 0.16);
+  --text-primary: #142033;
+  --text-secondary: #2c3c54;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+  --accent: #0284c7;
+  --accent-strong: #0369a1;
+  --accent-soft: rgba(2, 132, 199, 0.10);
   --accent-contrast: #ffffff;
-  --sidebar-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  --avatar-gradient: linear-gradient(135deg, #6366f1 0%, #ec4899 100%);
-  --shadow-color: rgba(0, 0, 0, 0.08);
+  --sidebar-gradient: linear-gradient(135deg, #0284c7 0%, #16a34a 100%);
+  --avatar-gradient: linear-gradient(135deg, #0284c7 0%, #f97316 100%);
+  --shadow-color: rgba(15, 23, 42, 0.10);
+  --glow-accent: rgba(2, 132, 199, 0.12);
+  --glow-warm: rgba(249, 115, 22, 0.10);
 }
 
 /* Custom scrollbar */
@@ -78,6 +82,10 @@ html, body, #root {
 body {
   background: var(--bg-app);
   color: var(--text-primary);
+  background-image:
+    radial-gradient(circle at 0% 0%, var(--glow-accent), transparent 28%),
+    radial-gradient(circle at 100% 0%, var(--glow-warm), transparent 24%);
+  background-attachment: fixed;
 }
 
 * {
@@ -99,6 +107,11 @@ body {
 /* Cursor fix for interactive elements */
 button, select, [role="button"] {
   cursor: pointer;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text-primary);
 }
 
 /* Date input styling */

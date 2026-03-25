@@ -8,7 +8,7 @@ export function ThemeSwitcher() {
   return (
     <button
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="flex items-center justify-center rounded-full border border-[var(--border-soft)] bg-[var(--surface-muted)] p-2 text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)]"
+      className="flex items-center justify-center rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-2.5 text-[var(--text-muted)] shadow-sm transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
       aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
     >
       {isDark ? <Sun size={16} /> : <Moon size={16} />}

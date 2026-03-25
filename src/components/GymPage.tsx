@@ -1424,6 +1424,68 @@ function ActiveExerciseCard({
   );
 }
 
+// --- History Exercise Row (with photo upload) ---
+function HistoryExerciseRow({
+  log, exercise, completedSets, onUploadPhoto,
+}: {
+  log: WorkoutExerciseLog;
+  exercise: Exercise | undefined;
+  completedSets: WorkoutSetLog[];
+  onUploadPhoto: GymPageProps['onUploadExercisePhoto'];
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(log.photoUrl);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const previewUrl = URL.createObjectURL(file);
+    setPhotoPreview(previewUrl);
+    setIsUploading(true);
+    await onUploadPhoto(log.id, file);
+    setIsUploading(false);
+    URL.revokeObjectURL(previewUrl);
+  };
+
+  return (
+    <div className="flex items-start gap-3">
+      {exercise?.referenceImageUrl ? (
+        <img src={exercise.referenceImageUrl} alt="" className="h-8 w-8 rounded object-cover mt-0.5" />
+      ) : (
+        <div className="flex h-8 w-8 items-center justify-center rounded bg-[var(--surface-muted)] mt-0.5"><Dumbbell size={14} className="text-[var(--text-faint)]" /></div>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-[var(--text-primary)]">{exercise?.name ?? 'Unknown'}</p>
+          <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleUpload} />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className={cn(
+              'flex items-center justify-center h-6 w-6 rounded-full transition',
+              photoPreview ? 'text-[var(--accent)]' : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'
+            )}
+            title={photoPreview ? 'Replace photo' : 'Add photo'}
+          >
+            {isUploading ? <div className="h-3 w-3 animate-spin rounded-full border border-[var(--accent)] border-t-transparent" /> : <Camera size={13} />}
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5 mt-1">
+          {completedSets.map(s => (
+            <span key={s.id} className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-xs text-[var(--text-muted)]">
+              {s.weight ?? '—'} × {s.reps ?? '—'}
+            </span>
+          ))}
+          {completedSets.length === 0 && <span className="text-xs text-[var(--text-faint)]">No sets logged</span>}
+        </div>
+        {photoPreview && (
+          <img src={photoPreview} alt="Workout photo" className="mt-2 h-24 w-auto rounded-lg object-cover cursor-pointer hover:opacity-80 transition" onClick={() => window.open(photoPreview, '_blank')} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ============================================================
 // HISTORY TAB
 // ============================================================
@@ -1522,29 +1584,14 @@ function HistoryTab(props: GymPageProps) {
                     const ex = exercises.find(e => e.id === log.exerciseId);
                     const logSets = setLogs.filter(sl => sl.workoutExerciseLogId === log.id).sort((a, b) => a.setNumber - b.setNumber);
                     const completedSets = logSets.filter(s => s.completed);
-
                     return (
-                      <div key={log.id} className="flex items-start gap-3">
-                        {ex?.referenceImageUrl ? (
-                          <img src={ex.referenceImageUrl} alt="" className="h-8 w-8 rounded object-cover mt-0.5" />
-                        ) : (
-                          <div className="flex h-8 w-8 items-center justify-center rounded bg-[var(--surface-muted)] mt-0.5"><Dumbbell size={14} className="text-[var(--text-faint)]" /></div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-[var(--text-primary)]">{ex?.name ?? 'Unknown'}</p>
-                          <div className="flex flex-wrap gap-1.5 mt-1">
-                            {completedSets.map(s => (
-                              <span key={s.id} className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-xs text-[var(--text-muted)]">
-                                {s.weight ?? '—'} × {s.reps ?? '—'}
-                              </span>
-                            ))}
-                            {completedSets.length === 0 && <span className="text-xs text-[var(--text-faint)]">No sets logged</span>}
-                          </div>
-                          {log.photoUrl && (
-                            <img src={log.photoUrl} alt="Workout photo" className="mt-2 h-24 w-auto rounded-lg object-cover cursor-pointer hover:opacity-80 transition" onClick={() => window.open(log.photoUrl!, '_blank')} />
-                          )}
-                        </div>
-                      </div>
+                      <HistoryExerciseRow
+                        key={log.id}
+                        log={log}
+                        exercise={ex}
+                        completedSets={completedSets}
+                        onUploadPhoto={props.onUploadExercisePhoto}
+                      />
                     );
                   })}
                 </div>

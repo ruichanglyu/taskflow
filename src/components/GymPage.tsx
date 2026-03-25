@@ -1039,7 +1039,12 @@ function StartWorkoutPicker({
   );
 }
 
-// --- Active Exercise Card ---
+// --- Active Exercise Card (guided flow) ---
+// Flow per set: idle → tap "Go" → in-progress → tap "Done" → enter reps → saved
+// Weight is set once at the top and applies to all sets.
+
+type SetState = 'idle' | 'active' | 'logging' | 'done';
+
 function ActiveExerciseCard({
   exercise, dayExercise, sets, lastPerformance, onUpdateSet, onNext, isLast,
 }: {
@@ -1051,15 +1056,26 @@ function ActiveExerciseCard({
   onNext: () => void;
   isLast: boolean;
 }) {
+  // Weight shared across all sets — pre-fill from last performance
+  const lastWeight = lastPerformance.find(s => s.completed)?.weight;
+  const firstSavedWeight = sets.find(s => s.weight !== null)?.weight;
+  const [weight, setWeight] = useState<string>(firstSavedWeight?.toString() ?? lastWeight?.toString() ?? '');
+
+  // Per-set UI state (not persisted — derived from DB on mount)
+  const [setStates, setSetStates] = useState<Map<string, SetState>>(() => {
+    const m = new Map<string, SetState>();
+    sets.forEach(s => m.set(s.id, s.completed ? 'done' : 'idle'));
+    return m;
+  });
+
+  // Reps input for the set currently being logged
+  const [loggingReps, setLoggingReps] = useState('');
+
+  // Rest timer
   const [restActive, setRestActive] = useState(false);
   const [restTime, setRestTime] = useState(0);
   const restInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const restTotal = dayExercise?.restSeconds ?? 90;
-
-  const startRest = useCallback(() => {
-    setRestTime(restTotal);
-    setRestActive(true);
-  }, [restTotal]);
 
   useEffect(() => {
     if (!restActive) return;
@@ -1067,7 +1083,6 @@ function ActiveExerciseCard({
       setRestTime(prev => {
         if (prev <= 1) {
           setRestActive(false);
-          // Play a brief sound via Web Audio
           try {
             const ctx = new AudioContext();
             const osc = ctx.createOscillator();
@@ -1087,16 +1102,52 @@ function ActiveExerciseCard({
     return () => { if (restInterval.current) clearInterval(restInterval.current); };
   }, [restActive]);
 
-  const handleToggleSet = async (set: WorkoutSetLog) => {
-    await onUpdateSet(set.id, { completed: !set.completed });
-    if (!set.completed) startRest();
+  const startRest = useCallback(() => {
+    setRestTime(restTotal);
+    setRestActive(true);
+  }, [restTotal]);
+
+  // Parse target reps (e.g. "15, 12, 10" or just "10")
+  const targetRepsList = (dayExercise?.targetReps ?? '').split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+  const getTargetReps = (setNumber: number): string => {
+    if (targetRepsList.length === 0) return '';
+    return targetRepsList[Math.min(setNumber - 1, targetRepsList.length - 1)];
   };
 
-  const allDone = sets.length > 0 && sets.every(s => s.completed);
+  // Handle "Go" — mark set as active
+  const handleGo = (setId: string) => {
+    // Stop rest timer if running
+    setRestActive(false);
+    setRestTime(0);
+    setSetStates(prev => new Map(prev).set(setId, 'active'));
+  };
 
-  // Format last performance
-  const lastText = lastPerformance.length > 0
-    ? lastPerformance.filter(s => s.completed).map(s => `${s.weight ?? '—'}×${s.reps ?? '—'}`).join(', ')
+  // Handle "Done" — transition to logging
+  const handleDone = (set: WorkoutSetLog) => {
+    const target = getTargetReps(set.setNumber);
+    // Pre-fill with target reps or last performance reps
+    const lastReps = lastPerformance.find(lp => lp.setNumber === set.setNumber)?.reps;
+    setLoggingReps(target || lastReps?.toString() || '');
+    setSetStates(prev => new Map(prev).set(set.id, 'logging'));
+  };
+
+  // Handle save reps after logging
+  const handleSaveReps = async (set: WorkoutSetLog) => {
+    const w = weight ? Number(weight) : null;
+    const r = loggingReps ? Number(loggingReps) : null;
+    await onUpdateSet(set.id, { weight: w, reps: r, completed: true });
+    setSetStates(prev => new Map(prev).set(set.id, 'done'));
+    setLoggingReps('');
+    // Auto-start rest timer
+    startRest();
+  };
+
+  const allDone = sets.length > 0 && sets.every(s => s.completed || setStates.get(s.id) === 'done');
+
+  // Format last performance summary
+  const lastCompletedSets = lastPerformance.filter(s => s.completed);
+  const lastText = lastCompletedSets.length > 0
+    ? `${lastCompletedSets[0]?.weight ?? '—'} lbs — ${lastCompletedSets.map(s => s.reps ?? '—').join(', ')} reps`
     : null;
 
   return (
@@ -1122,30 +1173,118 @@ function ActiveExerciseCard({
 
       {/* Last performance */}
       {lastText && (
-        <div className="flex items-center gap-2 border-b border-[var(--border-soft)] bg-[var(--surface-muted)] px-5 py-2">
+        <div className="flex items-center gap-2 border-b border-[var(--border-soft)] bg-[var(--surface-muted)] px-5 py-2.5">
           <RotateCcw size={12} className="text-[var(--text-faint)]" />
           <span className="text-xs text-[var(--text-muted)]">Last time: {lastText}</span>
         </div>
       )}
 
+      {/* Weight input (once for whole exercise) */}
+      <div className="flex items-center gap-3 border-b border-[var(--border-soft)] px-5 py-3">
+        <label className="text-xs font-medium text-[var(--text-muted)]">Weight</label>
+        <input
+          type="number"
+          value={weight}
+          onChange={e => setWeight(e.target.value)}
+          placeholder={lastWeight?.toString() ?? '0'}
+          className="w-24 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-center text-sm font-semibold text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+        />
+        <span className="text-xs text-[var(--text-faint)]">lbs</span>
+      </div>
+
       {/* Sets */}
       <div className="px-5 py-4 space-y-2">
-        <div className="grid grid-cols-[2rem_1fr_1fr_3rem] gap-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] px-1">
-          <span>Set</span>
-          <span>Weight</span>
-          <span>Reps</span>
-          <span />
-        </div>
+        {sets.map(set => {
+          const state = setStates.get(set.id) ?? (set.completed ? 'done' : 'idle');
+          const target = getTargetReps(set.setNumber);
 
-        {sets.map(set => (
-          <SetRow
-            key={set.id}
-            set={set}
-            lastSet={lastPerformance.find(lp => lp.setNumber === set.setNumber)}
-            onUpdate={onUpdateSet}
-            onToggle={() => handleToggleSet(set)}
-          />
-        ))}
+          return (
+            <div key={set.id} className={cn(
+              'flex items-center gap-3 rounded-xl px-4 py-3 transition',
+              state === 'done' ? 'bg-emerald-400/5 border border-emerald-400/15' :
+              state === 'active' ? 'bg-[var(--accent-soft)] border border-[var(--accent)]/30' :
+              state === 'logging' ? 'bg-amber-400/5 border border-amber-400/20' :
+              'border border-[var(--border-soft)] bg-[var(--surface-muted)]'
+            )}>
+              {/* Set number */}
+              <div className={cn(
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold',
+                state === 'done' ? 'bg-emerald-400/15 text-emerald-400' :
+                state === 'active' ? 'bg-[var(--accent)] text-[var(--accent-contrast)]' :
+                'bg-[var(--surface-elevated)] text-[var(--text-faint)]'
+              )}>
+                {set.setNumber}
+              </div>
+
+              {/* Content area */}
+              <div className="flex-1 min-w-0">
+                {state === 'idle' && (
+                  <p className="text-sm text-[var(--text-muted)]">
+                    {target ? `Target: ${target} reps` : 'Ready'}
+                  </p>
+                )}
+                {state === 'active' && (
+                  <p className="text-sm font-medium text-[var(--accent)]">
+                    Go! {target ? `Aim for ${target} reps` : ''}
+                  </p>
+                )}
+                {state === 'logging' && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[var(--text-muted)]">Reps done:</span>
+                    <input
+                      type="number"
+                      value={loggingReps}
+                      onChange={e => setLoggingReps(e.target.value)}
+                      className="w-16 rounded-lg border border-amber-400/30 bg-[var(--surface-elevated)] px-2 py-1 text-center text-sm font-semibold text-[var(--text-primary)] focus:outline-none"
+                      autoFocus
+                      onKeyDown={e => { if (e.key === 'Enter') handleSaveReps(set); }}
+                    />
+                  </div>
+                )}
+                {state === 'done' && (
+                  <p className="text-sm text-emerald-400">
+                    {set.weight ?? weight ?? '—'} lbs × {set.reps ?? '—'} reps
+                  </p>
+                )}
+              </div>
+
+              {/* Action button */}
+              {state === 'idle' && (
+                <button
+                  onClick={() => handleGo(set.id)}
+                  className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold text-[var(--accent-contrast)] transition"
+                  style={{ backgroundColor: 'var(--accent-strong)' }}
+                >
+                  <Play size={14} />
+                  Go
+                </button>
+              )}
+              {state === 'active' && (
+                <button
+                  onClick={() => handleDone(set)}
+                  className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400"
+                >
+                  <Check size={14} />
+                  Done
+                </button>
+              )}
+              {state === 'logging' && (
+                <button
+                  onClick={() => handleSaveReps(set)}
+                  className="flex items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-amber-400"
+                >
+                  <Check size={14} />
+                  Save
+                </button>
+              )}
+              {state === 'done' && (
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-400/15">
+                  <Check size={16} className="text-emerald-400" />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Rest timer */}
@@ -1157,6 +1296,7 @@ function ActiveExerciseCard({
               <span className="text-2xl font-bold tabular-nums text-[var(--accent)]">
                 {Math.floor(restTime / 60)}:{String(restTime % 60).padStart(2, '0')}
               </span>
+              <span className="text-xs text-[var(--text-faint)]">rest</span>
             </div>
             <button
               onClick={() => { setRestActive(false); setRestTime(0); }}
@@ -1171,89 +1311,15 @@ function ActiveExerciseCard({
         </div>
       )}
 
-      {/* Actions */}
-      <div className="flex gap-2 border-t border-[var(--border-soft)] px-5 py-3">
-        {!restActive && (
-          <button onClick={startRest} className="flex items-center gap-1.5 rounded-lg border border-[var(--border-soft)] px-3 py-2 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-muted)] transition">
-            <Timer size={14} />
-            Rest ({restTotal}s)
-          </button>
-        )}
-        <div className="flex-1" />
-        {!isLast && (
+      {/* Next exercise */}
+      {!isLast && (
+        <div className="flex justify-end border-t border-[var(--border-soft)] px-5 py-3">
           <button onClick={onNext} className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-[var(--accent-contrast)]" style={{ backgroundColor: 'var(--accent-strong)' }}>
             Next Exercise
             <ChevronRight size={14} />
           </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// --- Set Row ---
-function SetRow({
-  set, lastSet, onUpdate, onToggle,
-}: {
-  set: WorkoutSetLog;
-  lastSet?: WorkoutSetLog;
-  onUpdate: GymPageProps['onUpdateSetLog'];
-  onToggle: () => void;
-}) {
-  const [weight, setWeight] = useState(set.weight?.toString() ?? lastSet?.weight?.toString() ?? '');
-  const [reps, setReps] = useState(set.reps?.toString() ?? lastSet?.reps?.toString() ?? '');
-
-  const handleBlur = () => {
-    const w = weight ? Number(weight) : null;
-    const r = reps ? Number(reps) : null;
-    if (w !== set.weight || r !== set.reps) {
-      onUpdate(set.id, { weight: w, reps: r });
-    }
-  };
-
-  return (
-    <div className={cn(
-      'grid grid-cols-[2rem_1fr_1fr_3rem] gap-2 items-center rounded-lg px-1 py-1.5 transition',
-      set.completed ? 'bg-emerald-400/5' : 'hover:bg-[var(--surface-muted)]'
-    )}>
-      <span className={cn('text-center text-sm font-bold', set.completed ? 'text-emerald-400' : 'text-[var(--text-faint)]')}>
-        {set.setNumber}
-      </span>
-      <input
-        type="number"
-        value={weight}
-        onChange={e => setWeight(e.target.value)}
-        onBlur={handleBlur}
-        placeholder={lastSet?.weight?.toString() ?? '—'}
-        className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-2 py-1.5 text-center text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-      />
-      <input
-        type="number"
-        value={reps}
-        onChange={e => setReps(e.target.value)}
-        onBlur={handleBlur}
-        placeholder={lastSet?.reps?.toString() ?? '—'}
-        className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-2 py-1.5 text-center text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-      />
-      <button
-        onClick={() => {
-          // Auto-save weight/reps before toggling
-          const w = weight ? Number(weight) : null;
-          const r = reps ? Number(reps) : null;
-          if (w !== set.weight || r !== set.reps) {
-            onUpdate(set.id, { weight: w, reps: r });
-          }
-          onToggle();
-        }}
-        className={cn(
-          'flex h-8 w-8 items-center justify-center rounded-lg transition',
-          set.completed
-            ? 'bg-emerald-400 text-white'
-            : 'border border-[var(--border-soft)] text-[var(--text-faint)] hover:border-emerald-400 hover:text-emerald-400'
-        )}
-      >
-        <Check size={16} />
-      </button>
+        </div>
+      )}
     </div>
   );
 }

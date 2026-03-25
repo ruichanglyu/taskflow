@@ -62,7 +62,7 @@ function TaskCard({
   const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'done';
 
   return (
-    <div className="group rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4 transition-all hover:border-[var(--border-strong)]">
+    <div className="group rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm transition-all hover:border-[var(--border-strong)] hover:shadow-lg">
       <div className="flex items-start justify-between gap-2">
         <h4 className="text-sm font-medium leading-snug text-[var(--text-primary)]">{task.title}</h4>
         <div className="relative flex items-center gap-0.5">
@@ -81,7 +81,7 @@ function TaskCard({
           {showMenu && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 top-6 z-20 w-36 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-strong)] py-1 shadow-xl">
+              <div className="absolute right-0 top-6 z-20 w-36 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] py-1 shadow-xl">
                 {statusColumns.map(col => (
                   <button
                     key={col.status}
@@ -114,9 +114,9 @@ function TaskCard({
       {task.subtasks.length > 0 && (
         <div className="mt-2">
           <div className="flex items-center gap-2">
-            <div className="h-1 flex-1 rounded-full bg-[var(--border-soft)]">
+            <div className="h-1.5 flex-1 rounded-full bg-[var(--surface-muted)]">
               <div
-                className="h-1 rounded-full bg-emerald-400 transition-all"
+                className="h-1.5 rounded-full bg-emerald-400 transition-all"
                 style={{ width: `${task.subtasks.length > 0 ? Math.round((task.subtasks.filter(s => s.done).length / task.subtasks.length) * 100) : 0}%` }}
               />
             </div>
@@ -133,14 +133,14 @@ function TaskCard({
         </span>
 
         {project && (
-          <span className="flex items-center gap-1 rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]">
+          <span className="flex items-center gap-1 rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]">
             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: project.color }} />
             {project.name}
           </span>
         )}
 
         {dueLabel && (
-          <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded-full', isOverdue ? 'bg-red-500/10 text-red-400' : 'bg-[var(--surface-strong)] text-[var(--text-faint)]')}>
+          <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded-full', isOverdue ? 'bg-red-500/10 text-red-400' : 'bg-[var(--surface-muted)] text-[var(--text-faint)]')}>
             {dueLabel}
           </span>
         )}
@@ -152,7 +152,7 @@ function TaskCard({
         )}
 
         {task.comments.length > 0 && (
-          <span className="flex items-center gap-0.5 rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-faint)]">
+          <span className="flex items-center gap-0.5 rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-faint)]">
             <MessageSquare size={9} /> {task.comments.length}
           </span>
 
@@ -201,24 +201,48 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
     }
   };
 
+  const todoCount = filteredTasks.filter(t => t.status === 'todo').length;
+  const inProgressCount = filteredTasks.filter(t => t.status === 'in-progress').length;
+  const doneCount = filteredTasks.filter(t => t.status === 'done').length;
+  const linkedCount = filteredTasks.filter(task => deadlines.some(d => d.linkedTaskIds.includes(task.id))).length;
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Tasks</h1>
-          <p className="mt-1 text-[var(--text-muted)]">Manage and track your tasks</p>
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(56,189,248,0.14),rgba(99,102,241,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-6 shadow-[0_24px_80px_var(--shadow-color)]">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--accent)]">
+              Execution board
+            </div>
+            <h1 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Tasks</h1>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--text-secondary)] sm:text-base">
+              This is your active work surface. Move quickly, keep momentum visible, and jump straight from work to the deadline it supports.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:w-[420px]">
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">To do</div>
+              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{todoCount}</div>
+            </div>
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">In progress</div>
+              <div className="mt-1 text-2xl font-semibold text-blue-400">{inProgressCount}</div>
+            </div>
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Done</div>
+              <div className="mt-1 text-2xl font-semibold text-emerald-400">{doneCount}</div>
+            </div>
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Linked</div>
+              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{linkedCount}</div>
+            </div>
+          </div>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 self-start rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors"
-          style={{ backgroundColor: 'var(--accent-strong)' }}
-        >
-          <Plus size={16} /> New Task
-        </button>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
           <input
@@ -226,16 +250,16 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
             placeholder="Search tasks..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] py-2 pr-4 pl-9 text-sm text-[var(--text-secondary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+            className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] py-2.5 pr-4 pl-9 text-sm text-[var(--text-secondary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <div className="relative">
             <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
             <select
               value={filterPriority}
               onChange={e => setFilterPriority(e.target.value as Priority | 'all')}
-              className="cursor-pointer appearance-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] py-2 pr-8 pl-8 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+              className="cursor-pointer appearance-none rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] py-2.5 pr-8 pl-8 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
             >
               <option value="all">All Priorities</option>
               <option value="high">High</option>
@@ -243,17 +267,25 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
               <option value="low">Low</option>
             </select>
           </div>
-          <select
-            value={filterProject}
-            onChange={e => setFilterProject(e.target.value)}
-            className="cursor-pointer appearance-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
-          >
+            <select
+              value={filterProject}
+              onChange={e => setFilterProject(e.target.value)}
+            className="cursor-pointer appearance-none rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2.5 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+            >
             <option value="all">All Courses</option>
             {projects.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] shadow-lg transition-colors"
+            style={{ backgroundColor: 'var(--accent-strong)', boxShadow: '0 16px 34px var(--glow-accent)' }}
+          >
+            <Plus size={16} /> New Task
+          </button>
         </div>
+      </div>
       </div>
 
       {/* Kanban Columns with Drag & Drop */}
@@ -262,8 +294,8 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
           {statusColumns.map(col => {
             const columnTasks = filteredTasks.filter(t => t.status === col.status);
             return (
-              <div key={col.status} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
-                <div className="flex items-center gap-2 mb-4">
+              <div key={col.status} className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+                <div className="mb-4 flex items-center gap-2">
                   <div className={cn('w-2.5 h-2.5 rounded-full', col.dotColor)} />
                   <h3 className="text-sm font-semibold text-[var(--text-secondary)]">{col.label}</h3>
                   <span className="ml-auto rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-xs text-[var(--text-faint)]">{columnTasks.length}</span>
@@ -274,7 +306,7 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
                       ref={provided.innerRef}
                       {...provided.droppableProps}
                       className={cn(
-                        'space-y-3 min-h-[120px] rounded-lg transition-colors',
+                        'min-h-[120px] space-y-3 rounded-2xl transition-colors',
                         snapshot.isDraggingOver && 'bg-[var(--accent-soft)]/30'
                       )}
                     >

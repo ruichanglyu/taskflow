@@ -80,43 +80,47 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Timeline</h1>
-          <p className="mt-1 text-[var(--text-muted)]">
-            Gantt-style timeline
-            {onUpdateDueDate && <span className="ml-1 text-xs text-[var(--text-faint)]">· Drag bar ends to reschedule</span>}
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5">
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(99,102,241,0.14),rgba(56,189,248,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-6 shadow-[0_24px_80px_var(--shadow-color)]">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--accent)]">
+              Workload horizon
+            </div>
+            <h1 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Timeline</h1>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--text-secondary)] sm:text-base">
+              See how your work stretches across time, spot pressure points early, and reschedule due dates directly from the timeline.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setOffsetWeeks(0)}
-            className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+            className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)]"
           >
             Today
           </button>
           <button
             type="button"
             onClick={() => setOffsetWeeks(w => w - 1)}
-            className="rounded-lg border border-[var(--border-soft)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+            className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)]"
           >
             <ChevronLeft size={16} />
           </button>
           <button
             type="button"
             onClick={() => setOffsetWeeks(w => w + 1)}
-            className="rounded-lg border border-[var(--border-soft)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+            className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)]"
           >
             <ChevronRight size={16} />
           </button>
-          <span className="ml-2 text-sm text-[var(--text-muted)]">
+          <span className="ml-2 rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-muted)] shadow-sm">
             {formatShortDate(rangeStart)} — {formatShortDate(addDays(rangeEnd, -1))}
           </span>
+          </div>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] overflow-hidden">
+      <div className="overflow-hidden rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm">
         {/* Day headers */}
         <div className="flex border-b border-[var(--border-soft)]">
           <div className="w-56 shrink-0 border-r border-[var(--border-soft)] px-4 py-2">
@@ -130,7 +134,7 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
                 <div
                   key={i}
                   className={cn(
-                    'flex-1 min-w-[36px] border-r border-[var(--border-soft)] last:border-r-0 px-0.5 py-2 text-center',
+                'flex-1 min-w-[36px] border-r border-[var(--border-soft)] last:border-r-0 px-0.5 py-2 text-center',
                     isWeekend && 'bg-[var(--surface-muted)]',
                   )}
                 >
@@ -191,7 +195,7 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
                 : null;
 
               return (
-                <div key={task.id} className="flex items-center border-b border-[var(--border-soft)] last:border-b-0 hover:bg-[var(--surface-muted)] transition-colors">
+                <div key={task.id} className="flex items-center border-b border-[var(--border-soft)] transition-colors last:border-b-0 hover:bg-[var(--surface-muted)]">
                   <div className="w-56 shrink-0 border-r border-[var(--border-soft)] px-4 py-3">
                     <div className="flex items-center gap-2 min-w-0">
                       {project && (
@@ -238,7 +242,7 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
                     {/* Task bar */}
                     <div
                       className={cn(
-                        'absolute top-2.5 rounded-full group/bar',
+                        'absolute top-2.5 rounded-full group/bar shadow-sm',
                         onUpdateDueDate && 'cursor-grab',
                         isDragging && 'cursor-grabbing opacity-70'
                       )}
@@ -251,7 +255,7 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
                       }}
                     >
                       {previewDateLabel && (
-                        <div className="absolute -top-8 right-0 rounded-md border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2 py-1 text-[10px] font-medium text-[var(--text-primary)] shadow-lg">
+                        <div className="absolute -top-8 right-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2 py-1 text-[10px] font-medium text-[var(--text-primary)] shadow-lg">
                           {previewDateLabel}
                         </div>
                       )}

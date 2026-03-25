@@ -462,8 +462,21 @@ create table if not exists public.workout_exercise_logs (
   user_id uuid not null references auth.users(id) on delete cascade,
   position int not null default 0,
   notes text not null default '',
+  photo_url text,
   created_at timestamptz not null default timezone('utc', now())
 );
+
+-- Migration: add photo_url column if it doesn't exist
+alter table public.workout_exercise_logs add column if not exists photo_url text;
+
+-- Storage bucket for workout photos
+insert into storage.buckets (id, name, public) values ('workout-photos', 'workout-photos', true) on conflict do nothing;
+drop policy if exists "Users can upload workout photos" on storage.objects;
+create policy "Users can upload workout photos" on storage.objects for insert to authenticated with check (bucket_id = 'workout-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "Users can read workout photos" on storage.objects;
+create policy "Users can read workout photos" on storage.objects for select to authenticated using (bucket_id = 'workout-photos');
+drop policy if exists "Users can delete workout photos" on storage.objects;
+create policy "Users can delete workout photos" on storage.objects for delete to authenticated using (bucket_id = 'workout-photos' and (storage.foldername(name))[1] = auth.uid()::text);
 
 create index if not exists wel_session_idx on public.workout_exercise_logs(workout_session_id);
 create index if not exists wel_user_id_idx on public.workout_exercise_logs(user_id);

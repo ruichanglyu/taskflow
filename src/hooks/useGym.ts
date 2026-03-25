@@ -58,6 +58,7 @@ export function useGym(userId: string) {
       setExerciseLogs((el ?? []).map(r => ({
         id: r.id, workoutSessionId: r.workout_session_id, exerciseId: r.exercise_id,
         workoutDayExerciseId: r.workout_day_exercise_id, position: r.position, notes: r.notes,
+        photoUrl: r.photo_url ?? null,
       })));
       setSetLogs((sl ?? []).map(r => ({
         id: r.id, workoutExerciseLogId: r.workout_exercise_log_id, setNumber: r.set_number,
@@ -228,6 +229,7 @@ export function useGym(userId: string) {
         setExerciseLogs(prev => [...prev, {
           id: logData.id, workoutSessionId: logData.workout_session_id, exerciseId: logData.exercise_id,
           workoutDayExerciseId: logData.workout_day_exercise_id, position: logData.position, notes: logData.notes,
+          photoUrl: logData.photo_url ?? null,
         }]);
         // Pre-create set rows
         for (let s = 1; s <= de.targetSets; s++) {
@@ -296,6 +298,21 @@ export function useGym(userId: string) {
     return setLogs.filter(sl => sl.workoutExerciseLogId === lastLog.id).sort((a, b) => a.setNumber - b.setNumber);
   }, [exerciseLogs, sessions, setLogs]);
 
+  // --- Exercise Log Photo ---
+  const uploadExercisePhoto = useCallback(async (exerciseLogId: string, file: File): Promise<string | null> => {
+    if (!supabase) return null;
+    const ext = file.name.split('.').pop() ?? 'jpg';
+    const path = `${userId}/${exerciseLogId}.${ext}`;
+    const { error: uploadErr } = await supabase.storage.from('workout-photos').upload(path, file, { upsert: true });
+    if (uploadErr) { setError(uploadErr.message); return null; }
+    const { data: urlData } = supabase.storage.from('workout-photos').getPublicUrl(path);
+    const publicUrl = urlData.publicUrl;
+    const { error: updateErr } = await supabase.from('workout_exercise_logs').update({ photo_url: publicUrl }).eq('id', exerciseLogId);
+    if (updateErr) { setError(updateErr.message); return null; }
+    setExerciseLogs(prev => prev.map(el => el.id === exerciseLogId ? { ...el, photoUrl: publicUrl } : el));
+    return publicUrl;
+  }, [userId]);
+
   const activePlan = plans.find(p => p.isActive) ?? null;
   const activeSession = sessions.find(s => s.status === 'in-progress') ?? null;
 
@@ -309,6 +326,6 @@ export function useGym(userId: string) {
     addExercise, updateExercise, deleteExercise,
     addDayExercise, updateDayExercise, deleteDayExercise,
     startSession, completeSession, deleteSession, updateSetLog,
-    getLastPerformance,
+    getLastPerformance, uploadExercisePhoto,
   };
 }

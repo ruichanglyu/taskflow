@@ -126,6 +126,7 @@ export interface WorkoutExerciseLog {
   workoutDayExerciseId: string | null;
   position: number;
   notes: string;
+  photoUrl: string | null;
 }
 
 export interface WorkoutSetLog {

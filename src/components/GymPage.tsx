@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Dumbbell, Plus, Play, Square, ChevronRight, ChevronDown,
   Trash2, Edit3, Check, X, Timer, RotateCcw, History,
-  Trophy, TrendingUp, GripVertical,
+  Trophy, TrendingUp, GripVertical, Camera,
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, type DropResult, type DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 import type {
@@ -206,6 +206,7 @@ interface GymPageProps {
   onDeleteSession: (id: string) => void;
   onUpdateSetLog: (id: string, updates: Partial<Pick<WorkoutSetLog, 'weight' | 'reps' | 'completed'>>) => Promise<boolean>;
   getLastPerformance: (exerciseId: string, currentSessionId?: string) => WorkoutSetLog[];
+  onUploadExercisePhoto: (exerciseLogId: string, file: File) => Promise<string | null>;
 }
 
 export function GymPage(props: GymPageProps) {
@@ -1012,10 +1013,12 @@ function WorkoutTab(props: GymPageProps) {
       {currentLog && currentExercise && (
         <ActiveExerciseCard
           exercise={currentExercise}
+          exerciseLog={currentLog}
           dayExercise={currentDayExercise}
           sets={currentSets}
           lastPerformance={lastPerformance}
           onUpdateSet={props.onUpdateSetLog}
+          onUploadPhoto={props.onUploadExercisePhoto}
           onNext={() => setCurrentExIdx(Math.min(currentExIdx + 1, sessionLogs.length - 1))}
           isLast={currentExIdx === sessionLogs.length - 1}
         />
@@ -1098,16 +1101,38 @@ function StartWorkoutPicker({
 type SetState = 'idle' | 'active' | 'logging' | 'done';
 
 function ActiveExerciseCard({
-  exercise, dayExercise, sets, lastPerformance, onUpdateSet, onNext, isLast,
+  exercise, exerciseLog, dayExercise, sets, lastPerformance, onUpdateSet, onUploadPhoto, onNext, isLast,
 }: {
   exercise: Exercise;
+  exerciseLog: WorkoutExerciseLog;
   dayExercise: WorkoutDayExercise | null;
   sets: WorkoutSetLog[];
   lastPerformance: WorkoutSetLog[];
   onUpdateSet: GymPageProps['onUpdateSetLog'];
+  onUploadPhoto: GymPageProps['onUploadExercisePhoto'];
   onNext: () => void;
   isLast: boolean;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(exerciseLog.photoUrl);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Sync preview with exerciseLog changes (switching exercises)
+  useEffect(() => {
+    setPhotoPreview(exerciseLog.photoUrl);
+  }, [exerciseLog.id, exerciseLog.photoUrl]);
+
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Show instant preview
+    const previewUrl = URL.createObjectURL(file);
+    setPhotoPreview(previewUrl);
+    setIsUploading(true);
+    await onUploadPhoto(exerciseLog.id, file);
+    setIsUploading(false);
+    URL.revokeObjectURL(previewUrl);
+  };
   // Weight shared across all sets — pre-fill from last performance
   const lastWeight = lastPerformance.find(s => s.completed)?.weight;
   const firstSavedWeight = sets.find(s => s.weight !== null)?.weight;
@@ -1220,8 +1245,31 @@ function ActiveExerciseCard({
             {dayExercise ? `${dayExercise.targetSets} sets × ${dayExercise.targetReps} reps` : `${sets.length} sets`}
           </p>
         </div>
-        {allDone && <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-400/15"><Check size={18} className="text-emerald-400" /></div>}
+        <div className="flex items-center gap-2">
+          {/* Camera button */}
+          <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoCapture} />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded-full transition',
+              photoPreview
+                ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+                : 'bg-[var(--surface-muted)] text-[var(--text-faint)] hover:text-[var(--text-muted)]'
+            )}
+            title={photoPreview ? 'Replace photo' : 'Take a photo'}
+          >
+            {isUploading ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" /> : <Camera size={16} />}
+          </button>
+          {allDone && <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-400/15"><Check size={18} className="text-emerald-400" /></div>}
+        </div>
       </div>
+
+      {/* Photo preview */}
+      {photoPreview && (
+        <div className="border-b border-[var(--border-soft)] px-5 py-3">
+          <img src={photoPreview} alt="Workout photo" className="h-32 w-auto rounded-lg object-cover" />
+        </div>
+      )}
 
       {/* Last performance */}
       {lastText && (
@@ -1492,6 +1540,9 @@ function HistoryTab(props: GymPageProps) {
                             ))}
                             {completedSets.length === 0 && <span className="text-xs text-[var(--text-faint)]">No sets logged</span>}
                           </div>
+                          {log.photoUrl && (
+                            <img src={log.photoUrl} alt="Workout photo" className="mt-2 h-24 w-auto rounded-lg object-cover cursor-pointer hover:opacity-80 transition" onClick={() => window.open(log.photoUrl!, '_blank')} />
+                          )}
                         </div>
                       </div>
                     );

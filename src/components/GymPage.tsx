@@ -1247,7 +1247,7 @@ function ActiveExerciseCard({
         </div>
         <div className="flex items-center gap-2">
           {/* Camera button */}
-          <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoCapture} />
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoCapture} />
           <button
             onClick={() => fileInputRef.current?.click()}
             className={cn(
@@ -1458,7 +1458,7 @@ function HistoryExerciseRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium text-[var(--text-primary)]">{exercise?.name ?? 'Unknown'}</p>
-          <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleUpload} />
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
           <button
             onClick={() => fileInputRef.current?.click()}
             className={cn(

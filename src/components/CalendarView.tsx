@@ -96,7 +96,7 @@ function DayPanel({
   });
 
   return (
-    <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+    <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold text-[var(--text-primary)]">{dateLabel}</h3>
         <button
@@ -117,7 +117,7 @@ function DayPanel({
           {dayDeadlines.map(dl => (
             <div
               key={dl.id}
-              className="flex items-start gap-3 rounded-xl border border-orange-400/20 bg-orange-400/5 p-3"
+              className="flex items-start gap-3 rounded-2xl border border-orange-400/20 bg-orange-400/5 p-3"
             >
               <div className="mt-0.5 flex h-8 w-1 shrink-0 rounded-full bg-orange-400" />
               <div className="min-w-0 flex-1">
@@ -134,7 +134,7 @@ function DayPanel({
           {events.map(event => (
             <div
               key={event.id}
-              className="group flex items-start gap-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3"
+              className="group flex items-start gap-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3"
             >
               <div className="mt-0.5 flex h-8 w-1 shrink-0 rounded-full bg-indigo-400" />
               <div className="min-w-0 flex-1">
@@ -233,22 +233,26 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Calendar</h1>
-          <p className="mt-1 text-[var(--text-muted)]">
-            View and create Google Calendar events from TaskFlow.
-          </p>
-        </div>
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(56,189,248,0.16),rgba(99,102,241,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-6 shadow-[0_24px_80px_var(--shadow-color)]">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--accent)]">
+              Time view
+            </div>
+            <h1 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Calendar</h1>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--text-secondary)] sm:text-base">
+              See your schedule, pull in Google Calendar events, and keep deadlines visible in the same planning surface.
+            </p>
+          </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           {calendar.isConnected && (
-            <div className="flex rounded-lg border border-[var(--border-soft)] overflow-hidden">
+            <div className="flex overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm">
               <button
                 type="button"
                 onClick={() => setViewMode('month')}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors',
+                  'flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors',
                   viewMode === 'month'
                     ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
                     : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
@@ -260,7 +264,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
                 type="button"
                 onClick={() => setViewMode('list')}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors border-l border-[var(--border-soft)]',
+                  'flex items-center gap-1.5 border-l border-[var(--border-soft)] px-3 py-2.5 text-xs font-medium transition-colors',
                   viewMode === 'list'
                     ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
                     : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
@@ -276,8 +280,8 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
               <button
                 type="button"
                 onClick={() => { setCreateDate(undefined); setShowCreateModal(true); }}
-                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)]"
-                style={{ backgroundColor: 'var(--accent-strong)' }}
+                className="flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] shadow-lg"
+                style={{ backgroundColor: 'var(--accent-strong)', boxShadow: '0 16px 34px var(--glow-accent)' }}
               >
                 <Plus size={16} />
                 New Event
@@ -285,7 +289,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
               <button
                 type="button"
                 onClick={() => void calendar.refresh()}
-                className="flex items-center gap-2 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+                className="flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2.5 text-sm text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)]"
               >
                 <RefreshCcw size={15} />
                 Refresh
@@ -293,7 +297,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
               <button
                 type="button"
                 onClick={calendar.disconnect}
-                className="flex items-center gap-2 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+                className="flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2.5 text-sm text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)]"
               >
                 <Unplug size={15} />
                 Disconnect
@@ -304,12 +308,13 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
               type="button"
               onClick={() => void calendar.connect()}
               disabled={!calendar.isConfigured || calendar.isConnecting}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ backgroundColor: 'var(--accent-strong)' }}
+              className="rounded-2xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ backgroundColor: 'var(--accent-strong)', boxShadow: '0 16px 34px var(--glow-accent)' }}
             >
               {calendar.isConnecting ? 'Connecting...' : 'Connect Google Calendar'}
             </button>
           )}
+        </div>
         </div>
       </div>
 
@@ -327,7 +332,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
 
       {!calendar.isConnected ? (
         <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <section className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+          <section className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
             <div className="flex items-center gap-2">
               <CalendarDays size={18} className="text-[var(--accent)]" />
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">Connected Calendar</h2>
@@ -336,7 +341,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
               Connect your Google account to view and create events here.
             </div>
           </section>
-          <section className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+          <section className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
             <div className="flex min-h-[320px] items-center justify-center rounded-xl border border-dashed border-[var(--border-soft)] text-sm text-[var(--text-muted)]">
               Connect Google Calendar to populate this view.
             </div>
@@ -360,7 +365,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
 
           <div className="space-y-4">
             {/* Calendar picker */}
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 sm:p-5">
+            <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm sm:p-5">
               <div className="flex items-center gap-2 mb-3">
                 <CalendarDays size={18} className="text-[var(--accent)]" />
                 <h2 className="text-sm font-semibold text-[var(--text-primary)]">Calendar</h2>
@@ -394,7 +399,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
       ) : (
         /* ── List View ── */
         <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <section className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+          <section className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
             <div className="flex items-center gap-2 mb-3">
               <CalendarDays size={18} className="text-[var(--accent)]" />
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">Calendar</h2>
@@ -414,7 +419,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
             {calendar.isLoading && <p className="mt-2 text-xs text-[var(--text-faint)]">Loading...</p>}
           </section>
 
-          <section className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+          <section className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3 mb-6">
               <div>
                 <h2 className="text-sm font-semibold text-[var(--text-primary)]">Upcoming Events</h2>
@@ -442,7 +447,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
                       {events.map(event => (
                         <article
                           key={event.id}
-                          className="group rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4"
+                          className="group rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4 shadow-sm"
                         >
                           <div className="flex items-start justify-between gap-4">
                             <div className="min-w-0">

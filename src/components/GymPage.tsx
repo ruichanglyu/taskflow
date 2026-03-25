@@ -12,6 +12,172 @@ import { cn } from '../utils/cn';
 
 type GymTab = 'plan' | 'workout' | 'history';
 
+interface ParsedWorkoutPlan {
+  name: string;
+  description: string;
+  daysPerWeek: number;
+  days: {
+    name: string;
+    notes: string;
+    exercises: {
+      name: string;
+      targetSets: number;
+      targetReps: string;
+      restSeconds: number;
+    }[];
+  }[];
+}
+
+function normalizeWorkoutName(raw: string) {
+  return raw
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function parseRestSeconds(text: string): number {
+  const minuteRange = text.match(/(\d+)\s*[–-]\s*(\d+)\s*min/i);
+  if (minuteRange) return Math.round(((Number(minuteRange[1]) + Number(minuteRange[2])) / 2) * 60);
+
+  const minuteSingle = text.match(/(\d+)\s*min/i);
+  if (minuteSingle) return Number(minuteSingle[1]) * 60;
+
+  const secondRange = text.match(/(\d+)\s*[–-]\s*(\d+)\s*sec/i);
+  if (secondRange) return Math.round((Number(secondRange[1]) + Number(secondRange[2])) / 2);
+
+  const secondSingle = text.match(/(\d+)\s*sec/i);
+  if (secondSingle) return Number(secondSingle[1]);
+
+  return 90;
+}
+
+function parseExerciseLine(line: string) {
+  const trimmed = line.replace(/^[•-]\s*/, '').trim();
+  const match = trimmed.match(/^(.*?)\s+[—-]\s+(.+)$/);
+  if (!match) return null;
+
+  const name = normalizeWorkoutName(match[1]);
+  const prescription = match[2].trim();
+
+  const setRepMatch = prescription.match(/(\d+)\s*x\s*([\d,\s–-]+(?:AMRAP)?|AMRAP)/i);
+  if (setRepMatch) {
+    return {
+      name,
+      targetSets: Number(setRepMatch[1]),
+      targetReps: setRepMatch[2].replace(/\s+/g, ' ').trim(),
+      restSeconds: 90,
+    };
+  }
+
+  const setsOnly = prescription.match(/(\d+)(?:\s*[–-]\s*(\d+))?\s+sets?/i);
+  if (setsOnly) {
+    const lower = Number(setsOnly[1]);
+    const upper = setsOnly[2] ? Number(setsOnly[2]) : lower;
+    return {
+      name,
+      targetSets: upper,
+      targetReps: 'AMRAP',
+      restSeconds: 90,
+    };
+  }
+
+  return {
+    name,
+    targetSets: 3,
+    targetReps: prescription,
+    restSeconds: 90,
+  };
+}
+
+function parseWorkoutPlanText(raw: string): ParsedWorkoutPlan {
+  const normalized = raw.replace(/\r/g, '').trim();
+  if (!normalized) {
+    throw new Error('Paste a workout plan first.');
+  }
+
+  const lines = normalized.split('\n').map(line => line.trim()).filter(Boolean);
+  const name = lines[0];
+  const splitIndex = lines.findIndex(line => line.toUpperCase().startsWith('WEEKLY SPLIT'));
+  if (splitIndex === -1) {
+    throw new Error('Could not find a WEEKLY SPLIT section.');
+  }
+
+  const dayHeaderIndexes = lines
+    .map((line, index) => (/^DAY\s+\d+/i.test(line) ? index : -1))
+    .filter(index => index >= 0);
+
+  if (dayHeaderIndexes.length === 0) {
+    throw new Error('Could not find any day sections.');
+  }
+
+  const descriptionParts = lines.slice(1, splitIndex).filter(line => !/^GOAL:?$/i.test(line) && !/^[-–—]+$/.test(line));
+  const weeklySplitStart = splitIndex + 1;
+  const weeklySplitEnd = dayHeaderIndexes[0];
+  const weeklySplitLines = lines.slice(weeklySplitStart, weeklySplitEnd).filter(line => /^Day\s+\d+/i.test(line));
+
+  const parsedDays = dayHeaderIndexes.map((startIndex, idx) => {
+    const endIndex = dayHeaderIndexes[idx + 1] ?? lines.length;
+    const header = lines[startIndex];
+    const titleMatch = header.match(/^DAY\s+\d+\s+[—-]\s+(.+)$/i);
+    const dayName = titleMatch ? titleMatch[1].trim() : header;
+    const sectionLines = lines.slice(startIndex + 1, endIndex).filter(line => !/^[-–—]+$/.test(line));
+
+    let defaultRest = 90;
+    let inRestBlock = false;
+    const notes: string[] = [];
+    const exercises: ParsedWorkoutPlan['days'][number]['exercises'] = [];
+
+    for (const line of sectionLines) {
+      if (/^REST:?$/i.test(line)) {
+        inRestBlock = true;
+        continue;
+      }
+
+      if (/^(NOTE|CARDIO|KEY RULES?|PROGRESSION RULE|RESULT TIMELINE|FINAL GOAL):?/i.test(line)) {
+        inRestBlock = false;
+        notes.push(line.replace(/:$/, ''));
+        continue;
+      }
+
+      if (/^[•-]\s*/.test(line)) {
+        if (inRestBlock) {
+          defaultRest = parseRestSeconds(line);
+          notes.push(`Rest guidance: ${line.replace(/^[•-]\s*/, '')}`);
+          continue;
+        }
+
+        const parsedExercise = parseExerciseLine(line);
+        if (parsedExercise) {
+          exercises.push({ ...parsedExercise, restSeconds: defaultRest });
+        } else {
+          notes.push(line.replace(/^[•-]\s*/, ''));
+        }
+        continue;
+      }
+
+      if (/^OR$/i.test(line)) {
+        notes.push('OR');
+        continue;
+      }
+
+      notes.push(line);
+    }
+
+    return {
+      name: dayName,
+      notes: notes.join('\n').trim(),
+      exercises,
+    };
+  });
+
+  return {
+    name,
+    description: [descriptionParts.join('\n'), weeklySplitLines.length > 0 ? `Weekly split:\n${weeklySplitLines.join('\n')}` : ''].filter(Boolean).join('\n\n'),
+    daysPerWeek: weeklySplitLines.length || parsedDays.filter(day => day.exercises.length > 0).length || parsedDays.length,
+    days: parsedDays,
+  };
+}
+
 interface GymPageProps {
   plans: WorkoutPlan[];
   dayTemplates: WorkoutDayTemplate[];
@@ -99,12 +265,16 @@ export function GymPage(props: GymPageProps) {
 function PlanTab(props: GymPageProps) {
   const { activePlan, dayTemplates, exercises, dayExercises } = props;
   const [showNewPlan, setShowNewPlan] = useState(false);
+  const [showImportPlan, setShowImportPlan] = useState(false);
   const [newPlanName, setNewPlanName] = useState('');
   const [newPlanDays, setNewPlanDays] = useState(5);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [showAddDay, setShowAddDay] = useState(false);
   const [newDayName, setNewDayName] = useState('');
   const [showExerciseLib, setShowExerciseLib] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   const handleCreatePlan = async () => {
     if (!newPlanName.trim()) return;
@@ -122,6 +292,55 @@ function PlanTab(props: GymPageProps) {
     await props.onAddDayTemplate(activePlan.id, newDayName.trim());
     setNewDayName('');
     setShowAddDay(false);
+  };
+
+  const handleImportPlan = async () => {
+    setImportError(null);
+    setIsImporting(true);
+
+    try {
+      const parsed = parseWorkoutPlanText(importText);
+      const planId = await props.onAddPlan(parsed.name, parsed.description, parsed.daysPerWeek);
+
+      if (!planId) {
+        throw new Error('Could not create the workout plan.');
+      }
+
+      const exerciseIdsByName = new Map(
+        exercises.map(exercise => [exercise.name.trim().toLowerCase(), exercise.id] as const)
+      );
+
+      for (const day of parsed.days) {
+        const dayId = await props.onAddDayTemplate(planId, day.name);
+        if (!dayId) continue;
+
+        if (day.notes) {
+          await props.onUpdateDayTemplate(dayId, { notes: day.notes });
+        }
+
+        for (const exercise of day.exercises) {
+          const key = exercise.name.trim().toLowerCase();
+          let exerciseId = exerciseIdsByName.get(key) ?? null;
+
+          if (!exerciseId) {
+            exerciseId = await props.onAddExercise(exercise.name, '', '', undefined);
+            if (exerciseId) {
+              exerciseIdsByName.set(key, exerciseId);
+            }
+          }
+
+          if (!exerciseId) continue;
+          await props.onAddDayExercise(dayId, exerciseId, exercise.targetSets, exercise.targetReps, exercise.restSeconds);
+        }
+      }
+
+      setImportText('');
+      setShowImportPlan(false);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Could not import that workout plan.');
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   return (
@@ -168,14 +387,22 @@ function PlanTab(props: GymPageProps) {
             <div className="text-center py-8">
               <Dumbbell size={40} className="mx-auto mb-3 text-[var(--text-faint)]" />
               <p className="text-sm text-[var(--text-muted)] mb-4">No workout plan yet. Create one to get started.</p>
-              <button
-                onClick={() => setShowNewPlan(true)}
-                className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)]"
-                style={{ backgroundColor: 'var(--accent-strong)' }}
-              >
-                <Plus size={16} />
-                New Plan
-              </button>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <button
+                  onClick={() => setShowNewPlan(true)}
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)]"
+                  style={{ backgroundColor: 'var(--accent-strong)' }}
+                >
+                  <Plus size={16} />
+                  New Plan
+                </button>
+                <button
+                  onClick={() => setShowImportPlan(true)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-[var(--border-soft)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--accent)]"
+                >
+                  Import Plan
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -193,6 +420,14 @@ function PlanTab(props: GymPageProps) {
                 className="text-[var(--text-faint)] hover:text-red-400 transition"
               >
                 <Trash2 size={16} />
+              </button>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                onClick={() => setShowImportPlan(true)}
+                className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--accent)]"
+              >
+                Import workout plan
               </button>
             </div>
           </div>
@@ -254,6 +489,61 @@ function PlanTab(props: GymPageProps) {
             {showExerciseLib && <ExerciseLibrary exercises={exercises} onAdd={props.onAddExercise} onDelete={props.onDeleteExercise} />}
           </div>
         </>
+      )}
+
+      {showImportPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowImportPlan(false)}>
+          <div className="w-full max-w-3xl rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-[var(--text-primary)]">Import Workout Plan</h3>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">Paste a structured workout plan and TaskFlow will build the plan, days, and exercises for you.</p>
+              </div>
+              <button onClick={() => setShowImportPlan(false)} className="text-[var(--text-faint)] hover:text-[var(--text-primary)]">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-xs text-[var(--text-muted)]">
+                Expected format: plan title, optional GOAL block, WEEKLY SPLIT, then sections like `DAY 1 — Shoulders`, with bullet exercises such as `- Barbell bench press — 4x6–10`.
+              </div>
+
+              <textarea
+                value={importText}
+                onChange={e => setImportText(e.target.value)}
+                placeholder="Paste your workout plan here..."
+                rows={18}
+                className="w-full resize-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+              />
+
+              {importError && (
+                <div className="rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                  {importError}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 border-t border-[var(--border-soft)] px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setShowImportPlan(false)}
+                className="flex-1 rounded-lg border border-[var(--border-soft)] py-2.5 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleImportPlan}
+                disabled={!importText.trim() || isImporting}
+                className="flex-1 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] disabled:cursor-not-allowed disabled:opacity-40"
+                style={{ backgroundColor: 'var(--accent-strong)' }}
+              >
+                {isImporting ? 'Importing...' : 'Import Plan'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

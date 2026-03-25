@@ -329,3 +329,174 @@ with check (auth.uid() = user_id);
 create policy "Users can delete their own canvas_connections"
 on public.canvas_connections for delete to authenticated
 using (auth.uid() = user_id);
+
+-- ============================================================
+-- Gym Module
+-- ============================================================
+
+-- Workout plans (the overall program)
+create table if not exists public.workout_plans (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  description text not null default '',
+  days_per_week int not null default 3,
+  is_active boolean not null default true,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists workout_plans_user_id_idx on public.workout_plans(user_id);
+alter table public.workout_plans enable row level security;
+drop policy if exists "Users can read their own workout_plans" on public.workout_plans;
+drop policy if exists "Users can insert their own workout_plans" on public.workout_plans;
+drop policy if exists "Users can update their own workout_plans" on public.workout_plans;
+drop policy if exists "Users can delete their own workout_plans" on public.workout_plans;
+create policy "Users can read their own workout_plans" on public.workout_plans for select to authenticated using (auth.uid() = user_id);
+create policy "Users can insert their own workout_plans" on public.workout_plans for insert to authenticated with check (auth.uid() = user_id);
+create policy "Users can update their own workout_plans" on public.workout_plans for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Users can delete their own workout_plans" on public.workout_plans for delete to authenticated using (auth.uid() = user_id);
+
+-- Workout day templates (days in the split)
+create table if not exists public.workout_day_templates (
+  id uuid primary key default gen_random_uuid(),
+  plan_id uuid not null references public.workout_plans(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  position int not null default 0,
+  notes text not null default '',
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists wdt_plan_id_idx on public.workout_day_templates(plan_id);
+create index if not exists wdt_user_id_idx on public.workout_day_templates(user_id);
+alter table public.workout_day_templates enable row level security;
+drop policy if exists "Users can read their own workout_day_templates" on public.workout_day_templates;
+drop policy if exists "Users can insert their own workout_day_templates" on public.workout_day_templates;
+drop policy if exists "Users can update their own workout_day_templates" on public.workout_day_templates;
+drop policy if exists "Users can delete their own workout_day_templates" on public.workout_day_templates;
+create policy "Users can read their own workout_day_templates" on public.workout_day_templates for select to authenticated using (auth.uid() = user_id);
+create policy "Users can insert their own workout_day_templates" on public.workout_day_templates for insert to authenticated with check (auth.uid() = user_id);
+create policy "Users can update their own workout_day_templates" on public.workout_day_templates for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Users can delete their own workout_day_templates" on public.workout_day_templates for delete to authenticated using (auth.uid() = user_id);
+
+-- Exercises (user's exercise library)
+create table if not exists public.exercises (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  muscle_group text not null default '',
+  notes text not null default '',
+  reference_image_url text,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists exercises_user_id_idx on public.exercises(user_id);
+alter table public.exercises enable row level security;
+drop policy if exists "Users can read their own exercises" on public.exercises;
+drop policy if exists "Users can insert their own exercises" on public.exercises;
+drop policy if exists "Users can update their own exercises" on public.exercises;
+drop policy if exists "Users can delete their own exercises" on public.exercises;
+create policy "Users can read their own exercises" on public.exercises for select to authenticated using (auth.uid() = user_id);
+create policy "Users can insert their own exercises" on public.exercises for insert to authenticated with check (auth.uid() = user_id);
+create policy "Users can update their own exercises" on public.exercises for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Users can delete their own exercises" on public.exercises for delete to authenticated using (auth.uid() = user_id);
+
+-- Workout day exercises (exercises in a day template)
+create table if not exists public.workout_day_exercises (
+  id uuid primary key default gen_random_uuid(),
+  workout_day_template_id uuid not null references public.workout_day_templates(id) on delete cascade,
+  exercise_id uuid not null references public.exercises(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  position int not null default 0,
+  target_sets int not null default 3,
+  target_reps text not null default '10',
+  rest_seconds int not null default 90,
+  notes text not null default '',
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists wde_day_template_idx on public.workout_day_exercises(workout_day_template_id);
+create index if not exists wde_user_id_idx on public.workout_day_exercises(user_id);
+alter table public.workout_day_exercises enable row level security;
+drop policy if exists "Users can read their own workout_day_exercises" on public.workout_day_exercises;
+drop policy if exists "Users can insert their own workout_day_exercises" on public.workout_day_exercises;
+drop policy if exists "Users can update their own workout_day_exercises" on public.workout_day_exercises;
+drop policy if exists "Users can delete their own workout_day_exercises" on public.workout_day_exercises;
+create policy "Users can read their own workout_day_exercises" on public.workout_day_exercises for select to authenticated using (auth.uid() = user_id);
+create policy "Users can insert their own workout_day_exercises" on public.workout_day_exercises for insert to authenticated with check (auth.uid() = user_id);
+create policy "Users can update their own workout_day_exercises" on public.workout_day_exercises for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Users can delete their own workout_day_exercises" on public.workout_day_exercises for delete to authenticated using (auth.uid() = user_id);
+
+-- Workout sessions (actual gym visits)
+create table if not exists public.workout_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  plan_id uuid not null references public.workout_plans(id) on delete cascade,
+  workout_day_template_id uuid not null references public.workout_day_templates(id) on delete cascade,
+  started_at timestamptz not null default timezone('utc', now()),
+  completed_at timestamptz,
+  status text not null default 'in-progress' check (status in ('in-progress', 'completed', 'abandoned')),
+  notes text not null default '',
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists ws_user_id_idx on public.workout_sessions(user_id);
+create index if not exists ws_plan_id_idx on public.workout_sessions(plan_id);
+create index if not exists ws_day_template_idx on public.workout_sessions(workout_day_template_id);
+alter table public.workout_sessions enable row level security;
+drop policy if exists "Users can read their own workout_sessions" on public.workout_sessions;
+drop policy if exists "Users can insert their own workout_sessions" on public.workout_sessions;
+drop policy if exists "Users can update their own workout_sessions" on public.workout_sessions;
+drop policy if exists "Users can delete their own workout_sessions" on public.workout_sessions;
+create policy "Users can read their own workout_sessions" on public.workout_sessions for select to authenticated using (auth.uid() = user_id);
+create policy "Users can insert their own workout_sessions" on public.workout_sessions for insert to authenticated with check (auth.uid() = user_id);
+create policy "Users can update their own workout_sessions" on public.workout_sessions for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Users can delete their own workout_sessions" on public.workout_sessions for delete to authenticated using (auth.uid() = user_id);
+
+-- Workout exercise logs (exercises performed in a session)
+create table if not exists public.workout_exercise_logs (
+  id uuid primary key default gen_random_uuid(),
+  workout_session_id uuid not null references public.workout_sessions(id) on delete cascade,
+  exercise_id uuid not null references public.exercises(id) on delete cascade,
+  workout_day_exercise_id uuid references public.workout_day_exercises(id) on delete set null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  position int not null default 0,
+  notes text not null default '',
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists wel_session_idx on public.workout_exercise_logs(workout_session_id);
+create index if not exists wel_user_id_idx on public.workout_exercise_logs(user_id);
+alter table public.workout_exercise_logs enable row level security;
+drop policy if exists "Users can read their own workout_exercise_logs" on public.workout_exercise_logs;
+drop policy if exists "Users can insert their own workout_exercise_logs" on public.workout_exercise_logs;
+drop policy if exists "Users can update their own workout_exercise_logs" on public.workout_exercise_logs;
+drop policy if exists "Users can delete their own workout_exercise_logs" on public.workout_exercise_logs;
+create policy "Users can read their own workout_exercise_logs" on public.workout_exercise_logs for select to authenticated using (auth.uid() = user_id);
+create policy "Users can insert their own workout_exercise_logs" on public.workout_exercise_logs for insert to authenticated with check (auth.uid() = user_id);
+create policy "Users can update their own workout_exercise_logs" on public.workout_exercise_logs for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Users can delete their own workout_exercise_logs" on public.workout_exercise_logs for delete to authenticated using (auth.uid() = user_id);
+
+-- Workout set logs (individual sets)
+create table if not exists public.workout_set_logs (
+  id uuid primary key default gen_random_uuid(),
+  workout_exercise_log_id uuid not null references public.workout_exercise_logs(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  set_number int not null,
+  weight numeric,
+  reps int,
+  completed boolean not null default false,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists wsl_exercise_log_idx on public.workout_set_logs(workout_exercise_log_id);
+create index if not exists wsl_user_id_idx on public.workout_set_logs(user_id);
+alter table public.workout_set_logs enable row level security;
+drop policy if exists "Users can read their own workout_set_logs" on public.workout_set_logs;
+drop policy if exists "Users can insert their own workout_set_logs" on public.workout_set_logs;
+drop policy if exists "Users can update their own workout_set_logs" on public.workout_set_logs;
+drop policy if exists "Users can delete their own workout_set_logs" on public.workout_set_logs;
+create policy "Users can read their own workout_set_logs" on public.workout_set_logs for select to authenticated using (auth.uid() = user_id);
+create policy "Users can insert their own workout_set_logs" on public.workout_set_logs for insert to authenticated with check (auth.uid() = user_id);
+create policy "Users can update their own workout_set_logs" on public.workout_set_logs for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Users can delete their own workout_set_logs" on public.workout_set_logs for delete to authenticated using (auth.uid() = user_id);

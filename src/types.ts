@@ -4,7 +4,8 @@ export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
 export type DeadlineStatus = 'not-started' | 'in-progress' | 'done' | 'missed';
 export type DeadlineType = 'assignment' | 'exam' | 'quiz' | 'lab' | 'project' | 'other';
 export type DeadlineSource = 'manual' | 'canvas_assignment' | 'canvas_quiz';
-export type View = 'dashboard' | 'tasks' | 'projects' | 'calendar' | 'timeline' | 'deadlines';
+export type View = 'dashboard' | 'tasks' | 'projects' | 'calendar' | 'timeline' | 'deadlines' | 'gym';
+export type WorkoutSessionStatus = 'in-progress' | 'completed' | 'abandoned';
 
 export interface Subtask {
   id: string;
@@ -67,4 +68,71 @@ export interface CanvasConnection {
   canvasUserId: string | null;
   lastSyncedAt: string | null;
   createdAt: string;
+}
+
+// --- Gym types ---
+
+export interface WorkoutPlan {
+  id: string;
+  name: string;
+  description: string;
+  daysPerWeek: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface WorkoutDayTemplate {
+  id: string;
+  planId: string;
+  name: string;
+  position: number;
+  notes: string;
+}
+
+export interface Exercise {
+  id: string;
+  name: string;
+  muscleGroup: string;
+  notes: string;
+  referenceImageUrl: string | null;
+  createdAt: string;
+}
+
+export interface WorkoutDayExercise {
+  id: string;
+  workoutDayTemplateId: string;
+  exerciseId: string;
+  position: number;
+  targetSets: number;
+  targetReps: string;
+  restSeconds: number;
+  notes: string;
+}
+
+export interface WorkoutSession {
+  id: string;
+  planId: string;
+  workoutDayTemplateId: string;
+  startedAt: string;
+  completedAt: string | null;
+  status: WorkoutSessionStatus;
+  notes: string;
+}
+
+export interface WorkoutExerciseLog {
+  id: string;
+  workoutSessionId: string;
+  exerciseId: string;
+  workoutDayExerciseId: string | null;
+  position: number;
+  notes: string;
+}
+
+export interface WorkoutSetLog {
+  id: string;
+  workoutExerciseLogId: string;
+  setNumber: number;
+  weight: number | null;
+  reps: number | null;
+  completed: boolean;
 }

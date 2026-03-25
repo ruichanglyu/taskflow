@@ -15,6 +15,8 @@ import { CalendarView } from './CalendarView';
 import { TimelineView } from './TimelineView';
 import { GlobalSearch } from './GlobalSearch';
 import { CanvasConnect } from './CanvasConnect';
+import { GymPage } from './GymPage';
+import { useGym } from '../hooks/useGym';
 import { supabase } from '../lib/supabase';
 import { ThemeSwitcher } from './ThemeSwitcher';
 
@@ -44,6 +46,7 @@ export function AppShell({ user }: AppShellProps) {
   const store = useStore(user.id);
   const deadlineStore = useDeadlines(user.id);
   const canvasStore = useCanvas(user.id, store.projects);
+  const gym = useGym(user.id);
   const { requestPermission } = useNotifications(store.tasks);
 
   const pushToast = useCallback((tone: ToastTone, title: string, message?: string) => {
@@ -63,7 +66,7 @@ export function AppShell({ user }: AppShellProps) {
     const result = await canvasStore.sync();
     if (result) {
       await Promise.all([deadlineStore.loadDeadlines(), store.loadData()]);
-      pushToast('success', 'Canvas sync complete', canvasStore.lastSyncResult ?? 'Courses and deadlines were refreshed.');
+      pushToast('success', 'Canvas sync complete', 'Courses and deadlines were refreshed.');
     } else {
       pushToast('error', 'Canvas sync failed', canvasStore.error ?? 'Please check your Canvas connection and try again.');
     }
@@ -358,6 +361,35 @@ export function AppShell({ user }: AppShellProps) {
               projects={store.projects}
               deadlines={deadlineStore.deadlines}
               onUpdateDueDate={store.updateTaskDueDate}
+            />
+          )}
+          {currentView === 'gym' && (
+            <GymPage
+              plans={gym.plans}
+              dayTemplates={gym.dayTemplates}
+              exercises={gym.exercises}
+              dayExercises={gym.dayExercises}
+              sessions={gym.sessions}
+              exerciseLogs={gym.exerciseLogs}
+              setLogs={gym.setLogs}
+              activePlan={gym.activePlan}
+              activeSession={gym.activeSession}
+              onAddPlan={gym.addPlan}
+              onUpdatePlan={gym.updatePlan}
+              onDeletePlan={gym.deletePlan}
+              onAddDayTemplate={gym.addDayTemplate}
+              onUpdateDayTemplate={gym.updateDayTemplate}
+              onDeleteDayTemplate={gym.deleteDayTemplate}
+              onAddExercise={gym.addExercise}
+              onUpdateExercise={gym.updateExercise}
+              onDeleteExercise={gym.deleteExercise}
+              onAddDayExercise={gym.addDayExercise}
+              onUpdateDayExercise={gym.updateDayExercise}
+              onDeleteDayExercise={gym.deleteDayExercise}
+              onStartSession={gym.startSession}
+              onCompleteSession={gym.completeSession}
+              onUpdateSetLog={gym.updateSetLog}
+              getLastPerformance={gym.getLastPerformance}
             />
           )}
             </>

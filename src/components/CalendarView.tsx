@@ -97,12 +97,12 @@ function DayPanel({
 
   return (
     <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold text-[var(--text-primary)]">{dateLabel}</h3>
         <button
           type="button"
           onClick={onCreateEvent}
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--accent)] transition hover:bg-[var(--accent-soft)]"
+          className="flex items-center gap-1.5 self-start rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--accent)] transition hover:bg-[var(--accent-soft)]"
         >
           <Plus size={14} /> Add event
         </button>
@@ -153,7 +153,7 @@ function DayPanel({
                   type="button"
                   onClick={() => onDelete(event.id)}
                   disabled={deletingId === event.id}
-                  className="rounded-full p-1.5 text-[var(--text-faint)] opacity-0 transition group-hover:opacity-100 hover:text-red-400 disabled:opacity-50"
+                  className="rounded-full p-1.5 text-[var(--text-faint)] opacity-100 transition hover:text-red-400 disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
                 >
                   <Trash2 size={13} />
                 </button>
@@ -241,7 +241,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           {calendar.isConnected && (
             <div className="flex rounded-lg border border-[var(--border-soft)] overflow-hidden">
               <button
@@ -466,7 +466,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
                                 type="button"
                                 onClick={() => void handleDelete(event.id)}
                                 disabled={deletingId === event.id}
-                                className="rounded-full border border-[var(--border-soft)] p-2 text-[var(--text-faint)] opacity-0 transition group-hover:opacity-100 hover:border-red-500/30 hover:text-red-400 disabled:opacity-50"
+                className="rounded-full border border-[var(--border-soft)] p-2 text-[var(--text-faint)] opacity-100 transition hover:border-red-500/30 hover:text-red-400 disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
                               >
                                 <Trash2 size={14} />
                               </button>

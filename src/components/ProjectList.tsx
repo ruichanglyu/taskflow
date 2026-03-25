@@ -187,7 +187,7 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
                 </div>
                 <button
                   onClick={e => { e.stopPropagation(); setConfirmDeleteProject(project); }}
-                  className="p-1 text-[var(--text-faint)] opacity-0 transition-all group-hover:opacity-100 hover:text-red-400"
+                  className="p-1 text-[var(--text-faint)] opacity-100 transition-all hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -365,13 +365,13 @@ function CourseDetailModal({ project, tasks, deadlines, onOpenTasks, onOpenDeadl
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="shrink-0 flex items-start justify-between border-b border-[var(--border-soft)] px-6 py-5">
-          <div className="flex items-center gap-4">
+        <div className="shrink-0 flex items-start justify-between gap-3 border-b border-[var(--border-soft)] px-4 py-4 sm:px-6 sm:py-5">
+          <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ backgroundColor: `${project.color}20` }}>
               <FolderOpen size={22} style={{ color: project.color }} />
             </div>
-            <div>
-              <h2 className="text-xl font-semibold text-[var(--text-primary)]">{project.name}</h2>
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-semibold text-[var(--text-primary)] sm:text-xl">{project.name}</h2>
               <p className="mt-1 text-sm text-[var(--text-muted)]">{project.description || 'Course overview and workload snapshot'}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -396,8 +396,8 @@ function CourseDetailModal({ project, tasks, deadlines, onOpenTasks, onOpenDeadl
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-6">
-          <div className="grid gap-4 md:grid-cols-4">
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <SummaryStat label="Upcoming deadlines" value={upcomingDeadlines.length} icon={<CalendarClock size={15} />} tone="default" />
             <SummaryStat label="Overdue" value={overdueDeadlines.length} icon={<AlertTriangle size={15} />} tone="danger" />
             <SummaryStat label="Active tasks" value={activeTasks.length} icon={<ListTodo size={15} />} tone="default" />

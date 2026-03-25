@@ -227,7 +227,7 @@ export function GymPage(props: GymPageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">Gym</h1>
       </div>
 
@@ -374,9 +374,9 @@ function PlanTab(props: GymPageProps) {
                 onKeyDown={e => { if (e.key === 'Enter') handleCreatePlan(); }}
                 autoFocus
               />
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
                 <label className="text-sm text-[var(--text-muted)]">Days per week:</label>
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-1">
                   {[3, 4, 5, 6, 7].map(n => (
                     <button
                       key={n}
@@ -393,7 +393,7 @@ function PlanTab(props: GymPageProps) {
                   ))}
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <button onClick={handleCreatePlan} disabled={!newPlanName.trim()} className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create</button>
                 <button onClick={() => setShowNewPlan(false)} className="rounded-lg border border-[var(--border-soft)] px-4 py-2 text-sm text-[var(--text-muted)]">Cancel</button>
               </div>
@@ -425,7 +425,7 @@ function PlanTab(props: GymPageProps) {
         <>
           {/* Plan header */}
           <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-[var(--text-primary)]">{activePlan.name}</h2>
                 <p className="text-sm text-[var(--text-muted)]">{activePlan.daysPerWeek} days/week · {planDays.length} workout days</p>
@@ -488,7 +488,7 @@ function PlanTab(props: GymPageProps) {
 
           {/* Add day button */}
           {showAddDay ? (
-            <div className="flex gap-2 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-3">
+            <div className="flex flex-col gap-2 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-3 sm:flex-row">
               <input
                 value={newDayName}
                 onChange={e => setNewDayName(e.target.value)}
@@ -526,8 +526,8 @@ function PlanTab(props: GymPageProps) {
 
       {showImportPlan && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowImportPlan(false)}>
-          <div className="w-full max-w-3xl rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3 border-b border-[var(--border-soft)] px-4 py-4 sm:px-5">
               <div>
                 <h3 className="text-lg font-semibold text-[var(--text-primary)]">Import Workout Plan</h3>
                 <p className="mt-1 text-sm text-[var(--text-muted)]">Paste a structured workout plan and TaskFlow will build the plan, days, and exercises for you.</p>
@@ -537,7 +537,7 @@ function PlanTab(props: GymPageProps) {
               </button>
             </div>
 
-            <div className="space-y-4 p-5">
+            <div className="space-y-4 overflow-y-auto p-4 sm:p-5">
               <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-xs text-[var(--text-muted)]">
                 Expected format: plan title, optional GOAL block, WEEKLY SPLIT, then sections like `DAY 1 — Shoulders`, with bullet exercises such as `- Barbell bench press — 4x6–10`.
               </div>
@@ -557,7 +557,7 @@ function PlanTab(props: GymPageProps) {
               )}
             </div>
 
-            <div className="flex gap-3 border-t border-[var(--border-soft)] px-5 py-4">
+            <div className="flex flex-col gap-3 border-t border-[var(--border-soft)] px-4 py-4 sm:flex-row sm:px-5">
               <button
                 type="button"
                 onClick={() => setShowImportPlan(false)}
@@ -726,14 +726,14 @@ function WorkoutDayCard({
               </div>
 
               {showNewExercise && (
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <input value={newExName} onChange={e => setNewExName(e.target.value)} placeholder="Exercise name" className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none" />
-                  <input value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} placeholder="Muscle group" className="w-28 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none" />
+                  <input value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} placeholder="Muscle group" className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none sm:w-28" />
                   <button onClick={handleCreateAndAdd} disabled={!newExName.trim()} className="rounded-lg px-2 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create</button>
                 </div>
               )}
 
-              <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
                 <label className="flex items-center gap-1">Sets: <input type="number" value={addSets} onChange={e => setAddSets(Number(e.target.value))} min={1} max={20} className="w-12 rounded border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-1.5 py-1 text-center text-sm text-[var(--text-primary)] focus:outline-none" /></label>
                 <label className="flex items-center gap-1">Reps: <input value={addReps} onChange={e => setAddReps(e.target.value)} className="w-20 rounded border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-1.5 py-1 text-sm text-[var(--text-primary)] focus:outline-none" placeholder="e.g. 12,10,8" /></label>
                 <label className="flex items-center gap-1">Rest: <input type="number" value={addRest} onChange={e => setAddRest(Number(e.target.value))} min={0} step={15} className="w-14 rounded border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-1.5 py-1 text-center text-sm text-[var(--text-primary)] focus:outline-none" />s</label>
@@ -780,7 +780,7 @@ function DayExerciseRow({
   };
 
   return (
-    <div className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-[var(--surface-muted)] transition group">
+    <div className="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 transition hover:bg-[var(--surface-muted)] group sm:flex-nowrap">
       <span className="w-5 text-center text-xs font-medium text-[var(--text-faint)]">{index + 1}</span>
       {exercise?.referenceImageUrl ? (
         <img src={exercise.referenceImageUrl} alt="" className="h-8 w-8 rounded object-cover" />
@@ -808,8 +808,8 @@ function DayExerciseRow({
         <div className="flex items-center gap-2">
           <span className="text-xs text-[var(--text-muted)]">{dayExercise.targetSets} x {dayExercise.targetReps}</span>
           <span className="text-[10px] text-[var(--text-faint)]">{dayExercise.restSeconds}s rest</span>
-          <button onClick={() => setIsEditing(true)} className="p-1 text-[var(--text-faint)] opacity-0 group-hover:opacity-100 transition"><Edit3 size={12} /></button>
-          <button onClick={() => onDelete(dayExercise.id)} className="p-1 text-[var(--text-faint)] opacity-0 group-hover:opacity-100 hover:text-red-400 transition"><Trash2 size={12} /></button>
+          <button onClick={() => setIsEditing(true)} className="p-1 text-[var(--text-faint)] opacity-100 transition md:opacity-0 md:group-hover:opacity-100"><Edit3 size={12} /></button>
+          <button onClick={() => onDelete(dayExercise.id)} className="p-1 text-[var(--text-faint)] opacity-100 transition hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"><Trash2 size={12} /></button>
         </div>
       )}
     </div>
@@ -855,7 +855,7 @@ function ExerciseLibrary({
                 <Dumbbell size={12} className="text-[var(--text-faint)]" />
               )}
               <span className="flex-1 text-sm text-[var(--text-primary)]">{ex.name}</span>
-              <button onClick={() => onDelete(ex.id)} className="p-1 text-[var(--text-faint)] opacity-0 group-hover:opacity-100 hover:text-red-400 transition"><Trash2 size={12} /></button>
+              <button onClick={() => onDelete(ex.id)} className="p-1 text-[var(--text-faint)] opacity-100 transition hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"><Trash2 size={12} /></button>
             </div>
           ))}
         </div>
@@ -869,7 +869,7 @@ function ExerciseLibrary({
             <div key={ex.id} className="flex items-center gap-2 py-1 px-2 rounded hover:bg-[var(--surface-muted)] group">
               <Dumbbell size={12} className="text-[var(--text-faint)]" />
               <span className="flex-1 text-sm text-[var(--text-primary)]">{ex.name}</span>
-              <button onClick={() => onDelete(ex.id)} className="p-1 text-[var(--text-faint)] opacity-0 group-hover:opacity-100 hover:text-red-400 transition"><Trash2 size={12} /></button>
+              <button onClick={() => onDelete(ex.id)} className="p-1 text-[var(--text-faint)] opacity-100 transition hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"><Trash2 size={12} /></button>
             </div>
           ))}
         </div>
@@ -957,7 +957,7 @@ function WorkoutTab(props: GymPageProps) {
     <div className="space-y-4">
       {/* Session header */}
       <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -967,11 +967,11 @@ function WorkoutTab(props: GymPageProps) {
               Started {new Date(activeSession.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · {completedExercises}/{totalExercises} exercises done
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex w-full gap-2 sm:w-auto">
             <button onClick={handleAbandon} className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-red-400 transition">
               <Square size={14} />
             </button>
-            <button onClick={handleFinish} className="rounded-lg px-4 py-1.5 text-xs font-medium text-[var(--accent-contrast)]" style={{ backgroundColor: 'var(--accent-strong)' }}>
+            <button onClick={handleFinish} className="flex-1 rounded-lg px-4 py-1.5 text-xs font-medium text-[var(--accent-contrast)] sm:flex-none" style={{ backgroundColor: 'var(--accent-strong)' }}>
               Finish Workout
             </button>
           </div>
@@ -1230,7 +1230,7 @@ function ActiveExerciseCard({
   return (
     <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] overflow-hidden">
       {/* Exercise header */}
-      <div className="flex items-center gap-4 border-b border-[var(--border-soft)] px-5 py-4">
+      <div className="flex items-start gap-3 border-b border-[var(--border-soft)] px-4 py-4 sm:items-center sm:gap-4 sm:px-5">
         {exercise.referenceImageUrl ? (
           <img src={exercise.referenceImageUrl} alt="" className="h-14 w-14 rounded-lg object-cover" />
         ) : (
@@ -1238,14 +1238,14 @@ function ActiveExerciseCard({
             <Dumbbell size={24} className="text-[var(--text-faint)]" />
           </div>
         )}
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <h3 className="text-lg font-bold text-[var(--text-primary)]">{exercise.name}</h3>
           <p className="text-xs text-[var(--text-muted)]">
             {exercise.muscleGroup && <span>{exercise.muscleGroup} · </span>}
             {dayExercise ? `${dayExercise.targetSets} sets × ${dayExercise.targetReps} reps` : `${sets.length} sets`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {/* Camera button */}
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoCapture} />
           <button
@@ -1266,7 +1266,7 @@ function ActiveExerciseCard({
 
       {/* Photo preview */}
       {photoPreview && (
-        <div className="border-b border-[var(--border-soft)] px-5 py-3">
+        <div className="border-b border-[var(--border-soft)] px-4 py-3 sm:px-5">
           <img src={photoPreview} alt="Workout photo" className="h-32 w-auto rounded-lg object-cover" />
         </div>
       )}
@@ -1280,7 +1280,7 @@ function ActiveExerciseCard({
       )}
 
       {/* Weight input (once for whole exercise) */}
-      <div className="flex items-center gap-3 border-b border-[var(--border-soft)] px-5 py-3">
+      <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border-soft)] px-4 py-3 sm:px-5">
         <label className="text-xs font-medium text-[var(--text-muted)]">Weight</label>
         <input
           type="number"
@@ -1293,14 +1293,14 @@ function ActiveExerciseCard({
       </div>
 
       {/* Sets */}
-      <div className="px-5 py-4 space-y-2">
+      <div className="space-y-2 px-4 py-4 sm:px-5">
         {sets.map(set => {
           const state = setStates.get(set.id) ?? (set.completed ? 'done' : 'idle');
           const target = getTargetReps(set.setNumber);
 
           return (
             <div key={set.id} className={cn(
-              'flex items-center gap-3 rounded-xl px-4 py-3 transition',
+              'flex flex-wrap items-center gap-3 rounded-xl px-4 py-3 transition sm:flex-nowrap',
               state === 'done' ? 'bg-emerald-400/5 border border-emerald-400/15' :
               state === 'active' ? 'bg-[var(--accent-soft)] border border-[var(--accent)]/30' :
               state === 'logging' ? 'bg-amber-400/5 border border-amber-400/20' :
@@ -1352,7 +1352,7 @@ function ActiveExerciseCard({
               {state === 'idle' && (
                 <button
                   onClick={() => handleGo(set.id)}
-                  className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold text-[var(--accent-contrast)] transition"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold text-[var(--accent-contrast)] transition sm:w-auto"
                   style={{ backgroundColor: 'var(--accent-strong)' }}
                 >
                   <Play size={14} />
@@ -1362,7 +1362,7 @@ function ActiveExerciseCard({
               {state === 'active' && (
                 <button
                   onClick={() => handleDone(set)}
-                  className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-400 sm:w-auto"
                 >
                   <Check size={14} />
                   Done
@@ -1371,7 +1371,7 @@ function ActiveExerciseCard({
               {state === 'logging' && (
                 <button
                   onClick={() => handleSaveReps(set)}
-                  className="flex items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-amber-400"
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-amber-400 sm:w-auto"
                 >
                   <Check size={14} />
                   Save
@@ -1389,8 +1389,8 @@ function ActiveExerciseCard({
 
       {/* Rest timer */}
       {restActive && (
-        <div className="border-t border-[var(--border-soft)] bg-[var(--accent-soft)] px-5 py-4">
-          <div className="flex items-center justify-between">
+        <div className="border-t border-[var(--border-soft)] bg-[var(--accent-soft)] px-4 py-4 sm:px-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <Timer size={18} className="text-[var(--accent)]" />
               <span className="text-2xl font-bold tabular-nums text-[var(--accent)]">
@@ -1413,8 +1413,8 @@ function ActiveExerciseCard({
 
       {/* Next exercise */}
       {!isLast && (
-        <div className="flex justify-end border-t border-[var(--border-soft)] px-5 py-3">
-          <button onClick={onNext} className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-[var(--accent-contrast)]" style={{ backgroundColor: 'var(--accent-strong)' }}>
+        <div className="flex border-t border-[var(--border-soft)] px-4 py-3 sm:justify-end sm:px-5">
+          <button onClick={onNext} className="flex w-full items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-[var(--accent-contrast)] sm:w-auto" style={{ backgroundColor: 'var(--accent-strong)' }}>
             Next Exercise
             <ChevronRight size={14} />
           </button>
@@ -1525,7 +1525,7 @@ function HistoryTab(props: GymPageProps) {
   return (
     <div className="space-y-6">
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-4 text-center">
           <Trophy size={20} className="mx-auto mb-1 text-amber-400" />
           <p className="text-2xl font-bold text-[var(--text-primary)]">{completedSessions.length}</p>

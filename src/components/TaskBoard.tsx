@@ -68,13 +68,13 @@ function TaskCard({
         <div className="relative flex items-center gap-0.5">
           <button
             onClick={() => onEdit(task)}
-            className="p-1 text-[var(--text-faint)] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[var(--text-secondary)]"
+            className="p-1 text-[var(--text-faint)] opacity-100 transition-opacity hover:text-[var(--text-secondary)] md:opacity-0 md:group-hover:opacity-100"
           >
             <Pencil size={13} />
           </button>
           <button
             onClick={() => setShowMenu(!showMenu)}
-            className="p-1 text-[var(--text-faint)] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[var(--text-secondary)]"
+            className="p-1 text-[var(--text-faint)] opacity-100 transition-opacity hover:text-[var(--text-secondary)] md:opacity-0 md:group-hover:opacity-100"
           >
             <ChevronDown size={14} />
           </button>

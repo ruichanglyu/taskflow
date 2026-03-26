@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { useAI, getOpenAIKey, setOpenAIKey, removeOpenAIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow } from '../hooks/useAI';
+import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow } from '../hooks/useAI';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus } from '../types';
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
@@ -30,8 +30,8 @@ export function AIPanel({
 }: AIPanelProps) {
   const { messages, isStreaming, error, sendMessage, stopStreaming, clearChat } = useAI();
   const [input, setInput] = useState('');
-  const [apiKey, setApiKey] = useState(getOpenAIKey() ?? '');
-  const [hasKey, setHasKey] = useState(!!getOpenAIKey());
+  const [apiKey, setApiKey] = useState(getAPIKey() ?? '');
+  const [hasKey, setHasKey] = useState(!!getAPIKey());
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [importedBlocks, setImportedBlocks] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -65,14 +65,14 @@ export function AIPanel({
 
   const handleSaveKey = () => {
     if (apiKey.trim()) {
-      setOpenAIKey(apiKey.trim());
+      setAPIKey(apiKey.trim());
       setHasKey(true);
       setShowKeyInput(false);
     }
   };
 
   const handleRemoveKey = () => {
-    removeOpenAIKey();
+    removeAPIKey();
     setApiKey('');
     setHasKey(false);
     setShowKeyInput(false);
@@ -154,7 +154,7 @@ export function AIPanel({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">AI Assistant</h3>
-              <p className="text-[10px] text-[var(--text-faint)]">Powered by GPT-4o Mini</p>
+              <p className="text-[10px] text-[var(--text-faint)]">Powered by Gemini 2.0 Flash</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -192,15 +192,15 @@ export function AIPanel({
         {(showKeyInput || !hasKey) && (
           <div className="border-b border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3">
             <p className="mb-2 text-xs text-[var(--text-muted)]">
-              {hasKey ? 'Your API key is saved.' : 'Enter your OpenAI API key to get started.'}{' '}
-              <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">Get a key →</a>
+              {hasKey ? 'Your API key is saved.' : 'Enter your Google Gemini API key to get started (free tier available).'}{' '}
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">Get a free key →</a>
             </p>
             <div className="flex gap-2">
               <input
                 type="password"
                 value={apiKey}
                 onChange={e => setApiKey(e.target.value)}
-                placeholder="sk-..."
+                placeholder="AIza..."
                 className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
                 onKeyDown={e => { if (e.key === 'Enter') handleSaveKey(); }}
               />
@@ -222,7 +222,7 @@ export function AIPanel({
               )}
             </div>
             <p className="mt-1.5 text-[10px] text-[var(--text-faint)]">
-              Key is stored locally in your browser. Never sent to our servers.
+              Key is stored locally in your browser. Free tier: 15 req/min, 1M tokens/day.
             </p>
           </div>
         )}
@@ -264,7 +264,7 @@ export function AIPanel({
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={hasKey ? 'Ask anything or request tasks/deadlines...' : 'Add your API key above to start'}
+              placeholder={hasKey ? 'Ask anything or request tasks/deadlines...' : 'Add your Gemini API key above to start'}
               disabled={!hasKey || isStreaming}
               rows={1}
               className="max-h-32 min-h-[38px] flex-1 resize-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-50"
@@ -311,7 +311,7 @@ function WelcomeScreen({ hasKey }: { hasKey: boolean }) {
       <p className="mt-2 max-w-xs text-sm text-[var(--text-muted)]">
         {hasKey
           ? 'Ask me anything about your schedule, or tell me to create tasks and deadlines for you.'
-          : 'Add your OpenAI API key above to get started.'}
+          : 'Add your Google Gemini API key above to get started — it\'s free!'}
       </p>
       {hasKey && (
         <div className="mt-6 space-y-2 text-left">

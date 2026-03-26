@@ -30,10 +30,11 @@ export interface ParsedImportRow {
   notes?: string;
 }
 
-const STORAGE_KEY = 'taskflow_openai_key';
-const MODEL = 'gpt-4o-mini';
+const STORAGE_KEY = 'taskflow_gemini_key';
+const MODEL = 'gemini-2.0-flash';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-export function getOpenAIKey(): string | null {
+export function getAPIKey(): string | null {
   try {
     return localStorage.getItem(STORAGE_KEY);
   } catch {
@@ -41,11 +42,11 @@ export function getOpenAIKey(): string | null {
   }
 }
 
-export function setOpenAIKey(key: string) {
+export function setAPIKey(key: string) {
   localStorage.setItem(STORAGE_KEY, key);
 }
 
-export function removeOpenAIKey() {
+export function removeAPIKey() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
@@ -204,9 +205,9 @@ export function useAI() {
     userMessage: string,
     appData: Parameters<typeof buildSystemPrompt>[0]
   ) => {
-    const key = getOpenAIKey();
+    const key = getAPIKey();
     if (!key) {
-      setError('Please add your OpenAI API key first.');
+      setError('Please add your Google Gemini API key first.');
       return;
     }
 
@@ -232,24 +233,25 @@ export function useAI() {
     try {
       abortRef.current = new AbortController();
 
-      const conversationMessages = [...messages, userMsg].map(m => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
+      // Build Gemini conversation history
+      const systemInstruction = buildSystemPrompt(appData);
+      const conversationHistory = [...messages, userMsg].map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
       }));
 
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      const url = `${GEMINI_API_URL}/${MODEL}:streamGenerateContent?alt=sse&key=${key}`;
+
+      const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${key}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: MODEL,
-          stream: true,
-          messages: [
-            { role: 'system', content: buildSystemPrompt(appData) },
-            ...conversationMessages,
-          ],
+          system_instruction: { parts: [{ text: systemInstruction }] },
+          contents: conversationHistory,
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 4096,
+          },
         }),
         signal: abortRef.current.signal,
       });
@@ -265,24 +267,26 @@ export function useAI() {
 
       const decoder = new TextDecoder();
       let accumulated = '';
+      let buffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6);
-          if (data === '[DONE]') continue;
+          const data = line.slice(6).trim();
+          if (!data) continue;
 
           try {
             const parsed = JSON.parse(data);
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) {
-              accumulated += delta;
+            const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              accumulated += text;
               setMessages(prev =>
                 prev.map(m => m.id === assistantMsg.id ? { ...m, content: accumulated } : m)
               );
@@ -292,11 +296,29 @@ export function useAI() {
           }
         }
       }
+
+      // Process any remaining buffer
+      if (buffer.startsWith('data: ')) {
+        const data = buffer.slice(6).trim();
+        if (data) {
+          try {
+            const parsed = JSON.parse(data);
+            const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              accumulated += text;
+              setMessages(prev =>
+                prev.map(m => m.id === assistantMsg.id ? { ...m, content: accumulated } : m)
+              );
+            }
+          } catch {
+            // Skip
+          }
+        }
+      }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
       const errMsg = err instanceof Error ? err.message : 'Something went wrong';
       setError(errMsg);
-      // Remove the empty assistant message on error
       setMessages(prev => prev.filter(m => m.id !== assistantMsg.id));
     } finally {
       setIsStreaming(false);

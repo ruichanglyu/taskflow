@@ -112,45 +112,44 @@ export function CalendarGrid({
   }
 
   return (
-    <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
-      {/* Header */}
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-[var(--text-primary)]">{monthLabel}</h2>
+    <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)]">
+      <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
+        <div className="flex items-center gap-3">
+          <h2 className="text-[22px] font-semibold tracking-tight text-[var(--text-primary)]">{monthLabel}</h2>
+        </div>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={onToday}
-            className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+            className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
           >
             Today
           </button>
           <button
             type="button"
             onClick={onPrevMonth}
-            className="rounded-lg border border-[var(--border-soft)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+            className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
           >
             <ChevronLeft size={16} />
           </button>
           <button
             type="button"
             onClick={onNextMonth}
-            className="rounded-lg border border-[var(--border-soft)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+            className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
           >
             <ChevronRight size={16} />
           </button>
         </div>
       </div>
 
-      {/* Weekday headers */}
-      <div className="grid grid-cols-7 mb-1">
+      <div className="grid grid-cols-7 border-b border-[var(--border-soft)] px-2">
         {WEEKDAYS.map(day => (
-          <div key={day} className="py-2 text-center text-xs font-medium text-[var(--text-faint)]">
+          <div key={day} className="py-3 text-center text-[11px] font-medium text-[var(--text-faint)]">
             {day}
           </div>
         ))}
       </div>
 
-      {/* Day cells */}
       <div className="grid grid-cols-7">
         {cells.map(({ day, dateStr, isCurrentMonth }) => {
           const dayEvents = eventsByDate.get(dateStr) ?? [];
@@ -164,15 +163,15 @@ export function CalendarGrid({
               type="button"
               onClick={() => onSelectDate(dateStr)}
               className={cn(
-                'group relative flex flex-col items-center gap-1 border border-transparent p-1.5 transition-colors min-h-[72px]',
+                'group relative flex min-h-[108px] flex-col items-start border-r border-b border-[var(--border-soft)] px-3 py-2 text-left transition-colors last:border-r-0',
                 isCurrentMonth ? 'text-[var(--text-primary)]' : 'text-[var(--text-faint)]',
-                isSelected && 'border-[var(--accent)] bg-[var(--accent-soft)] rounded-lg',
-                !isSelected && isCurrentMonth && 'hover:bg-[var(--surface-muted)] hover:rounded-lg',
+                isSelected && 'bg-[var(--accent-soft)] ring-1 ring-inset ring-[var(--accent)]',
+                !isSelected && isCurrentMonth && 'hover:bg-[var(--surface-muted)]',
               )}
             >
               <span
                 className={cn(
-                  'flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium',
+                  'flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium',
                   isToday && !isSelected && 'bg-[var(--accent)] text-[var(--accent-contrast)]',
                   isToday && isSelected && 'bg-[var(--accent)] text-[var(--accent-contrast)]',
                 )}
@@ -180,35 +179,53 @@ export function CalendarGrid({
                 {day}
               </span>
 
-              {/* Deadline + event markers */}
-              {(dayDeadlines.length > 0 || dayEvents.length > 0) && (
-                <div className="flex items-center gap-0.5">
-                  {dayDeadlines.slice(0, 2).map((dl, i) => (
+              <div className="mt-auto flex min-h-[18px] items-center gap-1">
+                {dayDeadlines.slice(0, 2).map((dl, i) => (
+                  <div
+                    key={`dl-${i}`}
+                    className="h-2.5 w-2.5 rotate-45 bg-orange-400"
+                    title={dl.title}
+                  />
+                ))}
+                {dayEvents.slice(0, 3 - Math.min(dayDeadlines.length, 2)).map((event, i) => (
+                  <div
+                    key={`ev-${i}`}
+                    className={cn(
+                      'h-2.5 w-2.5 rounded-full',
+                      isSelected ? 'bg-[var(--accent)]' : 'bg-indigo-400'
+                    )}
+                    title={event.summary || 'Calendar event'}
+                  />
+                ))}
+                {dayEvents.length + dayDeadlines.length > 3 && (
+                  <span className="text-[10px] text-[var(--text-faint)]">+{dayEvents.length + dayDeadlines.length - 3}</span>
+                )}
+              </div>
+
+              {isCurrentMonth && (
+                <div className="mt-1 flex w-full flex-col gap-1">
+                  {dayEvents.slice(0, 2).map((event, idx) => (
                     <div
-                      key={`dl-${i}`}
-                      className="h-1.5 w-1.5 rotate-45 bg-orange-400"
-                      title={dl.title}
-                    />
+                      key={`${event.id}-${idx}`}
+                      className="truncate rounded-md bg-indigo-500/12 px-1.5 py-0.5 text-[10px] font-medium text-indigo-300"
+                    >
+                      {event.summary || 'Untitled'}
+                    </div>
                   ))}
-                  {dayEvents.slice(0, 3 - Math.min(dayDeadlines.length, 2)).map((_, i) => (
+                  {dayDeadlines.slice(0, Math.max(0, 2 - dayEvents.slice(0, 2).length)).map((dl, idx) => (
                     <div
-                      key={`ev-${i}`}
-                      className={cn(
-                        'h-1.5 w-1.5 rounded-full',
-                        isSelected ? 'bg-[var(--accent)]' : 'bg-indigo-400'
-                      )}
-                    />
+                      key={`${dl.id}-${idx}`}
+                      className="truncate rounded-md bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-300"
+                    >
+                      {dl.title}
+                    </div>
                   ))}
-                  {dayEvents.length + dayDeadlines.length > 3 && (
-                    <span className="text-[8px] text-[var(--text-faint)]">+{dayEvents.length + dayDeadlines.length - 3}</span>
-                  )}
                 </div>
               )}
 
-              {/* Quick add on hover */}
               {isCurrentMonth && (
                 <div
-                  className="absolute right-0.5 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute right-1.5 top-1.5 opacity-0 transition-opacity group-hover:opacity-100"
                   onClick={e => { e.stopPropagation(); onCreateEvent(dateStr); }}
                 >
                   <Plus size={12} className="text-[var(--text-faint)] hover:text-[var(--accent)]" />

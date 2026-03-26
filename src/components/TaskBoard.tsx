@@ -204,7 +204,7 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(56,189,248,0.14),rgba(99,102,241,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Tasks</h1>
         </div>

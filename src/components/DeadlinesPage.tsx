@@ -488,7 +488,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(14,165,233,0.14),rgba(249,115,22,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">
             <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Deadlines</h1>

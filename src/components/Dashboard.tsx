@@ -101,7 +101,7 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(14,165,233,0.16),rgba(34,197,94,0.08)_42%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">
             Dashboard

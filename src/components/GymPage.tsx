@@ -267,7 +267,8 @@ export function GymPage(props: GymPageProps) {
 // ============================================================
 
 function PlanTab(props: GymPageProps) {
-  const { activePlan, dayTemplates, exercises, dayExercises } = props;
+  const { plans, activePlan, dayTemplates, exercises, dayExercises } = props;
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(activePlan?.id ?? plans[0]?.id ?? null);
   const [showNewPlan, setShowNewPlan] = useState(false);
   const [showImportPlan, setShowImportPlan] = useState(false);
   const [newPlanName, setNewPlanName] = useState('');
@@ -280,20 +281,63 @@ function PlanTab(props: GymPageProps) {
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
+  useEffect(() => {
+    if (plans.length === 0) {
+      setSelectedPlanId(null);
+      return;
+    }
+
+    const stillExists = selectedPlanId ? plans.some(plan => plan.id === selectedPlanId) : false;
+    if (!stillExists) {
+      setSelectedPlanId(activePlan?.id ?? plans[0]?.id ?? null);
+    }
+  }, [activePlan?.id, plans, selectedPlanId]);
+
+  useEffect(() => {
+    setExpandedDay(null);
+    setShowAddDay(false);
+  }, [selectedPlanId]);
+
+  const selectedPlan = selectedPlanId
+    ? plans.find(plan => plan.id === selectedPlanId) ?? null
+    : activePlan ?? plans[0] ?? null;
+
+  const selectedPlanDays = selectedPlan
+    ? dayTemplates.filter(d => d.planId === selectedPlan.id).sort((a, b) => a.position - b.position)
+    : [];
+
+  const selectedPlanExerciseCount = selectedPlan
+    ? dayExercises.filter(de =>
+      selectedPlanDays.some(day => day.id === de.workoutDayTemplateId)
+    ).length
+    : 0;
+
+  const planCards = plans.map(plan => {
+    const planDays = dayTemplates.filter(d => d.planId === plan.id);
+    const exerciseCount = dayExercises.filter(de =>
+      planDays.some(day => day.id === de.workoutDayTemplateId)
+    ).length;
+
+    return {
+      plan,
+      dayCount: planDays.length,
+      exerciseCount,
+    };
+  });
+
   const handleCreatePlan = async () => {
     if (!newPlanName.trim()) return;
-    await props.onAddPlan(newPlanName.trim(), '', newPlanDays);
+    const planId = await props.onAddPlan(newPlanName.trim(), '', newPlanDays);
+    if (planId) {
+      setSelectedPlanId(planId);
+    }
     setNewPlanName('');
     setShowNewPlan(false);
   };
 
-  const planDays = activePlan
-    ? dayTemplates.filter(d => d.planId === activePlan.id).sort((a, b) => a.position - b.position)
-    : [];
-
   const handleAddDay = async () => {
-    if (!activePlan || !newDayName.trim()) return;
-    await props.onAddDayTemplate(activePlan.id, newDayName.trim());
+    if (!selectedPlan || !newDayName.trim()) return;
+    await props.onAddDayTemplate(selectedPlan.id, newDayName.trim());
     setNewDayName('');
     setShowAddDay(false);
   };
@@ -338,6 +382,7 @@ function PlanTab(props: GymPageProps) {
         }
       }
 
+      setSelectedPlanId(planId);
       setImportText('');
       setShowImportPlan(false);
     } catch (err) {
@@ -349,7 +394,7 @@ function PlanTab(props: GymPageProps) {
 
   const handleDayDragEnd = async (result: DropResult) => {
     if (!result.destination || result.source.index === result.destination.index) return;
-    const reordered = [...planDays];
+    const reordered = [...selectedPlanDays];
     const [moved] = reordered.splice(result.source.index, 1);
     reordered.splice(result.destination.index, 0, moved);
     // Update positions for all affected days
@@ -362,49 +407,145 @@ function PlanTab(props: GymPageProps) {
 
   return (
     <div className="space-y-6">
-      {/* Active plan or create */}
-      {!activePlan ? (
-        <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-6 shadow-sm">
-          {showNewPlan ? (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-[var(--text-primary)]">Create Workout Plan</h3>
-              <input
-                value={newPlanName}
-                onChange={e => setNewPlanName(e.target.value)}
-                placeholder="Plan name (e.g. Push Pull Legs)"
-                className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-                onKeyDown={e => { if (e.key === 'Enter') handleCreatePlan(); }}
-                autoFocus
-              />
-              <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-                <label className="text-sm text-[var(--text-muted)]">Days per week:</label>
-                <div className="flex flex-wrap gap-1">
-                  {[3, 4, 5, 6, 7].map(n => (
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(34,197,94,0.16),rgba(56,189,248,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-2xl">
+            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Gym</h1>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">Manage workout plans on the left, open one to edit its days, and keep the active plan ready for training.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowNewPlan(true)}
+              className="flex items-center gap-1.5 rounded-2xl px-4 py-2 text-xs font-medium text-[var(--accent-contrast)] shadow-lg"
+              style={{ backgroundColor: 'var(--accent-strong)', boxShadow: '0 16px 34px var(--glow-accent)' }}
+            >
+              <Plus size={14} />
+              New Plan
+            </button>
+            <button
+              onClick={() => setShowImportPlan(true)}
+              className="flex items-center gap-1.5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+            >
+              Import Plan
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="space-y-4">
+          <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Workout plans</div>
+                <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{plans.length} total</div>
+              </div>
+              <button
+                onClick={() => setShowNewPlan(true)}
+                className="rounded-xl border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+              >
+                Add
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {planCards.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-[var(--border-soft)] px-4 py-8 text-center text-sm text-[var(--text-muted)]">
+                  No plans yet. Create one or import a routine.
+                </div>
+              ) : (
+                planCards.map(({ plan, dayCount, exerciseCount }) => {
+                  const isSelected = selectedPlan?.id === plan.id;
+                  const isActive = plan.isActive;
+                  return (
                     <button
-                      key={n}
-                      onClick={() => setNewPlanDays(n)}
+                      key={plan.id}
+                      type="button"
+                      onClick={() => setSelectedPlanId(plan.id)}
                       className={cn(
-                        'h-8 w-8 rounded-lg text-sm font-medium transition',
-                        newPlanDays === n
-                          ? 'bg-[var(--accent)] text-[var(--accent-contrast)]'
-                          : 'border border-[var(--border-soft)] text-[var(--text-muted)] hover:bg-[var(--surface-muted)]'
+                        'w-full rounded-2xl border px-4 py-3 text-left transition',
+                        isSelected
+                          ? 'border-[var(--accent)] bg-[var(--accent-soft)]/40 shadow-md'
+                          : 'border-[var(--border-soft)] bg-[var(--surface-elevated)] hover:border-[var(--border-strong)]'
                       )}
                     >
-                      {n}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{plan.name}</div>
+                          <div className="mt-1 text-[11px] text-[var(--text-faint)]">
+                            {plan.daysPerWeek} days/week · {dayCount} days · {exerciseCount} exercises
+                          </div>
+                        </div>
+                        {isActive && (
+                          <span className="shrink-0 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      {plan.description && (
+                        <p className="mt-2 line-clamp-2 text-xs text-[var(--text-muted)]">{plan.description}</p>
+                      )}
                     </button>
-                  ))}
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {showNewPlan && (
+            <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">Create Plan</h3>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">Make a new plan without replacing the active one.</p>
+                </div>
+                <button onClick={() => setShowNewPlan(false)} className="text-[var(--text-faint)] transition hover:text-[var(--text-primary)]">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="mt-4 space-y-3">
+                <input
+                  value={newPlanName}
+                  onChange={e => setNewPlanName(e.target.value)}
+                  placeholder="Plan name"
+                  className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                  onKeyDown={e => { if (e.key === 'Enter') handleCreatePlan(); }}
+                  autoFocus
+                />
+                <div>
+                  <div className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-[var(--text-faint)]">Days per week</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[3, 4, 5, 6, 7].map(n => (
+                      <button
+                        key={n}
+                        onClick={() => setNewPlanDays(n)}
+                        className={cn(
+                          'h-8 w-8 rounded-lg text-sm font-medium transition',
+                          newPlanDays === n
+                            ? 'bg-[var(--accent)] text-[var(--accent-contrast)]'
+                            : 'border border-[var(--border-soft)] text-[var(--text-muted)] hover:bg-[var(--surface-muted)]'
+                        )}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleCreatePlan} disabled={!newPlanName.trim()} className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create</button>
+                  <button onClick={() => setShowNewPlan(false)} className="rounded-lg border border-[var(--border-soft)] px-4 py-2 text-sm text-[var(--text-muted)]">Cancel</button>
                 </div>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <button onClick={handleCreatePlan} disabled={!newPlanName.trim()} className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create</button>
-                <button onClick={() => setShowNewPlan(false)} className="rounded-lg border border-[var(--border-soft)] px-4 py-2 text-sm text-[var(--text-muted)]">Cancel</button>
-              </div>
             </div>
-          ) : (
-            <div className="py-8 text-center">
+          )}
+        </aside>
+
+        <section className="space-y-4">
+          {!selectedPlan ? (
+            <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-8 text-center shadow-sm">
               <Dumbbell size={44} className="mx-auto mb-4 text-[var(--accent)]" />
               <p className="mb-2 text-lg font-semibold text-[var(--text-primary)]">No workout plan yet</p>
-              <p className="mb-4 text-sm text-[var(--text-muted)]">Create one from scratch or import a structured routine to get moving fast.</p>
+              <p className="mb-4 text-sm text-[var(--text-muted)]">Create a plan or import one, then open it to organize the days inside.</p>
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <button
                   onClick={() => setShowNewPlan(true)}
@@ -422,111 +563,137 @@ function PlanTab(props: GymPageProps) {
                 </button>
               </div>
             </div>
-          )}
-        </div>
-      ) : (
-        <>
-          {/* Plan header */}
-          <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Active plan</div>
-                <h2 className="mt-1 text-xl font-bold text-[var(--text-primary)]">{activePlan.name}</h2>
-                <p className="text-sm text-[var(--text-muted)]">{activePlan.daysPerWeek} days/week · {planDays.length} workout days</p>
-              </div>
-              <button
-                onClick={() => { if (confirm('Delete this plan?')) props.onDeletePlan(activePlan.id); }}
-                className="text-[var(--text-faint)] hover:text-red-400 transition"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                onClick={() => setShowImportPlan(true)}
-                className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-              >
-                Import plan
-              </button>
-            </div>
-          </div>
-
-          {/* Workout days */}
-          <DragDropContext onDragEnd={handleDayDragEnd}>
-            <Droppable droppableId="workout-days">
-              {(provided) => (
-                <div className="space-y-2" ref={provided.innerRef} {...provided.droppableProps}>
-                  {planDays.map((day, idx) => (
-                    <Draggable key={day.id} draggableId={day.id} index={idx}>
-                      {(dragProvided, dragSnapshot) => (
-                        <div
-                          ref={dragProvided.innerRef}
-                          {...dragProvided.draggableProps}
-                          style={dragProvided.draggableProps.style}
-                        >
-                          <WorkoutDayCard
-                            day={day}
-                            dayNumber={idx + 1}
-                            isExpanded={expandedDay === day.id}
-                            onToggle={() => setExpandedDay(expandedDay === day.id ? null : day.id)}
-                            exercises={exercises}
-                            dayExercises={dayExercises.filter(de => de.workoutDayTemplateId === day.id).sort((a, b) => a.position - b.position)}
-                            onUpdateDay={props.onUpdateDayTemplate}
-                            onDeleteDay={props.onDeleteDayTemplate}
-                            onAddDayExercise={props.onAddDayExercise}
-                            onUpdateDayExercise={props.onUpdateDayExercise}
-                            onDeleteDayExercise={props.onDeleteDayExercise}
-                            onAddExercise={props.onAddExercise}
-                            dragHandleProps={dragProvided.dragHandleProps}
-                            isDragging={dragSnapshot.isDragging}
-                          />
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </DragDropContext>
-
-          {/* Add day button */}
-          {showAddDay ? (
-            <div className="flex flex-col gap-2 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-3 sm:flex-row">
-              <input
-                value={newDayName}
-                onChange={e => setNewDayName(e.target.value)}
-                placeholder="Day name (e.g. Push, Pull, Legs)"
-                className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-                onKeyDown={e => { if (e.key === 'Enter') handleAddDay(); if (e.key === 'Escape') setShowAddDay(false); }}
-                autoFocus
-              />
-              <button onClick={handleAddDay} disabled={!newDayName.trim()} className="rounded-lg px-3 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add</button>
-              <button onClick={() => setShowAddDay(false)} className="rounded-lg border border-[var(--border-soft)] px-3 py-2 text-sm text-[var(--text-muted)]"><X size={16} /></button>
-            </div>
           ) : (
-            <button
-              onClick={() => setShowAddDay(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-soft)] py-3 text-sm font-medium text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-            >
-              <Plus size={16} />
-              Add Workout Day
-            </button>
-          )}
+            <>
+              <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Selected plan</div>
+                    <h2 className="mt-1 truncate text-xl font-bold text-[var(--text-primary)]">{selectedPlan.name}</h2>
+                    <p className="mt-1 text-sm text-[var(--text-muted)]">
+                      {selectedPlan.daysPerWeek} days/week · {selectedPlanDays.length} workout days · {selectedPlanExerciseCount} exercises
+                    </p>
+                    {selectedPlan.description && (
+                      <p className="mt-3 max-w-3xl whitespace-pre-line text-sm text-[var(--text-muted)]">{selectedPlan.description}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!selectedPlan.isActive && (
+                      <button
+                        onClick={() => void props.onUpdatePlan(selectedPlan.id, { isActive: true })}
+                        className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                      >
+                        Set Active
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowImportPlan(true)}
+                      className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                    >
+                      Import plan
+                    </button>
+                    <button
+                      onClick={() => { if (confirm('Delete this plan?')) props.onDeletePlan(selectedPlan.id); }}
+                      className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-faint)] transition hover:text-red-400"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
 
-          {/* Exercise Library */}
-          <div>
-            <button
-              onClick={() => setShowExerciseLib(!showExerciseLib)}
-              className="flex items-center gap-2 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] transition"
-            >
-              {showExerciseLib ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-              Exercise Library ({exercises.length})
-            </button>
-            {showExerciseLib && <ExerciseLibrary exercises={exercises} onAdd={props.onAddExercise} onDelete={props.onDeleteExercise} />}
-          </div>
-        </>
-      )}
+              <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">Plan Days</h3>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">Click a day to open the exercises inside it.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowAddDay(true)}
+                      className="rounded-xl border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                    >
+                      Add Day
+                    </button>
+                  </div>
+                </div>
+
+                {showAddDay && (
+                  <div className="mt-4 flex flex-col gap-2 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-3 sm:flex-row">
+                    <input
+                      value={newDayName}
+                      onChange={e => setNewDayName(e.target.value)}
+                      placeholder="Day name (e.g. Push, Pull, Legs)"
+                      className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                      onKeyDown={e => { if (e.key === 'Enter') handleAddDay(); if (e.key === 'Escape') setShowAddDay(false); }}
+                      autoFocus
+                    />
+                    <button onClick={handleAddDay} disabled={!newDayName.trim()} className="rounded-lg px-3 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add</button>
+                    <button onClick={() => setShowAddDay(false)} className="rounded-lg border border-[var(--border-soft)] px-3 py-2 text-sm text-[var(--text-muted)]"><X size={16} /></button>
+                  </div>
+                )}
+
+                <div className="mt-4">
+                  {selectedPlanDays.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-[var(--border-soft)] px-4 py-8 text-center text-sm text-[var(--text-muted)]">
+                      Add workout days to this plan to build it out.
+                    </div>
+                  ) : (
+                    <DragDropContext onDragEnd={handleDayDragEnd}>
+                      <Droppable droppableId="workout-days">
+                        {(provided) => (
+                          <div className="space-y-2" ref={provided.innerRef} {...provided.droppableProps}>
+                            {selectedPlanDays.map((day, idx) => (
+                              <Draggable key={day.id} draggableId={day.id} index={idx}>
+                                {(dragProvided, dragSnapshot) => (
+                                  <div
+                                    ref={dragProvided.innerRef}
+                                    {...dragProvided.draggableProps}
+                                    style={dragProvided.draggableProps.style}
+                                  >
+                                    <WorkoutDayCard
+                                      day={day}
+                                      dayNumber={idx + 1}
+                                      isExpanded={expandedDay === day.id}
+                                      onToggle={() => setExpandedDay(expandedDay === day.id ? null : day.id)}
+                                      exercises={exercises}
+                                      dayExercises={dayExercises.filter(de => de.workoutDayTemplateId === day.id).sort((a, b) => a.position - b.position)}
+                                      onUpdateDay={props.onUpdateDayTemplate}
+                                      onDeleteDay={props.onDeleteDayTemplate}
+                                      onAddDayExercise={props.onAddDayExercise}
+                                      onUpdateDayExercise={props.onUpdateDayExercise}
+                                      onDeleteDayExercise={props.onDeleteDayExercise}
+                                      onAddExercise={props.onAddExercise}
+                                      dragHandleProps={dragProvided.dragHandleProps}
+                                      isDragging={dragSnapshot.isDragging}
+                                    />
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
+                          </div>
+                        )}
+                      </Droppable>
+                    </DragDropContext>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <button
+                  onClick={() => setShowExerciseLib(!showExerciseLib)}
+                  className="mb-3 flex items-center gap-2 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] transition"
+                >
+                  {showExerciseLib ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  Exercise Library ({exercises.length})
+                </button>
+                {showExerciseLib && <ExerciseLibrary exercises={exercises} onAdd={props.onAddExercise} onDelete={props.onDeleteExercise} />}
+              </div>
+            </>
+          )}
+        </section>
+      </div>
 
       {showImportPlan && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowImportPlan(false)}>

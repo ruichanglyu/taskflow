@@ -79,20 +79,22 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Courses</h1>
-          <p className="mt-1 text-[var(--text-muted)]">Organize your work by course</p>
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(34,197,94,0.14),rgba(56,189,248,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-2xl">
+            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Courses</h1>
+          </div>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="inline-flex items-center gap-2 self-start rounded-2xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] shadow-lg transition-colors"
+            style={{ backgroundColor: 'var(--accent-strong)', boxShadow: '0 16px 34px var(--glow-accent)' }}
+          >
+            <Plus size={15} /> New Course
+          </button>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="inline-flex items-center gap-2 self-start rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors"
-          style={{ backgroundColor: 'var(--accent-strong)' }}
-        >
-          <Plus size={15} /> New Course
-        </button>
       </div>
 
+      <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
@@ -114,10 +116,11 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
           <option value="next-deadline">Sort by next deadline</option>
         </select>
       </div>
+      </div>
 
       {/* Add Project Form */}
       {showForm && (
-        <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+        <form onSubmit={handleSubmit} className="space-y-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
           <input
             type="text"
             value={name}
@@ -173,15 +176,15 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
               key={project.id}
               type="button"
               onClick={() => setSelectedProjectId(project.id)}
-              className="group rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 text-left transition-all hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)]"
+              className="group rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 text-left shadow-sm transition-all hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)] hover:shadow-lg"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: project.color + '20' }}>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm" style={{ backgroundColor: project.color + '20' }}>
                     <FolderOpen size={20} style={{ color: project.color }} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">{project.name}</h3>
+                    <h3 className="text-base font-semibold text-[var(--text-primary)]">{project.name}</h3>
                     <p className="mt-0.5 text-xs text-[var(--text-faint)]">{project.description || 'No description'}</p>
                   </div>
                 </div>
@@ -193,7 +196,7 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
                 </button>
               </div>
 
-              <div className="mt-4">
+              <div className="mt-5">
                 <div className="mb-2 flex justify-between text-xs text-[var(--text-faint)]">
                   <span>Progress</span>
                   <span>{progress}%</span>
@@ -221,7 +224,7 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
                 </div>
               </div>
 
-              <div className="mt-4 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
+              <div className="mt-5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)]">
                     <Target size={13} />
@@ -232,8 +235,8 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
                   </span>
                 </div>
 
-                <div className="mt-3 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5">
-                  <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">Next deadline</div>
+                <div className="mt-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-3">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Next deadline</div>
                   {nextDeadline ? (
                     <div className="mt-1.5">
                       <div className="text-sm font-medium text-[var(--text-primary)]">{nextDeadline.title}</div>

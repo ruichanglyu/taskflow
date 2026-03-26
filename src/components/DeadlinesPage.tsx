@@ -435,39 +435,40 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Deadlines</h1>
-          <p className="mt-1 text-[var(--text-muted)]">Track what's due and when</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowFilters(f => !f)}
-            className={cn(
-              'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition',
-              showFilters || activeFilters > 0
-                ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent-soft)]'
-                : 'border-[var(--border-soft)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]'
-            )}
-          >
-            <Filter size={14} />
-            Filters{activeFilters > 0 && ` (${activeFilters})`}
-          </button>
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
-          >
-            <Upload size={14} />
-            Import CSV
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-medium text-[var(--accent-contrast)] cursor-pointer"
-            style={{ backgroundColor: 'var(--accent-strong)' }}
-          >
-            <Plus size={14} />
-            Add Deadline
-          </button>
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(14,165,233,0.14),rgba(249,115,22,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-2xl">
+            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Deadlines</h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowFilters(f => !f)}
+              className={cn(
+                'flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-xs font-medium shadow-sm transition',
+                showFilters || activeFilters > 0
+                  ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--surface)]'
+                  : 'border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]'
+              )}
+            >
+              <Filter size={14} />
+              Filters{activeFilters > 0 && ` (${activeFilters})`}
+            </button>
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-1.5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+            >
+              <Upload size={14} />
+              Import CSV
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-1.5 rounded-2xl px-4 py-2 text-xs font-medium text-[var(--accent-contrast)] shadow-lg"
+              style={{ backgroundColor: 'var(--accent-strong)', boxShadow: '0 16px 34px var(--glow-accent)' }}
+            >
+              <Plus size={14} />
+              Add Deadline
+            </button>
+          </div>
         </div>
       </div>
 
@@ -492,20 +493,21 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
       )}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-          <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">Upcoming</div>
-          <div className="mt-1 text-lg font-semibold text-[var(--text-primary)]">{upcomingCount}</div>
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4 shadow-sm">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Upcoming</div>
+          <div className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">{upcomingCount}</div>
         </div>
-        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-          <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">In progress</div>
-          <div className="mt-1 text-lg font-semibold text-blue-400">{inProgressCount}</div>
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4 shadow-sm">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">In progress</div>
+          <div className="mt-2 text-2xl font-semibold text-blue-400">{inProgressCount}</div>
         </div>
-        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-          <div className="text-[10px] uppercase tracking-wide text-[var(--text-faint)]">Overdue</div>
-          <div className="mt-1 text-lg font-semibold text-red-400">{overdueCount}</div>
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4 shadow-sm">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Overdue</div>
+          <div className="mt-2 text-2xl font-semibold text-red-400">{overdueCount}</div>
         </div>
       </div>
 
+      <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
@@ -527,7 +529,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
         )}
       </div>
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-2">
           {([
             { value: 'all', label: 'All' },
@@ -590,10 +592,11 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
           </button>
         </div>
       </div>
+      </div>
 
       {/* Filters */}
       {showFilters && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-3">
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
           <select
             value={filterCourse}
             onChange={e => setFilterCourse(e.target.value)}
@@ -636,8 +639,8 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
             </div>
           ) : (
             groupedByCourse.map(group => (
-              <div key={group.courseName} className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)]">
-                <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-4 py-3">
+              <div key={group.courseName} className="overflow-hidden rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm">
+                <div className="flex items-center justify-between border-b border-[var(--border-soft)] bg-[var(--surface-muted)]/60 px-4 py-3">
                   <div>
                     <div className="text-sm font-semibold text-[var(--text-primary)]">{group.courseName}</div>
                     <div className="mt-0.5 text-xs text-[var(--text-faint)]">{group.deadlines.length} deadlines</div>
@@ -697,7 +700,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                 key={dl.id}
                 type="button"
                 onClick={() => setDetailId(dl.id)}
-                className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 text-left transition hover:border-[var(--border-strong)]"
+                className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 text-left shadow-sm transition hover:border-[var(--border-strong)] hover:shadow-lg"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -721,7 +724,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
       </div>
 
       {/* Table */}
-      <div className="hidden overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] md:block">
+      <div className="hidden overflow-hidden rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10">
@@ -789,7 +792,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                       <td className="px-3 py-2.5">
                         <button
                           onClick={() => setDetailId(dl.id)}
-                          className="text-[var(--text-faint)] hover:text-[var(--accent)] transition opacity-0 group-hover:opacity-100"
+                          className="text-[var(--text-faint)] hover:text-[var(--accent)] transition opacity-100 md:opacity-0 md:group-hover:opacity-100"
                         >
                           <Pencil size={13} />
                         </button>
@@ -885,7 +888,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                       <td className="px-3 py-2.5">
                         <button
                           onClick={() => onDelete(dl.id)}
-                          className="text-[var(--text-faint)] hover:text-red-400 transition opacity-0 group-hover:opacity-100"
+                          className="text-[var(--text-faint)] hover:text-red-400 transition opacity-100 md:opacity-0 md:group-hover:opacity-100"
                         >
                           <Trash2 size={13} />
                         </button>

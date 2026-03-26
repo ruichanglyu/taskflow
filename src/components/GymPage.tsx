@@ -227,18 +227,20 @@ export function GymPage(props: GymPageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Gym</h1>
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(34,197,94,0.16),rgba(56,189,248,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Gym</h1>
+        </div>
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-1">
+      <div className="flex gap-1 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 shadow-sm">
         {tabs.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             className={cn(
-              'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all',
+              'flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all',
               tab === t.key
                 ? 'bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
@@ -362,7 +364,7 @@ function PlanTab(props: GymPageProps) {
     <div className="space-y-6">
       {/* Active plan or create */}
       {!activePlan ? (
-        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6">
+        <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-6 shadow-sm">
           {showNewPlan ? (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-[var(--text-primary)]">Create Workout Plan</h3>
@@ -399,9 +401,10 @@ function PlanTab(props: GymPageProps) {
               </div>
             </div>
           ) : (
-            <div className="text-center py-8">
-              <Dumbbell size={40} className="mx-auto mb-3 text-[var(--text-faint)]" />
-              <p className="text-sm text-[var(--text-muted)] mb-4">No workout plan yet. Create one to get started.</p>
+            <div className="py-8 text-center">
+              <Dumbbell size={44} className="mx-auto mb-4 text-[var(--accent)]" />
+              <p className="mb-2 text-lg font-semibold text-[var(--text-primary)]">No workout plan yet</p>
+              <p className="mb-4 text-sm text-[var(--text-muted)]">Create one from scratch or import a structured routine to get moving fast.</p>
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <button
                   onClick={() => setShowNewPlan(true)}
@@ -424,10 +427,11 @@ function PlanTab(props: GymPageProps) {
       ) : (
         <>
           {/* Plan header */}
-          <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-5">
+          <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-lg font-bold text-[var(--text-primary)]">{activePlan.name}</h2>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Active plan</div>
+                <h2 className="mt-1 text-xl font-bold text-[var(--text-primary)]">{activePlan.name}</h2>
                 <p className="text-sm text-[var(--text-muted)]">{activePlan.daysPerWeek} days/week · {planDays.length} workout days</p>
               </div>
               <button
@@ -437,10 +441,10 @@ function PlanTab(props: GymPageProps) {
                 <Trash2 size={16} />
               </button>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               <button
                 onClick={() => setShowImportPlan(true)}
-                className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
               >
                 Import plan
               </button>
@@ -911,7 +915,7 @@ function WorkoutTab(props: GymPageProps) {
 
   if (!activePlan) {
     return (
-      <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-8 text-center">
+      <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-8 text-center shadow-sm">
         <Dumbbell size={40} className="mx-auto mb-3 text-[var(--text-faint)]" />
         <p className="text-sm text-[var(--text-muted)]">Create a workout plan first to start a session.</p>
       </div>
@@ -956,7 +960,7 @@ function WorkoutTab(props: GymPageProps) {
   return (
     <div className="space-y-4">
       {/* Session header */}
-      <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-4">
+      <div className="rounded-[24px] border border-emerald-400/20 bg-[linear-gradient(135deg,rgba(16,185,129,0.16),rgba(14,165,233,0.08)_60%,rgba(15,23,42,0.02)_100%)] p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
@@ -1043,10 +1047,10 @@ function StartWorkoutPicker({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 text-center">
+      <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-6 text-center shadow-sm">
         <Play size={32} className="mx-auto mb-3 text-[var(--accent)]" />
         <h3 className="text-lg font-bold text-[var(--text-primary)]">Start a Workout</h3>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">Choose which day to train</p>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">Choose a day and the app will guide you through the whole session.</p>
       </div>
 
       <div className="space-y-2">
@@ -1060,8 +1064,8 @@ function StartWorkoutPicker({
               className={cn(
                 'flex w-full items-center gap-4 rounded-xl border p-4 text-left transition',
                 isSuggested
-                  ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                  : 'border-[var(--border-soft)] bg-[var(--surface-elevated)] hover:border-[var(--border-strong)]'
+                  ? 'border-[var(--accent)] bg-[var(--surface)] shadow-lg'
+                  : 'border-[var(--border-soft)] bg-[var(--surface)] hover:border-[var(--border-strong)] hover:shadow-md'
               )}
             >
               <div className={cn(
@@ -1228,13 +1232,13 @@ function ActiveExerciseCard({
     : null;
 
   return (
-    <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] overflow-hidden">
+    <div className="overflow-hidden rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm">
       {/* Exercise header */}
       <div className="flex items-start gap-3 border-b border-[var(--border-soft)] px-4 py-4 sm:items-center sm:gap-4 sm:px-5">
         {exercise.referenceImageUrl ? (
-          <img src={exercise.referenceImageUrl} alt="" className="h-14 w-14 rounded-lg object-cover" />
+          <img src={exercise.referenceImageUrl} alt="" className="h-14 w-14 rounded-2xl object-cover" />
         ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-[var(--surface-muted)]">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface-muted)]">
             <Dumbbell size={24} className="text-[var(--text-faint)]" />
           </div>
         )}
@@ -1267,7 +1271,7 @@ function ActiveExerciseCard({
       {/* Photo preview */}
       {photoPreview && (
         <div className="border-b border-[var(--border-soft)] px-4 py-3 sm:px-5">
-          <img src={photoPreview} alt="Workout photo" className="h-32 w-auto rounded-lg object-cover" />
+          <img src={photoPreview} alt="Workout photo" className="h-32 w-auto rounded-2xl object-cover" />
         </div>
       )}
 
@@ -1500,7 +1504,7 @@ function HistoryTab(props: GymPageProps) {
 
   if (completedSessions.length === 0) {
     return (
-      <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-8 text-center">
+      <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-8 text-center shadow-sm">
         <History size={40} className="mx-auto mb-3 text-[var(--text-faint)]" />
         <p className="text-sm text-[var(--text-muted)]">No workout history yet. Complete a session to see it here.</p>
       </div>
@@ -1526,17 +1530,17 @@ function HistoryTab(props: GymPageProps) {
     <div className="space-y-6">
       {/* Stats row */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-4 text-center">
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 text-center shadow-sm">
           <Trophy size={20} className="mx-auto mb-1 text-amber-400" />
           <p className="text-2xl font-bold text-[var(--text-primary)]">{completedSessions.length}</p>
           <p className="text-[10px] text-[var(--text-faint)]">Total sessions</p>
         </div>
-        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-4 text-center">
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 text-center shadow-sm">
           <TrendingUp size={20} className="mx-auto mb-1 text-emerald-400" />
           <p className="text-2xl font-bold text-[var(--text-primary)]">{thisWeek.length}</p>
           <p className="text-[10px] text-[var(--text-faint)]">This week</p>
         </div>
-        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-4 text-center">
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 text-center shadow-sm">
           <Dumbbell size={20} className="mx-auto mb-1 text-[var(--accent)]" />
           <p className="text-2xl font-bold text-[var(--text-primary)]">{totalSets}</p>
           <p className="text-[10px] text-[var(--text-faint)]">Total sets</p>
@@ -1554,7 +1558,7 @@ function HistoryTab(props: GymPageProps) {
             : null;
 
           return (
-            <div key={session.id} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] overflow-hidden">
+            <div key={session.id} className="overflow-hidden rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm">
               <div className="flex items-center">
                 <button onClick={() => setExpandedSession(isExpanded ? null : session.id)} className="flex flex-1 items-center gap-3 px-4 py-3 text-left">
                   <div className="flex-1">

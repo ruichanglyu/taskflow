@@ -238,11 +238,12 @@ export function AppShell({ user }: AppShellProps) {
         onCanvasClick={() => { setSidebarOpen(false); setCanvasOpen(true); }}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex items-center gap-4 border-b border-[var(--border-soft)] bg-[var(--bg-app-soft)] px-4 py-4 backdrop-blur-sm sm:px-6">
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-48 bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.14),transparent_60%)]" />
+        <header className="sticky top-0 z-10 flex items-center gap-4 border-b border-[var(--border-soft)] bg-[var(--bg-app-soft)] px-4 py-4 backdrop-blur-xl sm:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] lg:hidden"
+            className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] lg:hidden"
           >
             <Menu size={22} />
           </button>
@@ -250,15 +251,15 @@ export function AppShell({ user }: AppShellProps) {
           {/* Search trigger */}
           <button
             onClick={() => setSearchOpen(true)}
-            className="hidden sm:flex items-center gap-2 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-sm text-[var(--text-faint)] transition hover:border-[var(--border-strong)]"
+            className="hidden items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-faint)] shadow-sm transition hover:border-[var(--border-strong)] sm:flex"
           >
             <Search size={14} />
             <span>Search...</span>
-            <kbd className="ml-4 rounded border border-[var(--border-soft)] bg-[var(--surface)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-faint)]">⌘K</kbd>
+            <kbd className="ml-4 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-faint)]">⌘K</kbd>
           </button>
 
           <div className="flex-1" />
-          <div className="hidden items-center gap-2 rounded-full bg-[var(--surface-muted)] px-3 py-1.5 sm:flex">
+          <div className="hidden items-center gap-2 rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 shadow-sm sm:flex">
             <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
             <span className="text-xs text-[var(--text-muted)]">
               {store.tasks.filter(task => task.status !== 'done').length} active tasks
@@ -274,7 +275,7 @@ export function AppShell({ user }: AppShellProps) {
             </div>
             <button
               onClick={handleSignOut}
-              className="flex items-center gap-2 rounded-full border border-[var(--border-soft)] px-3 py-2 text-sm text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+              className="flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
             >
               <LogOut size={16} />
               <span className="hidden sm:inline">Log out</span>
@@ -282,7 +283,7 @@ export function AppShell({ user }: AppShellProps) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main className="relative z-[1] flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           {(store.error || deadlineStore.error || canvasStore.error) && (
             <div className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
               <p>{store.error || deadlineStore.error || canvasStore.error}</p>

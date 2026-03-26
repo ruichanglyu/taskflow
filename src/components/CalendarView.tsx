@@ -947,7 +947,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
       <div className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 shadow-sm sm:px-5">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight text-[var(--text-primary)]">Calendar</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Calendar</h1>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">

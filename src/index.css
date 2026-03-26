@@ -566,10 +566,6 @@ html, body, #root {
 body {
   background: var(--bg-app);
   color: var(--text-primary);
-  background-image:
-    radial-gradient(circle at 0% 0%, var(--glow-accent), transparent 28%),
-    radial-gradient(circle at 100% 0%, var(--glow-warm), transparent 24%);
-  background-attachment: fixed;
 }
 
 * {

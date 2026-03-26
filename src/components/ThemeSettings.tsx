@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { X, Check, Sun, Moon } from 'lucide-react';
 import { useTheme, PALETTE_OPTIONS, FONT_OPTIONS, type PaletteId, type FontId } from '../hooks/useTheme';
 import { cn } from '../utils/cn';
@@ -20,7 +21,7 @@ export function ThemeSettings({ open, onClose }: ThemeSettingsProps) {
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <>
       <div className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-y-0 right-0 z-[91] flex w-full max-w-md flex-col border-l border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl">
@@ -173,6 +174,7 @@ export function ThemeSettings({ open, onClose }: ThemeSettingsProps) {
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }

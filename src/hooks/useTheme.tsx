@@ -1,11 +1,11 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 
-export type PaletteId = 'neutral' | 'matcha' | 'sakura' | 'cloud' | 'lavender' | 'ocean' | 'ember' | 'sage' | 'plum' | 'graphite';
+export type PaletteId = 'neutral' | 'matcha' | 'sakura' | 'lavender' | 'ember' | 'honey' | 'mocha';
 export type ModeId = 'light' | 'dark';
 export type FontId = 'inter' | 'dm-sans' | 'lora' | 'playfair';
 
 // Keep old ThemeId as union for backward compat
-export type ThemeId = 'dark' | 'light' | 'matcha' | 'sakura' | 'cloud' | 'lavender' | 'ocean' | 'ember' | 'sage' | 'plum' | 'graphite';
+export type ThemeId = 'dark' | 'light' | 'matcha' | 'sakura' | 'lavender' | 'ember' | 'honey' | 'mocha';
 
 export interface PaletteOption {
   id: PaletteId;
@@ -17,13 +17,10 @@ export const PALETTE_OPTIONS: PaletteOption[] = [
   { id: 'neutral', label: 'Default', colors: ['#94a3b8', '#38bdf8'] },
   { id: 'matcha', label: 'Matcha', colors: ['#d4e4c8', '#7a9e65'] },
   { id: 'sakura', label: 'Sakura', colors: ['#f8d7e8', '#d4829e'] },
-  { id: 'cloud', label: 'Cloud', colors: ['#d0e2ff', '#6a9fd8'] },
   { id: 'lavender', label: 'Lavender', colors: ['#e0d4f0', '#9b7ec8'] },
-  { id: 'ocean', label: 'Ocean', colors: ['#cbeafe', '#0ea5e9'] },
   { id: 'ember', label: 'Ember', colors: ['#ffd8bf', '#f97316'] },
-  { id: 'sage', label: 'Sage', colors: ['#dbe7cb', '#4f7a4a'] },
-  { id: 'plum', label: 'Plum', colors: ['#eadcf7', '#a855f7'] },
-  { id: 'graphite', label: 'Graphite', colors: ['#cbd5e1', '#64748b'] },
+  { id: 'honey', label: 'Honey', colors: ['#fdf0d5', '#eab308'] },
+  { id: 'mocha', label: 'Mocha', colors: ['#e8d8c8', '#8d6444'] },
 ];
 
 export const FONT_OPTIONS: { id: FontId; label: string; family: string }[] = [
@@ -79,7 +76,7 @@ function loadSettings(): ThemeSettings {
         const oldTheme = parsed.theme as string;
         if (oldTheme === 'dark') return { ...DEFAULTS, palette: 'neutral', mode: 'dark', font: parsed.font ?? DEFAULTS.font, fontSize: parsed.fontSize ?? DEFAULTS.fontSize };
         if (oldTheme === 'light') return { ...DEFAULTS, palette: 'neutral', mode: 'light', font: parsed.font ?? DEFAULTS.font, fontSize: parsed.fontSize ?? DEFAULTS.fontSize };
-        if (['matcha', 'sakura', 'cloud', 'lavender', 'ocean', 'ember', 'sage', 'plum', 'graphite'].includes(oldTheme)) {
+        if (['matcha', 'sakura', 'lavender', 'ember', 'honey', 'mocha'].includes(oldTheme)) {
           return { ...DEFAULTS, palette: oldTheme as PaletteId, mode: 'light', font: parsed.font ?? DEFAULTS.font, fontSize: parsed.fontSize ?? DEFAULTS.fontSize };
         }
       }

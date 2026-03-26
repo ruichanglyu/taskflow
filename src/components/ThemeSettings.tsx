@@ -7,8 +7,10 @@ const SWATCH_COLORS: Record<string, [string, string]> = {
   neutral: ['#94a3b8', '#38bdf8'],
   matcha: ['#d4e4c8', '#7a9e65'],
   sakura: ['#f8d7e8', '#d4829e'],
-  cloud: ['#d0e2ff', '#6a9fd8'],
   lavender: ['#e0d4f0', '#9b7ec8'],
+  ember: ['#ffd8bf', '#f97316'],
+  honey: ['#fdf0d5', '#eab308'],
+  mocha: ['#e8d8c8', '#8d6444'],
 };
 
 interface ThemeSettingsProps {
@@ -68,7 +70,7 @@ export function ThemeSettings({ open, onClose }: ThemeSettingsProps) {
           {/* Palette */}
           <div>
             <label className="mb-3 block text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--text-faint)]">Color Palette</label>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {PALETTE_OPTIONS.map(opt => {
                 const colors = SWATCH_COLORS[opt.id] ?? opt.colors;
                 const isActive = palette === opt.id;

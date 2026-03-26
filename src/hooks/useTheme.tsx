@@ -1,11 +1,11 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 
-export type PaletteId = 'neutral' | 'matcha' | 'sakura' | 'cloud' | 'lavender';
+export type PaletteId = 'neutral' | 'matcha' | 'sakura' | 'cloud' | 'lavender' | 'ocean' | 'ember' | 'sage' | 'plum' | 'graphite';
 export type ModeId = 'light' | 'dark';
 export type FontId = 'inter' | 'dm-sans' | 'lora' | 'playfair';
 
 // Keep old ThemeId as union for backward compat
-export type ThemeId = 'dark' | 'light' | 'matcha' | 'sakura' | 'cloud' | 'lavender';
+export type ThemeId = 'dark' | 'light' | 'matcha' | 'sakura' | 'cloud' | 'lavender' | 'ocean' | 'ember' | 'sage' | 'plum' | 'graphite';
 
 export interface PaletteOption {
   id: PaletteId;
@@ -19,6 +19,11 @@ export const PALETTE_OPTIONS: PaletteOption[] = [
   { id: 'sakura', label: 'Sakura', colors: ['#f8d7e8', '#d4829e'] },
   { id: 'cloud', label: 'Cloud', colors: ['#d0e2ff', '#6a9fd8'] },
   { id: 'lavender', label: 'Lavender', colors: ['#e0d4f0', '#9b7ec8'] },
+  { id: 'ocean', label: 'Ocean', colors: ['#cbeafe', '#0ea5e9'] },
+  { id: 'ember', label: 'Ember', colors: ['#ffd8bf', '#f97316'] },
+  { id: 'sage', label: 'Sage', colors: ['#dbe7cb', '#4f7a4a'] },
+  { id: 'plum', label: 'Plum', colors: ['#eadcf7', '#a855f7'] },
+  { id: 'graphite', label: 'Graphite', colors: ['#cbd5e1', '#64748b'] },
 ];
 
 export const FONT_OPTIONS: { id: FontId; label: string; family: string }[] = [
@@ -74,7 +79,7 @@ function loadSettings(): ThemeSettings {
         const oldTheme = parsed.theme as string;
         if (oldTheme === 'dark') return { ...DEFAULTS, palette: 'neutral', mode: 'dark', font: parsed.font ?? DEFAULTS.font, fontSize: parsed.fontSize ?? DEFAULTS.fontSize };
         if (oldTheme === 'light') return { ...DEFAULTS, palette: 'neutral', mode: 'light', font: parsed.font ?? DEFAULTS.font, fontSize: parsed.fontSize ?? DEFAULTS.fontSize };
-        if (['matcha', 'sakura', 'cloud', 'lavender'].includes(oldTheme)) {
+        if (['matcha', 'sakura', 'cloud', 'lavender', 'ocean', 'ember', 'sage', 'plum', 'graphite'].includes(oldTheme)) {
           return { ...DEFAULTS, palette: oldTheme as PaletteId, mode: 'light', font: parsed.font ?? DEFAULTS.font, fontSize: parsed.fontSize ?? DEFAULTS.fontSize };
         }
       }
@@ -105,6 +110,7 @@ function applySettings(settings: ThemeSettings) {
   const fontOption = FONT_OPTIONS.find(f => f.id === settings.font);
   document.documentElement.style.setProperty('--font-family', fontOption?.family ?? FONT_OPTIONS[0].family);
   document.documentElement.style.setProperty('--font-size-base', `${settings.fontSize}px`);
+  document.documentElement.style.fontSize = `${settings.fontSize}px`;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
 }
 

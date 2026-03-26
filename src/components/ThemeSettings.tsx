@@ -68,7 +68,7 @@ export function ThemeSettings({ open, onClose }: ThemeSettingsProps) {
           {/* Palette */}
           <div>
             <label className="mb-3 block text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--text-faint)]">Color Palette</label>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               {PALETTE_OPTIONS.map(opt => {
                 const colors = SWATCH_COLORS[opt.id] ?? opt.colors;
                 const isActive = palette === opt.id;

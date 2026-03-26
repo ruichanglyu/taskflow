@@ -417,13 +417,6 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
 
   const activeFilters = [search, filterCourse, filterType, filterStatus, quickFilter !== 'all' ? quickFilter : ''].filter(Boolean).length;
   const detailDeadline = detailId ? deadlines.find(d => d.id === detailId) : null;
-  const upcomingCount = deadlines.filter(d => {
-    const days = daysUntil(d.dueDate);
-    return d.status !== 'done' && d.status !== 'missed' && days >= 0;
-  }).length;
-  const overdueCount = deadlines.filter(d => daysUntil(d.dueDate) < 0 && d.status !== 'done' && d.status !== 'missed').length;
-  const inProgressCount = deadlines.filter(d => d.status === 'in-progress').length;
-
   const handleImport = async (preview: ImportPreview) => {
     const projectIdsByCourse = new Map<string, string | null>();
     const existingProjectsByName = new Map(
@@ -523,7 +516,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
             <button
               onClick={() => setShowDeleteAllModal(true)}
               disabled={deadlines.length === 0}
-              className="flex items-center gap-1.5 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-xs font-medium text-rose-200 shadow-sm transition hover:border-rose-400/30 hover:bg-rose-400/15 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex items-center gap-1.5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Trash2 size={14} />
               Delete All
@@ -559,21 +552,6 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
           </button>
         </div>
       )}
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4 shadow-sm">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Upcoming</div>
-          <div className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">{upcomingCount}</div>
-        </div>
-        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4 shadow-sm">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">In progress</div>
-          <div className="mt-2 text-2xl font-semibold text-blue-400">{inProgressCount}</div>
-        </div>
-        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4 shadow-sm">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Overdue</div>
-          <div className="mt-2 text-2xl font-semibold text-red-400">{overdueCount}</div>
-        </div>
-      </div>
 
       <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row">

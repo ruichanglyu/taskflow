@@ -51,7 +51,7 @@ function minutesToTime(totalMinutes: number) {
 }
 
 function snapMinutesToQuarter(minutes: number) {
-  return Math.max(300, Math.min(1425, Math.floor(minutes / 15) * 15));
+  return Math.max(0, Math.min(1425, Math.floor(minutes / 15) * 15));
 }
 
 function getEventStartLabel(date?: { date?: string; dateTime?: string }) {
@@ -348,7 +348,8 @@ function WeekCalendarGrid({
   ) => void;
 }) {
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
-  const hourRows = Array.from({ length: 19 }, (_, index) => 5 + index);
+  const weekStartHour = 0;
+  const hourRows = Array.from({ length: 24 }, (_, index) => weekStartHour + index);
   const rowHeight = 44;
   const todayKey = formatDateKey(new Date());
   const [hoverSlot, setHoverSlot] = useState<{ dateKey: string; startMinutes: number } | null>(null);
@@ -369,7 +370,7 @@ function WeekCalendarGrid({
 
     const columnRect = dayColumnRefs.current[selection.dateKey]?.getBoundingClientRect();
     const anchorTop = columnRect
-      ? columnRect.top + window.scrollY + ((startMinutes - 300) / 60) * rowHeight
+      ? columnRect.top + window.scrollY + ((startMinutes - weekStartHour * 60) / 60) * rowHeight
       : selection.anchorRect.top;
 
     onCreateEventAt(
@@ -590,6 +591,7 @@ function WeekCalendarGrid({
                         currentMinutes: startMinutes,
                         anchorRect: {
                           top: columnRect.top + window.scrollY + ((startMinutes - 300) / 60) * rowHeight,
+                          
                           left: columnRect.left + window.scrollX,
                           width: columnRect.width,
                           height: rowHeight,
@@ -610,6 +612,7 @@ function WeekCalendarGrid({
                     className="pointer-events-none absolute left-1.5 right-1.5 z-10 overflow-hidden rounded-lg"
                     style={{
                       top: `${((draftPreview.startMinutes - 300) / 60) * rowHeight}px`,
+                      
                       height: `${Math.max(((draftPreview.endMinutes - draftPreview.startMinutes) / 60) * rowHeight, rowHeight / 4)}px`,
                       backgroundColor: 'var(--accent-soft)',
                       borderLeft: '3px solid var(--accent)',
@@ -626,6 +629,7 @@ function WeekCalendarGrid({
                     className="pointer-events-none absolute left-1.5 right-1.5 z-20 overflow-hidden rounded-md bg-[var(--surface-muted)]/95"
                     style={{
                       top: `${((previewStartMinutes - 300) / 60) * rowHeight}px`,
+                      
                       height: `${Math.max(((previewEndMinutes - previewStartMinutes) / 60) * rowHeight, rowHeight / 4)}px`,
                     }}
                   />
@@ -636,7 +640,7 @@ function WeekCalendarGrid({
                   const endMinutes = getMinutesFromStart(event.end?.dateTime);
                   if (startMinutes === null || endMinutes === null) return null;
 
-                  const top = ((startMinutes - 300) / 60) * rowHeight;
+                  const top = ((startMinutes - weekStartHour * 60) / 60) * rowHeight;
                   const height = Math.max(((endMinutes - startMinutes) / 60) * rowHeight, 24);
 
                   if (top < 0 || top > hourRows.length * rowHeight) return null;

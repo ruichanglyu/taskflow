@@ -1,75 +1,103 @@
-import { X, Check } from 'lucide-react';
-import { useTheme, THEME_PRESETS, FONT_OPTIONS, type ThemeId, type FontId } from '../hooks/useTheme';
+import { createPortal } from 'react-dom';
+import { X, Check, Sun, Moon } from 'lucide-react';
+import { useTheme, PALETTE_OPTIONS, FONT_OPTIONS, type PaletteId, type FontId } from '../hooks/useTheme';
 import { cn } from '../utils/cn';
 
-interface ThemeSettingsProps {
-  open: boolean;
-  onClose: () => void;
-}
-
-// Each preset gets a pair of colors for the swatch (gradient pill)
 const SWATCH_COLORS: Record<string, [string, string]> = {
-  dark: ['#1e293b', '#38bdf8'],
-  light: ['#e2e8f0', '#0284c7'],
+  neutral: ['#94a3b8', '#38bdf8'],
   matcha: ['#d4e4c8', '#7a9e65'],
   sakura: ['#f8d7e8', '#d4829e'],
   cloud: ['#d0e2ff', '#6a9fd8'],
   lavender: ['#e0d4f0', '#9b7ec8'],
 };
 
+interface ThemeSettingsProps {
+  open: boolean;
+  onClose: () => void;
+}
+
 export function ThemeSettings({ open, onClose }: ThemeSettingsProps) {
-  const { theme, font, fontSize, setTheme, setFont, setFontSize } = useTheme();
+  const { palette, mode, font, fontSize, setPalette, setMode, setFont, setFontSize } = useTheme();
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <>
-      <div className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed right-0 top-0 z-[91] flex h-full w-80 flex-col border-l border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl sm:w-96">
+      <div className="fixed inset-0 z-[9998] bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-y-0 right-0 z-[9999] flex w-full max-w-md flex-col border-l border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
+        <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-6 py-5">
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">Appearance</h2>
           <button onClick={onClose} className="rounded-xl p-1.5 text-[var(--text-muted)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]">
             <X size={18} />
           </button>
         </div>
 
-        <div className="flex-1 space-y-8 overflow-y-auto px-5 py-6">
-          {/* Theme Presets */}
+        <div className="flex-1 space-y-8 overflow-y-auto px-6 py-6">
+          {/* Dark / Light toggle */}
           <div>
-            <label className="mb-3 block text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--text-faint)]">Theme</label>
-            <div className="grid grid-cols-3 gap-3">
-              {THEME_PRESETS.map(preset => {
-                const colors = SWATCH_COLORS[preset.id] ?? [preset.swatch, preset.swatch];
-                const isActive = theme === preset.id;
+            <label className="mb-3 block text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--text-faint)]">Mode</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setMode('light')}
+                className={cn(
+                  'flex items-center justify-center gap-2 rounded-2xl border-2 px-4 py-3 text-sm font-medium transition-all',
+                  mode === 'light'
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                    : 'border-[var(--border-soft)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'
+                )}
+              >
+                <Sun size={16} />
+                Light
+              </button>
+              <button
+                onClick={() => setMode('dark')}
+                className={cn(
+                  'flex items-center justify-center gap-2 rounded-2xl border-2 px-4 py-3 text-sm font-medium transition-all',
+                  mode === 'dark'
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                    : 'border-[var(--border-soft)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'
+                )}
+              >
+                <Moon size={16} />
+                Dark
+              </button>
+            </div>
+          </div>
+
+          {/* Palette */}
+          <div>
+            <label className="mb-3 block text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--text-faint)]">Color Palette</label>
+            <div className="grid grid-cols-5 gap-2">
+              {PALETTE_OPTIONS.map(opt => {
+                const colors = SWATCH_COLORS[opt.id] ?? opt.colors;
+                const isActive = palette === opt.id;
                 return (
                   <button
-                    key={preset.id}
-                    onClick={() => setTheme(preset.id as ThemeId)}
+                    key={opt.id}
+                    onClick={() => setPalette(opt.id as PaletteId)}
                     className={cn(
-                      'group flex flex-col items-center gap-2.5 rounded-2xl border-2 px-2 py-3.5 transition-all',
+                      'flex flex-col items-center gap-2 rounded-2xl border-2 px-1 py-3 transition-all',
                       isActive
-                        ? 'border-[var(--accent)] shadow-lg'
+                        ? 'border-[var(--accent)]'
                         : 'border-transparent hover:border-[var(--border-strong)]'
                     )}
-                    style={isActive ? { boxShadow: `0 0 20px ${colors[1]}33` } : undefined}
                   >
-                    {/* Color pill */}
                     <div
-                      className="relative h-12 w-12 overflow-hidden rounded-2xl ring-2 ring-white/20"
+                      className="relative h-10 w-10 overflow-hidden rounded-xl ring-1 ring-black/10"
                       style={{ background: `linear-gradient(135deg, ${colors[0]} 0%, ${colors[1]} 100%)` }}
                     >
                       {isActive && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                          <Check size={16} className="text-white drop-shadow" />
+                          <Check size={14} className="text-white drop-shadow" />
                         </div>
                       )}
                     </div>
                     <span className={cn(
-                      'text-xs font-medium',
-                      isActive ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'
+                      'text-[10px] font-medium',
+                      isActive ? 'text-[var(--text-primary)]' : 'text-[var(--text-faint)]'
                     )}>
-                      {preset.label}
+                      {opt.label}
                     </span>
                   </button>
                 );
@@ -101,10 +129,7 @@ export function ThemeSettings({ open, onClose }: ThemeSettingsProps) {
                   >
                     {opt.label}
                   </span>
-                  <span
-                    className="text-xs text-[var(--text-faint)]"
-                    style={{ fontFamily: opt.family }}
-                  >
+                  <span className="text-xs text-[var(--text-faint)]" style={{ fontFamily: opt.family }}>
                     Aa Bb 123
                   </span>
                 </button>
@@ -149,6 +174,7 @@ export function ThemeSettings({ open, onClose }: ThemeSettingsProps) {
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }

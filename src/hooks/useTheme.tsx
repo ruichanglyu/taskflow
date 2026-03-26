@@ -1,22 +1,24 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 
-export type ThemeId = 'dark' | 'light' | 'matcha' | 'sakura' | 'cloud' | 'lavender';
+export type PaletteId = 'neutral' | 'matcha' | 'sakura' | 'cloud' | 'lavender';
+export type ModeId = 'light' | 'dark';
 export type FontId = 'inter' | 'dm-sans' | 'lora' | 'playfair';
 
-export interface ThemePreset {
-  id: ThemeId;
+// Keep old ThemeId as union for backward compat
+export type ThemeId = 'dark' | 'light' | 'matcha' | 'sakura' | 'cloud' | 'lavender';
+
+export interface PaletteOption {
+  id: PaletteId;
   label: string;
-  swatch: string; // preview color
-  isDark: boolean;
+  colors: [string, string]; // gradient swatch colors
 }
 
-export const THEME_PRESETS: ThemePreset[] = [
-  { id: 'dark', label: 'Midnight', swatch: '#0f1623', isDark: true },
-  { id: 'light', label: 'Light', swatch: '#eef4fb', isDark: false },
-  { id: 'matcha', label: 'Matcha', swatch: '#8fae7e', isDark: false },
-  { id: 'sakura', label: 'Sakura', swatch: '#e8a0bf', isDark: false },
-  { id: 'cloud', label: 'Cloud', swatch: '#89b4e8', isDark: false },
-  { id: 'lavender', label: 'Lavender', swatch: '#b4a0d4', isDark: false },
+export const PALETTE_OPTIONS: PaletteOption[] = [
+  { id: 'neutral', label: 'Default', colors: ['#94a3b8', '#38bdf8'] },
+  { id: 'matcha', label: 'Matcha', colors: ['#d4e4c8', '#7a9e65'] },
+  { id: 'sakura', label: 'Sakura', colors: ['#f8d7e8', '#d4829e'] },
+  { id: 'cloud', label: 'Cloud', colors: ['#d0e2ff', '#6a9fd8'] },
+  { id: 'lavender', label: 'Lavender', colors: ['#e0d4f0', '#9b7ec8'] },
 ];
 
 export const FONT_OPTIONS: { id: FontId; label: string; family: string }[] = [
@@ -27,22 +29,28 @@ export const FONT_OPTIONS: { id: FontId; label: string; family: string }[] = [
 ];
 
 interface ThemeSettings {
-  theme: ThemeId;
+  palette: PaletteId;
+  mode: ModeId;
   font: FontId;
-  fontSize: number; // 13-18
+  fontSize: number;
 }
 
 interface ThemeContextValue extends ThemeSettings {
-  setTheme: (theme: ThemeId) => void;
-  setFont: (font: FontId) => void;
-  setFontSize: (size: number) => void;
+  setPalette: (p: PaletteId) => void;
+  setMode: (m: ModeId) => void;
+  setFont: (f: FontId) => void;
+  setFontSize: (s: number) => void;
+  // compat
+  theme: ThemeId;
+  setTheme: (t: ThemeId) => void;
   isDark: boolean;
 }
 
 const STORAGE_KEY = 'taskflow_theme_settings';
 
 const DEFAULTS: ThemeSettings = {
-  theme: 'dark',
+  palette: 'neutral',
+  mode: 'dark',
   font: 'inter',
   fontSize: 14,
 };
@@ -52,22 +60,32 @@ function loadSettings(): ThemeSettings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return {
-        theme: THEME_PRESETS.some(p => p.id === parsed.theme) ? parsed.theme : DEFAULTS.theme,
-        font: FONT_OPTIONS.some(f => f.id === parsed.font) ? parsed.font : DEFAULTS.font,
-        fontSize: typeof parsed.fontSize === 'number' && parsed.fontSize >= 13 && parsed.fontSize <= 18 ? parsed.fontSize : DEFAULTS.fontSize,
-      };
+      // New format
+      if (parsed.palette && parsed.mode) {
+        return {
+          palette: PALETTE_OPTIONS.some(p => p.id === parsed.palette) ? parsed.palette : DEFAULTS.palette,
+          mode: parsed.mode === 'light' || parsed.mode === 'dark' ? parsed.mode : DEFAULTS.mode,
+          font: FONT_OPTIONS.some(f => f.id === parsed.font) ? parsed.font : DEFAULTS.font,
+          fontSize: typeof parsed.fontSize === 'number' && parsed.fontSize >= 13 && parsed.fontSize <= 18 ? parsed.fontSize : DEFAULTS.fontSize,
+        };
+      }
+      // Old format migration
+      if (parsed.theme) {
+        const oldTheme = parsed.theme as string;
+        if (oldTheme === 'dark') return { ...DEFAULTS, palette: 'neutral', mode: 'dark', font: parsed.font ?? DEFAULTS.font, fontSize: parsed.fontSize ?? DEFAULTS.fontSize };
+        if (oldTheme === 'light') return { ...DEFAULTS, palette: 'neutral', mode: 'light', font: parsed.font ?? DEFAULTS.font, fontSize: parsed.fontSize ?? DEFAULTS.fontSize };
+        if (['matcha', 'sakura', 'cloud', 'lavender'].includes(oldTheme)) {
+          return { ...DEFAULTS, palette: oldTheme as PaletteId, mode: 'light', font: parsed.font ?? DEFAULTS.font, fontSize: parsed.fontSize ?? DEFAULTS.fontSize };
+        }
+      }
     }
   } catch { /* ignore */ }
 
-  // Migrate from old key
   const oldTheme = localStorage.getItem('taskflow_theme');
-  if (oldTheme === 'dark' || oldTheme === 'light') {
-    return { ...DEFAULTS, theme: oldTheme };
-  }
+  if (oldTheme === 'light') return { ...DEFAULTS, mode: 'light' };
 
   if (window.matchMedia('(prefers-color-scheme: light)').matches) {
-    return { ...DEFAULTS, theme: 'light' };
+    return { ...DEFAULTS, mode: 'light' };
   }
   return DEFAULTS;
 }
@@ -75,7 +93,15 @@ function loadSettings(): ThemeSettings {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function applySettings(settings: ThemeSettings) {
-  document.documentElement.dataset.theme = settings.theme;
+  // Set data attributes for CSS
+  document.documentElement.dataset.palette = settings.palette;
+  document.documentElement.dataset.mode = settings.mode;
+  // Legacy compat: also set data-theme for any old selectors
+  if (settings.palette === 'neutral') {
+    document.documentElement.dataset.theme = settings.mode;
+  } else {
+    document.documentElement.dataset.theme = settings.palette + '-' + settings.mode;
+  }
   const fontOption = FONT_OPTIONS.find(f => f.id === settings.font);
   document.documentElement.style.setProperty('--font-family', fontOption?.family ?? FONT_OPTIONS[0].family);
   document.documentElement.style.setProperty('--font-size-base', `${settings.fontSize}px`);
@@ -93,8 +119,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applySettings(settings);
   }, [settings]);
 
-  const setTheme = useCallback((theme: ThemeId) => {
-    setSettings(prev => ({ ...prev, theme }));
+  const setPalette = useCallback((palette: PaletteId) => {
+    setSettings(prev => ({ ...prev, palette }));
+  }, []);
+
+  const setMode = useCallback((mode: ModeId) => {
+    setSettings(prev => ({ ...prev, mode }));
   }, []);
 
   const setFont = useCallback((font: FontId) => {
@@ -105,10 +135,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setSettings(prev => ({ ...prev, fontSize }));
   }, []);
 
-  const isDark = THEME_PRESETS.find(p => p.id === settings.theme)?.isDark ?? false;
+  // Compat
+  const theme: ThemeId = settings.palette === 'neutral' ? settings.mode : settings.palette;
+  const setTheme = useCallback((t: ThemeId) => {
+    if (t === 'dark') setSettings(prev => ({ ...prev, palette: 'neutral', mode: 'dark' }));
+    else if (t === 'light') setSettings(prev => ({ ...prev, palette: 'neutral', mode: 'light' }));
+    else setSettings(prev => ({ ...prev, palette: t as PaletteId, mode: 'light' }));
+  }, []);
 
   return (
-    <ThemeContext.Provider value={{ ...settings, setTheme, setFont, setFontSize, isDark }}>
+    <ThemeContext.Provider value={{
+      ...settings, setPalette, setMode, setFont, setFontSize,
+      theme, setTheme, isDark: settings.mode === 'dark',
+    }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -116,8 +155,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
 export function useTheme() {
   const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error('useTheme must be used within a ThemeProvider.');
-  }
+  if (!context) throw new Error('useTheme must be used within a ThemeProvider.');
   return context;
 }

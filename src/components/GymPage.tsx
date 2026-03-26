@@ -867,7 +867,7 @@ function WorkoutDayCard({
   const [addSets, setAddSets] = useState(3);
   const [addReps, setAddReps] = useState('10');
   const [addRest, setAddRest] = useState(45);
-  const [showNewExercise, setShowNewExercise] = useState(exercises.length === 0);
+  const [showNewExercise, setShowNewExercise] = useState(true);
   const [newExName, setNewExName] = useState('');
   const [newExMuscle, setNewExMuscle] = useState('');
   const [newExImage, setNewExImage] = useState('');
@@ -970,8 +970,16 @@ function WorkoutDayCard({
           {/* Add exercise */}
           {showAddExercise ? (
             <div className="space-y-3 rounded-xl border border-[var(--accent)]/20 bg-[var(--accent-soft)]/40 p-3">
-              {/* If exercises exist, show select + New toggle. If none, show create inline by default */}
-              {!showNewExercise && exercises.length > 0 ? (
+              {/* New exercise form is always primary; pick from library is secondary */}
+              {showNewExercise ? (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input value={newExName} onChange={e => setNewExName(e.target.value)} placeholder="Exercise name (e.g. Bench Press)" className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none" autoFocus />
+                  <input value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} placeholder="Muscle (optional)" className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none sm:w-32" />
+                  {exercises.length > 0 && (
+                    <button onClick={() => setShowNewExercise(false)} className="shrink-0 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]">Library</button>
+                  )}
+                </div>
+              ) : (
                 <div className="flex gap-2">
                   <select
                     value={addExerciseId}
@@ -985,17 +993,6 @@ function WorkoutDayCard({
                   </select>
                   <button onClick={() => setShowNewExercise(true)} className="shrink-0 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]">+ New</button>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {exercises.length > 0 && (
-                    <button onClick={() => setShowNewExercise(false)} className="text-xs text-[var(--accent)] hover:underline">← Pick from existing exercises</button>
-                  )}
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <input value={newExName} onChange={e => setNewExName(e.target.value)} placeholder="Exercise name (e.g. Bench Press)" className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none" autoFocus />
-                    <input value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} placeholder="Muscle (optional)" className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none sm:w-32" />
-                    <button onClick={handleCreateAndAdd} disabled={!newExName.trim()} className="shrink-0 rounded-lg px-3 py-2 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create & Add</button>
-                  </div>
-                </div>
               )}
 
               <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
@@ -1005,8 +1002,11 @@ function WorkoutDayCard({
               </div>
 
               <div className="flex gap-2">
-                {!showNewExercise && <button onClick={handleAddExerciseToPlan} disabled={!addExerciseId} className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add to Day</button>}
-                <button onClick={() => { setShowAddExercise(false); setShowNewExercise(exercises.length === 0); }} className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-[var(--text-muted)]">Cancel</button>
+                {showNewExercise
+                  ? <button onClick={handleCreateAndAdd} disabled={!newExName.trim()} className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create & Add</button>
+                  : <button onClick={handleAddExerciseToPlan} disabled={!addExerciseId} className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add to Day</button>
+                }
+                <button onClick={() => { setShowAddExercise(false); setShowNewExercise(true); }} className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-[var(--text-muted)]">Cancel</button>
               </div>
             </div>
           ) : (

@@ -9,8 +9,10 @@ interface SidebarProps {
   onClose: () => void;
   userEmail?: string;
   userName?: string;
+  avatarUrl?: string;
   canvasConnected?: boolean;
   onCanvasClick?: () => void;
+  onProfileClick?: () => void;
 }
 
 const navItems: { view: View; label: string; icon: React.ReactNode }[] = [
@@ -23,7 +25,7 @@ const navItems: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: 'gym', label: 'Gym', icon: <Dumbbell size={20} /> },
 ];
 
-export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail, userName, canvasConnected, onCanvasClick }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail, userName, avatarUrl, canvasConnected, onCanvasClick, onProfileClick }: SidebarProps) {
   const displayName = userName || (userEmail ? userEmail.split('@')[0] : 'User');
   const avatarInitial = displayName.charAt(0).toUpperCase();
   return (
@@ -131,15 +133,22 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail,
 
         {/* Footer */}
         <div className="border-t border-[var(--border-soft)] px-4 py-4">
-          <div className="flex items-center gap-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl text-xs font-bold text-white" style={{ backgroundImage: 'var(--avatar-gradient)' }}>
-              {avatarInitial}
-            </div>
-            <div className="min-w-0">
+          <button
+            onClick={onProfileClick}
+            className="flex w-full items-center gap-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-3 text-left transition-all hover:border-[var(--border-strong)] hover:shadow-md"
+          >
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="h-10 w-10 rounded-2xl object-cover" />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl text-xs font-bold text-white" style={{ backgroundImage: 'var(--avatar-gradient)' }}>
+                {avatarInitial}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-[var(--text-primary)] truncate">{displayName}</p>
               {userEmail && <p className="text-xs text-[var(--text-faint)] truncate">{userEmail}</p>}
             </div>
-          </div>
+          </button>
         </div>
       </aside>
     </>

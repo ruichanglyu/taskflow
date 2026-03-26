@@ -20,6 +20,7 @@ import { GymPage } from './GymPage';
 import { useGym } from '../hooks/useGym';
 import { supabase } from '../lib/supabase';
 import { ThemeSwitcher } from './ThemeSwitcher';
+import { ProfileModal } from './ProfileModal';
 
 interface AppShellProps {
   user: User;
@@ -61,6 +62,7 @@ export function AppShell({ user }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [canvasOpen, setCanvasOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const store = useStore(user.id);
   const deadlineStore = useDeadlines(user.id);
@@ -117,6 +119,12 @@ export function AppShell({ user }: AppShellProps) {
     if (!supabase) return;
     await supabase.auth.signOut();
   };
+
+  // Force refresh user session after profile updates
+  const handleUserUpdated = useCallback(async () => {
+    if (!supabase) return;
+    await supabase.auth.refreshSession();
+  }, []);
 
   const handleViewChange = useCallback((view: View) => {
     navigate(VIEW_PATHS[view]);
@@ -268,8 +276,10 @@ export function AppShell({ user }: AppShellProps) {
         onClose={() => setSidebarOpen(false)}
         userEmail={user.email}
         userName={user.user_metadata.full_name}
+        avatarUrl={user.user_metadata.avatar_url}
         canvasConnected={!!canvasStore.connection}
         onCanvasClick={() => { setSidebarOpen(false); setCanvasOpen(true); }}
+        onProfileClick={() => { setSidebarOpen(false); setProfileOpen(true); }}
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col">
@@ -456,6 +466,16 @@ export function AppShell({ user }: AppShellProps) {
           onClearError={canvasStore.clearError}
         />
       )}
+
+      <ProfileModal
+        user={user}
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        tasks={store.tasks}
+        deadlines={deadlineStore.deadlines}
+        projects={store.projects}
+        onUserUpdated={handleUserUpdated}
+      />
 
       <div className="pointer-events-none fixed right-4 top-20 z-[80] flex w-full max-w-sm flex-col gap-2 sm:right-6">
         {toasts.map(toast => (

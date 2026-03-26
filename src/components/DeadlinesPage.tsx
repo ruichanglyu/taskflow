@@ -63,6 +63,23 @@ function statusMeta(status: DeadlineStatus) {
   return STATUS_OPTIONS.find(s => s.value === status) ?? STATUS_OPTIONS[0];
 }
 
+function groupDeadlinesByCourse(deadlines: Deadline[], projects: Project[]) {
+  const groups = deadlines.reduce<Record<string, Deadline[]>>((acc, deadline) => {
+    const key = projects.find(project => project.id === deadline.projectId)?.name ?? 'No Course';
+    acc[key] = acc[key] ?? [];
+    acc[key].push(deadline);
+    return acc;
+  }, {});
+
+  return Object.entries(groups)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([courseName, courseDeadlines]) => ({
+      courseName,
+      projectId: courseDeadlines[0]?.projectId ?? null,
+      deadlines: courseDeadlines,
+    }));
+}
+
 function formatDate(dateStr: string) {
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -352,23 +369,6 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
     return result;
   }, [deadlines, search, filterCourse, filterType, filterStatus, quickFilter, sortField, sortDir, projects]);
 
-  const groupedByCourse = useMemo(() => {
-    const groups = filtered.reduce<Record<string, Deadline[]>>((acc, deadline) => {
-      const key = projects.find(project => project.id === deadline.projectId)?.name ?? 'No Course';
-      acc[key] = acc[key] ?? [];
-      acc[key].push(deadline);
-      return acc;
-    }, {});
-
-    return Object.entries(groups)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([courseName, courseDeadlines]) => ({
-        courseName,
-        projectId: courseDeadlines[0]?.projectId ?? null,
-        deadlines: courseDeadlines,
-      }));
-  }, [filtered, projects]);
-
   const canCollapseCompletedHistory =
     !search.trim() &&
     !filterCourse &&
@@ -397,6 +397,23 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
     }
     return filtered.slice(leadingCompletedCount);
   }, [canCollapseCompletedHistory, filtered, leadingCompletedCount, showCompletedHistory]);
+
+  const activeDeadlines = visibleDeadlines;
+
+  const historyDeadlines = useMemo(() => {
+    if (!canCollapseCompletedHistory || leadingCompletedCount === 0) return [];
+    return filtered.slice(0, leadingCompletedCount);
+  }, [canCollapseCompletedHistory, filtered, leadingCompletedCount]);
+
+  const groupedByCourse = useMemo(
+    () => groupDeadlinesByCourse(visibleDeadlines, projects),
+    [projects, visibleDeadlines]
+  );
+
+  const historyGroupedByCourse = useMemo(
+    () => groupDeadlinesByCourse(historyDeadlines, projects),
+    [historyDeadlines, projects]
+  );
 
   const activeFilters = [search, filterCourse, filterType, filterStatus, quickFilter !== 'all' ? quickFilter : ''].filter(Boolean).length;
   const detailDeadline = detailId ? deadlines.find(d => d.id === detailId) : null;
@@ -682,104 +699,144 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
         </div>
       )}
 
-      {leadingCompletedCount > 0 && (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 shadow-sm">
-          <div className="text-sm text-[var(--text-secondary)]">
-            {showCompletedHistory
-              ? `Showing ${leadingCompletedCount} older completed or missed deadlines first.`
-              : `Collapsed ${leadingCompletedCount} older completed or missed deadlines so you can focus on what is still active.`}
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowCompletedHistory(current => !current)}
-            className="rounded-xl border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
-          >
-            {showCompletedHistory ? 'Hide History' : 'Show History'}
-          </button>
-        </div>
-      )}
-
       {viewMode === 'course' ? (
         <div className="space-y-4">
-          {(canCollapseCompletedHistory && !showCompletedHistory
-            ? groupedByCourse
-                .map(group => ({
-                  ...group,
-                  deadlines: group.deadlines.filter(deadline =>
-                    visibleDeadlines.some(visible => visible.id === deadline.id)
-                  ),
-                }))
-                .filter(group => group.deadlines.length > 0)
-            : groupedByCourse).length === 0 ? (
+          {groupedByCourse.length === 0 && leadingCompletedCount === 0 ? (
             <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
               No deadlines match your filters.
             </div>
           ) : (
-            (canCollapseCompletedHistory && !showCompletedHistory
-              ? groupedByCourse
-                  .map(group => ({
-                    ...group,
-                    deadlines: group.deadlines.filter(deadline =>
-                      visibleDeadlines.some(visible => visible.id === deadline.id)
-                    ),
-                  }))
-                  .filter(group => group.deadlines.length > 0)
-              : groupedByCourse).map(group => (
-              <div key={group.courseName} className="overflow-hidden rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm">
-                <div className="flex items-center justify-between border-b border-[var(--border-soft)] bg-[var(--surface-muted)]/60 px-4 py-3">
-                  <div>
-                    <div className="text-sm font-semibold text-[var(--text-primary)]">{group.courseName}</div>
-                    <div className="mt-0.5 text-xs text-[var(--text-faint)]">{group.deadlines.length} deadlines</div>
+            <>
+              {groupedByCourse.length > 0 ? (
+                groupedByCourse.map(group => (
+                  <div key={group.courseName} className="overflow-hidden rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm">
+                    <div className="flex items-center justify-between border-b border-[var(--border-soft)] bg-[var(--surface-muted)]/60 px-4 py-3">
+                      <div>
+                        <div className="text-sm font-semibold text-[var(--text-primary)]">{group.courseName}</div>
+                        <div className="mt-0.5 text-xs text-[var(--text-faint)]">{group.deadlines.length} deadlines</div>
+                      </div>
+                      {group.projectId && (
+                        <button
+                          type="button"
+                          onClick={() => onNavigateToCourse?.(group.projectId!)}
+                          className="text-xs font-medium text-[var(--accent)] transition hover:underline"
+                        >
+                          Open course
+                        </button>
+                      )}
+                    </div>
+                    <div className="divide-y divide-[var(--border-soft)]">
+                      {group.deadlines.map(dl => (
+                        <button
+                          key={dl.id}
+                          type="button"
+                          onClick={() => setDetailId(dl.id)}
+                          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-[var(--surface-muted)]"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-[var(--text-primary)]">{dl.title}</div>
+                            <div className="mt-1 flex flex-wrap gap-2 text-xs text-[var(--text-faint)]">
+                              <span>{formatDate(dl.dueDate)}</span>
+                              {dl.dueTime && <span>{formatTime(dl.dueTime)}</span>}
+                              <span className="uppercase tracking-wide">{dl.type}</span>
+                            </div>
+                          </div>
+                          <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium', statusMeta(dl.status).color)}>
+                            {statusMeta(dl.status).label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  {group.projectId && (
-                    <button
-                      type="button"
-                      onClick={() => onNavigateToCourse?.(group.projectId!)}
-                      className="text-xs font-medium text-[var(--accent)] transition hover:underline"
-                    >
-                      Open course
-                    </button>
-                  )}
+                ))
+              ) : (
+                <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
+                  Everything currently visible is in completed history.
                 </div>
-                <div className="divide-y divide-[var(--border-soft)]">
-                  {group.deadlines.map(dl => (
-                    <button
-                      key={dl.id}
-                      type="button"
-                      onClick={() => setDetailId(dl.id)}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-[var(--surface-muted)]"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-[var(--text-primary)]">{dl.title}</div>
-                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-[var(--text-faint)]">
-                          <span>{formatDate(dl.dueDate)}</span>
-                          {dl.dueTime && <span>{formatTime(dl.dueTime)}</span>}
-                          <span className="uppercase tracking-wide">{dl.type}</span>
+              )}
+
+              {leadingCompletedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowCompletedHistory(current => !current)}
+                  className="flex w-full items-center justify-between gap-3 rounded-[24px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-4 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-[var(--surface-muted)]"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--surface-muted)] text-[var(--accent)]">
+                      {showCompletedHistory ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-[var(--text-primary)]">
+                        {showCompletedHistory
+                          ? `Hide ${leadingCompletedCount} completed or missed deadlines`
+                          : `Show ${leadingCompletedCount} completed or missed deadlines`}
+                      </div>
+                      <div className="mt-0.5 text-xs text-[var(--text-faint)]">
+                        {showCompletedHistory
+                          ? 'Completed history is expanded below.'
+                          : 'Collapsed history stays out of the way until you need it.'}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-xs font-medium text-[var(--text-secondary)]">
+                    {showCompletedHistory ? 'Collapse' : 'Expand'}
+                  </span>
+                </button>
+              )}
+
+              {showCompletedHistory && historyGroupedByCourse.length > 0 && (
+                <div className="space-y-4 pt-2">
+                  <div className="text-xs uppercase tracking-[0.18em] text-[var(--text-faint)]">Completed history</div>
+                  {historyGroupedByCourse.map(group => (
+                    <div key={`history-${group.courseName}`} className="overflow-hidden rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm">
+                      <div className="flex items-center justify-between border-b border-[var(--border-soft)] bg-[var(--surface-muted)]/60 px-4 py-3">
+                        <div>
+                          <div className="text-sm font-semibold text-[var(--text-primary)]">{group.courseName}</div>
+                          <div className="mt-0.5 text-xs text-[var(--text-faint)]">{group.deadlines.length} deadlines</div>
                         </div>
                       </div>
-                      <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium', statusMeta(dl.status).color)}>
-                        {statusMeta(dl.status).label}
-                      </span>
-                    </button>
+                      <div className="divide-y divide-[var(--border-soft)]">
+                        {group.deadlines.map(dl => (
+                          <button
+                            key={dl.id}
+                            type="button"
+                            onClick={() => setDetailId(dl.id)}
+                            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-[var(--surface-muted)]"
+                          >
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-medium text-[var(--text-primary)]">{dl.title}</div>
+                              <div className="mt-1 flex flex-wrap gap-2 text-xs text-[var(--text-faint)]">
+                                <span>{formatDate(dl.dueDate)}</span>
+                                {dl.dueTime && <span>{formatTime(dl.dueTime)}</span>}
+                                <span className="uppercase tracking-wide">{dl.type}</span>
+                              </div>
+                            </div>
+                            <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium', statusMeta(dl.status).color)}>
+                              {statusMeta(dl.status).label}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
-              </div>
-            ))
+              )}
+            </>
           )}
         </div>
       ) : (
       <>
       <div className="grid gap-3 md:hidden">
-        {visibleDeadlines.length === 0 ? (
+        {activeDeadlines.length === 0 ? (
           <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
             {deadlines.length === 0
               ? 'No deadlines yet. Click "Add Deadline" to get started.'
               : leadingCompletedCount > 0 && !showCompletedHistory
-                ? 'Everything currently visible is in completed history. Use "Show History" to review it.'
+                ? 'Everything currently visible is in completed history. Expand the history row below to review it.'
                 : 'No deadlines match your filters.'}
           </div>
         ) : (
-          visibleDeadlines.map(dl => {
+          activeDeadlines.map(dl => {
             const project = projects.find(p => p.id === dl.projectId);
             const days = daysUntil(dl.dueDate);
             const sm = statusMeta(dl.status);
@@ -810,6 +867,72 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
               </button>
             );
           })
+        )}
+
+        {leadingCompletedCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowCompletedHistory(current => !current)}
+            className="flex items-center justify-between gap-3 rounded-[24px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-4 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-[var(--surface-muted)]"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[var(--surface-muted)] text-[var(--accent)]">
+                {showCompletedHistory ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+              </span>
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-[var(--text-primary)]">
+                  {showCompletedHistory
+                    ? `Hide ${leadingCompletedCount} completed or missed deadlines`
+                    : `Show ${leadingCompletedCount} completed or missed deadlines`}
+                </div>
+                <div className="mt-0.5 text-xs text-[var(--text-faint)]">
+                  {showCompletedHistory
+                    ? 'Completed history is expanded below.'
+                    : 'Collapsed history stays out of the way until you need it.'}
+                </div>
+              </div>
+            </div>
+            <span className="shrink-0 text-xs font-medium text-[var(--text-secondary)]">
+              {showCompletedHistory ? 'Collapse' : 'Expand'}
+            </span>
+          </button>
+        )}
+
+        {showCompletedHistory && historyDeadlines.length > 0 && (
+          <div className="space-y-3 pt-1">
+            <div className="text-xs uppercase tracking-[0.18em] text-[var(--text-faint)]">Completed history</div>
+            {historyDeadlines.map(dl => {
+              const project = projects.find(p => p.id === dl.projectId);
+              const days = daysUntil(dl.dueDate);
+              const sm = statusMeta(dl.status);
+              const isOverdue = days < 0 && dl.status !== 'done' && dl.status !== 'missed';
+
+              return (
+                <button
+                  key={dl.id}
+                  type="button"
+                  onClick={() => setDetailId(dl.id)}
+                  className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 text-left shadow-sm transition hover:border-[var(--border-strong)] hover:shadow-lg"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{dl.title}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-faint)]">
+                        {project && <span>{project.name}</span>}
+                        <span className="uppercase tracking-wide">{dl.type}</span>
+                      </div>
+                    </div>
+                    <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', sm.color)}>{sm.label}</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    <span className={cn(isOverdue ? 'text-red-400' : 'text-[var(--text-secondary)]')}>{formatDate(dl.dueDate)}</span>
+                    {dl.dueTime && <span className="text-[var(--text-faint)]">{formatTime(dl.dueTime)}</span>}
+                    {dl.linkedTaskIds.length > 0 && <span className="text-indigo-400">{dl.linkedTaskIds.length} linked</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -857,18 +980,18 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
               </tr>
             </thead>
             <tbody>
-              {visibleDeadlines.length === 0 ? (
+              {activeDeadlines.length === 0 ? (
                 <tr>
                   <td colSpan={viewMode === 'table' ? 10 : 7} className="py-12 text-center text-sm text-[var(--text-faint)]">
                     {deadlines.length === 0
                       ? 'No deadlines yet. Click "Add Deadline" to get started.'
                       : leadingCompletedCount > 0 && !showCompletedHistory
-                        ? 'Everything currently visible is in completed history. Use "Show History" to review it.'
+                        ? 'Everything currently visible is in completed history. Expand the history row below to review it.'
                         : 'No deadlines match your filters.'}
                   </td>
                 </tr>
               ) : (
-                visibleDeadlines.map(dl => {
+                activeDeadlines.map(dl => {
                   const project = projects.find(p => p.id === dl.projectId);
                   const days = daysUntil(dl.dueDate);
                   const sm = statusMeta(dl.status);
@@ -990,6 +1113,171 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                     </tr>
                   );
                 })
+              )}
+
+              {leadingCompletedCount > 0 && (
+                <tr>
+                  <td colSpan={viewMode === 'table' ? 10 : 7} className="px-2 py-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowCompletedHistory(current => !current)}
+                      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-muted)]/60 px-4 py-3 text-left transition hover:border-[var(--accent)] hover:bg-[var(--surface-muted)]"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[var(--surface)] text-[var(--accent)]">
+                          {showCompletedHistory ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-[var(--text-primary)]">
+                            {showCompletedHistory
+                              ? `Hide ${leadingCompletedCount} completed or missed deadlines`
+                              : `Show ${leadingCompletedCount} completed or missed deadlines`}
+                          </div>
+                          <div className="mt-0.5 text-xs text-[var(--text-faint)]">
+                            {showCompletedHistory
+                              ? 'Completed history is expanded below.'
+                              : 'Collapsed history stays out of the way until you need it.'}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-xs font-medium text-[var(--text-secondary)]">
+                        {showCompletedHistory ? 'Collapse' : 'Expand'}
+                      </span>
+                    </button>
+                  </td>
+                </tr>
+              )}
+
+              {showCompletedHistory && historyDeadlines.length > 0 && (
+                <>
+                  <tr>
+                    <td colSpan={viewMode === 'table' ? 10 : 7} className="px-3 pb-0 pt-4">
+                      <div className="text-xs uppercase tracking-[0.18em] text-[var(--text-faint)]">Completed history</div>
+                    </td>
+                  </tr>
+                  {historyDeadlines.map(dl => {
+                    const project = projects.find(p => p.id === dl.projectId);
+                    const days = daysUntil(dl.dueDate);
+                    const sm = statusMeta(dl.status);
+                    const isOverdue = days < 0 && dl.status !== 'done' && dl.status !== 'missed';
+
+                    return (
+                      <tr
+                        key={dl.id}
+                        className={cn(
+                          'border-b border-[var(--border-soft)] last:border-b-0 transition-colors hover:bg-[var(--surface-muted)] group',
+                          dl.status === 'done' && 'opacity-60',
+                          viewMode === 'compact' && 'text-xs'
+                        )}
+                      >
+                        <td className="px-3 py-2.5">
+                          <button
+                            onClick={() => setDetailId(dl.id)}
+                            className="text-[var(--text-faint)] hover:text-[var(--accent)] transition opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <select
+                            value={dl.status}
+                            onChange={e => onUpdate(dl.id, { status: e.target.value as DeadlineStatus })}
+                            className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium border-0 cursor-pointer focus:outline-none', sm.color)}
+                          >
+                            {STATUS_OPTIONS.map(s => (
+                              <option key={s.value} value={s.value}>{s.label}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          {project ? (
+                            <button
+                              type="button"
+                              onClick={() => onNavigateToCourse?.(project.id)}
+                              className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] transition hover:text-[var(--accent)]"
+                            >
+                              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: project.color }} />
+                              <span className="truncate max-w-[100px]">{project.name}</span>
+                            </button>
+                          ) : (
+                            <span className="text-xs text-[var(--text-faint)]">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className={cn('text-xs', isOverdue ? 'text-red-400 font-medium' : 'text-[var(--text-secondary)]')}>
+                            {formatDate(dl.dueDate)}
+                          </span>
+                          {dl.status !== 'done' && dl.status !== 'missed' && (
+                            <span className={cn(
+                              'ml-1.5 text-[10px]',
+                              days < 0 ? 'text-red-400' : days <= 2 ? 'text-yellow-400' : 'text-[var(--text-faint)]'
+                            )}>
+                              {days === 0 ? 'today' : days === 1 ? 'tmrw' : days < 0 ? `${Math.abs(days)}d ago` : `${days}d`}
+                            </span>
+                          )}
+                        </td>
+                        {viewMode === 'table' && (
+                          <td className="px-3 py-2.5 text-xs text-[var(--text-faint)]">
+                            {dl.dueTime ? formatTime(dl.dueTime) : '—'}
+                          </td>
+                        )}
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className={cn('text-sm', dl.status === 'done' ? 'text-[var(--text-faint)] line-through' : 'text-[var(--text-primary)]')}>
+                              {dl.title}
+                            </span>
+                            {dl.sourceType !== 'manual' && (
+                              <span className="shrink-0 rounded bg-orange-500/10 px-1.5 py-0.5 text-[9px] font-medium text-orange-400" title={dl.sourceUrl ?? undefined}>
+                                Canvas
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-faint)]">
+                            {dl.type}
+                          </span>
+                        </td>
+                        {viewMode === 'table' && (
+                          <td className="px-3 py-2.5">
+                            {dl.notes ? (
+                              <span className="flex items-center gap-1 text-xs text-[var(--text-faint)]" title={dl.notes}>
+                                <StickyNote size={11} />
+                                <span className="truncate max-w-[120px]">{dl.notes}</span>
+                              </span>
+                            ) : (
+                              <span className="text-xs text-[var(--text-faint)]">—</span>
+                            )}
+                          </td>
+                        )}
+                        {viewMode === 'table' && (
+                          <td className="px-3 py-2.5">
+                            {dl.linkedTaskIds.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => dl.projectId && onNavigateToTasks?.(dl.projectId)}
+                                className="flex items-center gap-1 text-xs text-indigo-400 transition hover:underline"
+                              >
+                                <Link2 size={11} />
+                                {dl.linkedTaskIds.length}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-[var(--text-faint)]">—</span>
+                            )}
+                          </td>
+                        )}
+                        <td className="px-3 py-2.5">
+                          <button
+                            onClick={() => onDelete(dl.id)}
+                            className="text-[var(--text-faint)] hover:text-red-400 transition opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </>
               )}
             </tbody>
           </table>

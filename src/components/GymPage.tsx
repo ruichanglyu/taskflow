@@ -286,10 +286,8 @@ function PlanTab(props: GymPageProps) {
   // Wizard modal state
   const [wizardStep, setWizardStep] = useState<'days' | 'exercises' | null>(null);
   const [wizardDayIndex, setWizardDayIndex] = useState(0);
-  const [wizardExerciseMode, setWizardExerciseMode] = useState<'create' | 'library'>('create');
   // Exercise form state for wizard
   const [wizExName, setWizExName] = useState('');
-  const [wizExMuscle, setWizExMuscle] = useState('');
   const [wizExId, setWizExId] = useState('');
   const [wizExImageFile, setWizExImageFile] = useState<File | null>(null);
   const [wizExImagePreview, setWizExImagePreview] = useState<string | null>(null);
@@ -363,7 +361,6 @@ function PlanTab(props: GymPageProps) {
 
   const resetWizardExerciseForm = () => {
     setWizExName('');
-    setWizExMuscle('');
     setWizExId('');
     setWizExImageFile(null);
     if (wizExImagePreview) {
@@ -433,12 +430,12 @@ function PlanTab(props: GymPageProps) {
     const currentDay = selectedPlanDays[wizardDayIndex];
     if (!currentDay) return;
 
-    if (wizardExerciseMode === 'library' && wizExId) {
+    if (wizExId) {
       // Pick from library
       await props.onAddDayExercise(currentDay.id, wizExId, wizSets, wizReps, wizRest);
-    } else if (wizardExerciseMode === 'create' && wizExName.trim()) {
+    } else if (wizExName.trim()) {
       // Create new exercise + add
-      const exId = await props.onAddExercise(wizExName.trim(), wizExMuscle.trim(), '', undefined);
+      const exId = await props.onAddExercise(wizExName.trim(), '', '', undefined);
       if (exId) {
         if (wizExImageFile) {
           await props.onUploadExerciseImage(exId, wizExImageFile);
@@ -463,7 +460,6 @@ function PlanTab(props: GymPageProps) {
     if (dayIndex < 0) return;
     setWizardDayIndex(dayIndex);
     setWizardStep('exercises');
-    setWizardExerciseMode('create');
     resetWizardExerciseForm();
     setWizSets(3);
     setWizReps('10');
@@ -483,10 +479,6 @@ function PlanTab(props: GymPageProps) {
     setWizExImageFile(null);
     setWizExImagePreview(null);
   };
-
-  const selectedWizardExercise = wizardExerciseMode === 'library' && wizExId
-    ? exercises.find(exercise => exercise.id === wizExId) ?? null
-    : null;
 
   const wizardCurrentDay = wizardStep === 'exercises' ? selectedPlanDays[wizardDayIndex] : null;
   const wizardCurrentDayExercises = wizardCurrentDay
@@ -911,7 +903,6 @@ function PlanTab(props: GymPageProps) {
                   onClick={() => {
                     setWizardStep('exercises');
                     setWizardDayIndex(0);
-                    setWizardExerciseMode('create');
                     resetWizardExerciseForm();
                     setWizSets(3);
                     setWizReps('10');
@@ -966,151 +957,82 @@ function PlanTab(props: GymPageProps) {
             )}
 
             <div className="mt-4 space-y-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
-              <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWizardExerciseMode('create');
-                      resetWizardExerciseForm();
-                      setWizSets(3);
-                      setWizReps('10');
-                      setWizRest(45);
+              <div className="space-y-3 rounded-2xl border border-[var(--accent)]/20 bg-[var(--accent-soft)]/30 p-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-[var(--text-faint)]">Exercise name</label>
+                  <input
+                    value={wizExName}
+                    onChange={e => {
+                      setWizExName(e.target.value);
+                      if (e.target.value.trim()) setWizExId('');
                     }}
-                    className={cn(
-                      'rounded-xl px-3 py-2 text-sm font-medium transition',
-                      wizardExerciseMode === 'create'
-                        ? 'bg-[var(--accent)] text-[var(--accent-contrast)] shadow-sm'
-                        : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                    )}
-                  >
-                    Create new
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWizardExerciseMode('library');
-                      resetWizardExerciseForm();
-                      setWizSets(3);
-                      setWizReps('10');
-                      setWizRest(45);
-                    }}
-                    className={cn(
-                      'rounded-xl px-3 py-2 text-sm font-medium transition',
-                      wizardExerciseMode === 'library'
-                        ? 'bg-[var(--accent)] text-[var(--accent-contrast)] shadow-sm'
-                        : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                    )}
-                  >
-                    Choose from library
-                  </button>
+                    placeholder="Exercise name (e.g. Bench Press)"
+                    className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                    onKeyDown={e => { if (e.key === 'Enter' && wizExName.trim()) void handleWizardAddExercise(); }}
+                    autoFocus
+                  />
                 </div>
-                <p className="mt-2 px-1 text-xs text-[var(--text-muted)]">
-                  Pick one path. You can create a new exercise here, or add an existing one from your library. Every exercise stays editable later from the Exercise Library tab.
-                </p>
-              </div>
 
-              {wizardExerciseMode === 'create' ? (
-                <div className="space-y-3 rounded-2xl border border-[var(--accent)]/20 bg-[var(--accent-soft)]/30 p-3">
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <input
-                      value={wizExName}
-                      onChange={e => setWizExName(e.target.value)}
-                      placeholder="Exercise name (e.g. Bench Press)"
-                      className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-                      onKeyDown={e => { if (e.key === 'Enter' && wizExName.trim()) void handleWizardAddExercise(); }}
-                      autoFocus
-                    />
-                    <input
-                      value={wizExMuscle}
-                      onChange={e => setWizExMuscle(e.target.value)}
-                      placeholder="Muscle group (optional)"
-                      className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none sm:w-48"
-                    />
-                  </div>
+                <div className="flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--text-faint)]">
+                  <span className="h-px flex-1 bg-[var(--border-soft)]" />
+                  <span>or</span>
+                  <span className="h-px flex-1 bg-[var(--border-soft)]" />
+                </div>
 
-                  <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-3">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)]">
-                        {wizExImagePreview ? (
-                          <img src={wizExImagePreview} alt="" className="h-full w-full object-cover" />
-                        ) : (
-                          <Camera size={18} className="text-[var(--text-faint)]" />
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-[var(--text-faint)]">Choose from exercise library</label>
+                  <select
+                    value={wizExId}
+                    onChange={e => {
+                      setWizExId(e.target.value);
+                      if (e.target.value) setWizExName('');
+                    }}
+                    className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                  >
+                    <option value="">Select an exercise...</option>
+                    {exercises.map(ex => (
+                      <option key={ex.id} value={ex.id}>{ex.name}{ex.muscleGroup ? ` (${ex.muscleGroup})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)]">
+                      {wizExImagePreview ? (
+                        <img src={wizExImagePreview} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <Camera size={16} className="text-[var(--text-faint)]" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-[var(--text-primary)]">Photo</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border-soft)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]">
+                          <Camera size={14} />
+                          Choose image
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            onChange={e => handleWizardImageFile(e.target.files?.[0])}
+                          />
+                        </label>
+                        {wizExImagePreview && (
+                          <button
+                            type="button"
+                            onClick={clearWizardImageFile}
+                            className="rounded-lg border border-[var(--border-soft)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+                          >
+                            Remove
+                          </button>
                         )}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-[var(--text-primary)]">Add an exercise photo</p>
-                        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                          Pick a photo from your device or take one with your camera.
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border-soft)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]">
-                            <Camera size={14} />
-                            {wizExImagePreview ? 'Change image' : 'Choose image'}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              capture="environment"
-                              className="hidden"
-                              onChange={e => handleWizardImageFile(e.target.files?.[0])}
-                            />
-                          </label>
-                          {wizExImagePreview && (
-                            <button
-                              type="button"
-                              onClick={clearWizardImageFile}
-                              className="rounded-lg border border-[var(--border-soft)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="space-y-3 rounded-2xl border border-[var(--accent)]/20 bg-[var(--accent-soft)]/30 p-3">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-[var(--text-faint)]">Choose from exercise library</label>
-                    <select
-                      value={wizExId}
-                      onChange={e => setWizExId(e.target.value)}
-                      className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
-                    >
-                      <option value="">Select an exercise...</option>
-                      {exercises.map(ex => (
-                        <option key={ex.id} value={ex.id}>{ex.name}{ex.muscleGroup ? ` (${ex.muscleGroup})` : ''}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {selectedWizardExercise && (
-                    <div className="flex items-center gap-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-3">
-                      {selectedWizardExercise.referenceImageUrl ? (
-                        <img src={selectedWizardExercise.referenceImageUrl} alt="" className="h-12 w-12 rounded-lg object-cover" />
-                      ) : (
-                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--text-faint)]">
-                          <Dumbbell size={16} />
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{selectedWizardExercise.name}</p>
-                        <p className="text-xs text-[var(--text-muted)]">
-                          {selectedWizardExercise.muscleGroup || 'No muscle group set'}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setEditingExercise(selectedWizardExercise)}
-                        className="rounded-lg border border-[var(--border-soft)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
+              </div>
 
               <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
                 <label className="flex items-center gap-1.5">Sets: <input type="number" value={wizSets} onChange={e => setWizSets(Number(e.target.value))} min={1} max={20} className="w-12 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-1.5 py-1.5 text-center text-sm text-[var(--text-primary)] focus:outline-none" /></label>
@@ -1120,11 +1042,11 @@ function PlanTab(props: GymPageProps) {
 
               <button
                 onClick={() => void handleWizardAddExercise()}
-                disabled={wizardExerciseMode === 'create' ? !wizExName.trim() : !wizExId}
+                disabled={!wizExName.trim() && !wizExId}
                 className="w-full rounded-lg px-3 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40"
                 style={{ backgroundColor: 'var(--accent-strong)' }}
               >
-                {wizardExerciseMode === 'create' ? 'Create & Add' : 'Add to Day'}
+                Add to Day
               </button>
             </div>
 

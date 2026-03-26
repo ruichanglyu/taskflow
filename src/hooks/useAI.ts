@@ -30,24 +30,43 @@ export interface ParsedImportRow {
   notes?: string;
 }
 
-const STORAGE_KEY = 'taskflow_gemini_key';
-const MODEL = 'gemini-2.0-flash';
+export type AIProvider = 'gemini' | 'openai';
+
+const KEY_STORAGE = 'taskflow_ai_key';
+const PROVIDER_STORAGE = 'taskflow_ai_provider';
+
+const GEMINI_MODEL = 'gemini-2.0-flash';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+const OPENAI_MODEL = 'gpt-4o-mini';
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
 export function getAPIKey(): string | null {
   try {
-    return localStorage.getItem(STORAGE_KEY);
+    return localStorage.getItem(KEY_STORAGE);
   } catch {
     return null;
   }
 }
 
 export function setAPIKey(key: string) {
-  localStorage.setItem(STORAGE_KEY, key);
+  localStorage.setItem(KEY_STORAGE, key);
+}
+
+export function getProvider(): AIProvider {
+  try {
+    const p = localStorage.getItem(PROVIDER_STORAGE);
+    return p === 'openai' ? 'openai' : 'gemini';
+  } catch {
+    return 'gemini';
+  }
+}
+
+export function setProvider(p: AIProvider) {
+  localStorage.setItem(PROVIDER_STORAGE, p);
 }
 
 export function removeAPIKey() {
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(KEY_STORAGE);
 }
 
 function buildSystemPrompt(data: {
@@ -195,6 +214,132 @@ export function parseImportBlocks(content: string): ImportBlock[] {
   return blocks;
 }
 
+/* ── Streaming helpers ─────────────────────────────────────────────── */
+
+async function streamGemini(
+  key: string,
+  systemPrompt: string,
+  history: ChatMessage[],
+  onUpdate: (text: string) => void,
+  signal: AbortSignal,
+) {
+  const contents = history.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
+
+  const url = `${GEMINI_API_URL}/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${key}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents,
+      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
+    }),
+    signal,
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Gemini error ${res.status}: ${body.slice(0, 200)}`);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('No response body');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let accumulated = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const json = line.slice(6).trim();
+      if (!json || json === '[DONE]') continue;
+      try {
+        const parsed = JSON.parse(json);
+        const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          accumulated += text;
+          onUpdate(accumulated);
+        }
+      } catch { /* skip malformed lines */ }
+    }
+  }
+}
+
+async function streamOpenAI(
+  key: string,
+  systemPrompt: string,
+  history: ChatMessage[],
+  onUpdate: (text: string) => void,
+  signal: AbortSignal,
+) {
+  const apiMessages = [
+    { role: 'system' as const, content: systemPrompt },
+    ...history.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+  ];
+
+  const res = await fetch(OPENAI_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: apiMessages,
+      stream: true,
+      temperature: 0.7,
+      max_tokens: 4096,
+    }),
+    signal,
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`OpenAI error ${res.status}: ${body.slice(0, 200)}`);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('No response body');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let accumulated = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const json = line.slice(6).trim();
+      if (!json || json === '[DONE]') continue;
+      try {
+        const parsed = JSON.parse(json);
+        const delta = parsed?.choices?.[0]?.delta?.content;
+        if (delta) {
+          accumulated += delta;
+          onUpdate(accumulated);
+        }
+      } catch { /* skip malformed lines */ }
+    }
+  }
+}
+
 export function useAI() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -207,10 +352,11 @@ export function useAI() {
   ) => {
     const key = getAPIKey();
     if (!key) {
-      setError('Please add your Google Gemini API key first.');
+      setError('Please add your API key first.');
       return;
     }
 
+    const provider = getProvider();
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -230,90 +376,20 @@ export function useAI() {
     };
     setMessages(prev => [...prev, assistantMsg]);
 
+    const updateContent = (text: string) => {
+      setMessages(prev =>
+        prev.map(m => m.id === assistantMsg.id ? { ...m, content: text } : m)
+      );
+    };
+
     try {
       abortRef.current = new AbortController();
+      const systemPrompt = buildSystemPrompt(appData);
 
-      // Build Gemini conversation history
-      const systemInstruction = buildSystemPrompt(appData);
-      const conversationHistory = [...messages, userMsg].map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
-      }));
-
-      const url = `${GEMINI_API_URL}/${MODEL}:streamGenerateContent?alt=sse&key=${key}`;
-
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemInstruction }] },
-          contents: conversationHistory,
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 4096,
-          },
-        }),
-        signal: abortRef.current.signal,
-      });
-
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => null);
-        const errMsg = errBody?.error?.message || `API error: ${res.status}`;
-        throw new Error(errMsg);
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error('No response stream');
-
-      const decoder = new TextDecoder();
-      let accumulated = '';
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6).trim();
-          if (!data) continue;
-
-          try {
-            const parsed = JSON.parse(data);
-            const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) {
-              accumulated += text;
-              setMessages(prev =>
-                prev.map(m => m.id === assistantMsg.id ? { ...m, content: accumulated } : m)
-              );
-            }
-          } catch {
-            // Skip unparseable chunks
-          }
-        }
-      }
-
-      // Process any remaining buffer
-      if (buffer.startsWith('data: ')) {
-        const data = buffer.slice(6).trim();
-        if (data) {
-          try {
-            const parsed = JSON.parse(data);
-            const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) {
-              accumulated += text;
-              setMessages(prev =>
-                prev.map(m => m.id === assistantMsg.id ? { ...m, content: accumulated } : m)
-              );
-            }
-          } catch {
-            // Skip
-          }
-        }
+      if (provider === 'gemini') {
+        await streamGemini(key, systemPrompt, [...messages, userMsg], updateContent, abortRef.current.signal);
+      } else {
+        await streamOpenAI(key, systemPrompt, [...messages, userMsg], updateContent, abortRef.current.signal);
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;

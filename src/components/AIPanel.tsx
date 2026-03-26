@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow } from '../hooks/useAI';
+import { useAI, getAPIKey, setAPIKey, removeAPIKey, getProvider, setProvider, parseImportBlocks, type AIProvider, type ChatMessage, type ImportBlock, type ParsedImportRow } from '../hooks/useAI';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus } from '../types';
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
@@ -33,6 +33,7 @@ export function AIPanel({
   const [apiKey, setApiKey] = useState(getAPIKey() ?? '');
   const [hasKey, setHasKey] = useState(!!getAPIKey());
   const [showKeyInput, setShowKeyInput] = useState(false);
+  const [provider, setProviderState] = useState<AIProvider>(getProvider());
   const [importedBlocks, setImportedBlocks] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -72,6 +73,16 @@ export function AIPanel({
   };
 
   const handleRemoveKey = () => {
+    removeAPIKey();
+    setApiKey('');
+    setHasKey(false);
+    setShowKeyInput(false);
+  };
+
+  const handleProviderChange = (p: AIProvider) => {
+    setProvider(p);
+    setProviderState(p);
+    // Clear key when switching provider so user enters the right one
     removeAPIKey();
     setApiKey('');
     setHasKey(false);
@@ -154,7 +165,7 @@ export function AIPanel({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">AI Assistant</h3>
-              <p className="text-[10px] text-[var(--text-faint)]">Powered by Gemini 2.0 Flash</p>
+              <p className="text-[10px] text-[var(--text-faint)]">Powered by {provider === 'gemini' ? 'Gemini 2.0 Flash' : 'GPT-4o Mini'}</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -191,16 +202,50 @@ export function AIPanel({
         {/* API Key Input */}
         {(showKeyInput || !hasKey) && (
           <div className="border-b border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3">
+            {/* Provider toggle */}
+            <div className="mb-3 flex items-center gap-1 rounded-lg bg-[var(--surface)] p-0.5">
+              <button
+                onClick={() => handleProviderChange('gemini')}
+                className={cn(
+                  'flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition',
+                  provider === 'gemini'
+                    ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+                    : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'
+                )}
+              >
+                Gemini (Free)
+              </button>
+              <button
+                onClick={() => handleProviderChange('openai')}
+                className={cn(
+                  'flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition',
+                  provider === 'openai'
+                    ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+                    : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'
+                )}
+              >
+                OpenAI
+              </button>
+            </div>
+
             <p className="mb-2 text-xs text-[var(--text-muted)]">
-              {hasKey ? 'Your API key is saved.' : 'Enter your Google Gemini API key to get started (free tier available).'}{' '}
-              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">Get a free key →</a>
+              {hasKey
+                ? 'Your API key is saved.'
+                : provider === 'gemini'
+                  ? 'Enter your Google Gemini API key to get started (free tier available).'
+                  : 'Enter your OpenAI API key to get started.'}{' '}
+              {provider === 'gemini' ? (
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">Get a free key →</a>
+              ) : (
+                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">Get an API key →</a>
+              )}
             </p>
             <div className="flex gap-2">
               <input
                 type="password"
                 value={apiKey}
                 onChange={e => setApiKey(e.target.value)}
-                placeholder="Paste your Gemini API key"
+                placeholder={provider === 'gemini' ? 'Paste your Gemini API key' : 'Paste your OpenAI API key (sk-...)'}
                 className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
                 onKeyDown={e => { if (e.key === 'Enter') handleSaveKey(); }}
               />
@@ -222,7 +267,9 @@ export function AIPanel({
               )}
             </div>
             <p className="mt-1.5 text-[10px] text-[var(--text-faint)]">
-              Key is stored locally in your browser. Free tier: 15 req/min, 1M tokens/day.
+              {provider === 'gemini'
+                ? 'Key is stored locally in your browser. Free tier: 15 req/min, 1M tokens/day.'
+                : 'Key is stored locally in your browser. Usage charged to your OpenAI account.'}
             </p>
           </div>
         )}
@@ -230,7 +277,7 @@ export function AIPanel({
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {messages.length === 0 ? (
-            <WelcomeScreen hasKey={hasKey} />
+            <WelcomeScreen hasKey={hasKey} provider={provider} />
           ) : (
             <div className="space-y-4">
               {messages.map(msg => (
@@ -264,7 +311,7 @@ export function AIPanel({
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={hasKey ? 'Ask anything or request tasks/deadlines...' : 'Add your Gemini API key above to start'}
+              placeholder={hasKey ? 'Ask anything or request tasks/deadlines...' : `Add your ${provider === 'gemini' ? 'Gemini' : 'OpenAI'} API key above to start`}
               disabled={!hasKey || isStreaming}
               rows={1}
               className="max-h-32 min-h-[38px] flex-1 resize-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-50"
@@ -301,7 +348,7 @@ export function AIPanel({
 }
 
 // --- Welcome Screen ---
-function WelcomeScreen({ hasKey }: { hasKey: boolean }) {
+function WelcomeScreen({ hasKey, provider }: { hasKey: boolean; provider: AIProvider }) {
   return (
     <div className="flex h-full flex-col items-center justify-center text-center">
       <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl" style={{ backgroundImage: 'var(--sidebar-gradient)' }}>
@@ -311,7 +358,9 @@ function WelcomeScreen({ hasKey }: { hasKey: boolean }) {
       <p className="mt-2 max-w-xs text-sm text-[var(--text-muted)]">
         {hasKey
           ? 'Ask me anything about your schedule, or tell me to create tasks and deadlines for you.'
-          : 'Add your Google Gemini API key above to get started — it\'s free!'}
+          : provider === 'gemini'
+            ? 'Add your Google Gemini API key above to get started — it\'s free!'
+            : 'Add your OpenAI API key above to get started.'}
       </p>
       {hasKey && (
         <div className="mt-6 space-y-2 text-left">

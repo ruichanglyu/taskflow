@@ -59,10 +59,10 @@ export function CanvasConnect({
         <div className="p-5 space-y-5">
           {/* Error banner */}
           {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-400">
+            <div className="flex items-start gap-2 rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-white/90">
               <AlertCircle size={16} className="mt-0.5 shrink-0" />
               <p className="flex-1">{error}</p>
-              <button onClick={onClearError} className="text-red-400/60 hover:text-red-400">
+              <button onClick={onClearError} className="text-white/60 hover:text-white">
                 <X size={14} />
               </button>
             </div>
@@ -97,7 +97,7 @@ export function CanvasConnect({
                   {lastSyncResult.errors.length > 0 && (
                     <div className="mt-2 space-y-1">
                       {lastSyncResult.errors.map((err, i) => (
-                        <p key={i} className="text-[10px] text-red-400">{err}</p>
+                        <p key={i} className="text-[10px] text-rose-300">{err}</p>
                       ))}
                     </div>
                   )}

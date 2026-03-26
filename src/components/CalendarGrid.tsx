@@ -179,47 +179,34 @@ export function CalendarGrid({
                 {day}
               </span>
 
-              <div className="mt-auto flex min-h-[18px] items-center gap-1">
-                {dayDeadlines.slice(0, 2).map((dl, i) => (
-                  <div
-                    key={`dl-${i}`}
-                    className="h-2.5 w-2.5 rotate-45 bg-orange-400"
-                    title={dl.title}
-                  />
-                ))}
-                {dayEvents.slice(0, 3 - Math.min(dayDeadlines.length, 2)).map((event, i) => (
-                  <div
-                    key={`ev-${i}`}
-                    className={cn(
-                      'h-2.5 w-2.5 rounded-full',
-                      isSelected ? 'bg-[var(--accent)]' : 'bg-indigo-400'
-                    )}
-                    title={event.summary || 'Calendar event'}
-                  />
-                ))}
-                {dayEvents.length + dayDeadlines.length > 3 && (
-                  <span className="text-[10px] text-[var(--text-faint)]">+{dayEvents.length + dayDeadlines.length - 3}</span>
-                )}
-              </div>
-
               {isCurrentMonth && (
                 <div className="mt-1 flex w-full flex-col gap-1">
                   {dayEvents.slice(0, 2).map((event, idx) => (
                     <div
                       key={`${event.id}-${idx}`}
-                      className="truncate rounded-md bg-indigo-500/12 px-1.5 py-0.5 text-[10px] font-medium text-indigo-300"
+                      className="flex items-center gap-1.5 truncate rounded-md bg-transparent px-0.5 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]"
                     >
-                      {event.summary || 'Untitled'}
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: event.calendarColor || '#818cf8' }}
+                      />
+                      <span className="truncate">{event.summary || 'Untitled'}</span>
                     </div>
                   ))}
                   {dayDeadlines.slice(0, Math.max(0, 2 - dayEvents.slice(0, 2).length)).map((dl, idx) => (
                     <div
                       key={`${dl.id}-${idx}`}
-                      className="truncate rounded-md bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-300"
+                      className="flex items-center gap-1.5 truncate rounded-md bg-transparent px-0.5 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]"
                     >
-                      {dl.title}
+                      <span className="h-2 w-2 shrink-0 rotate-45 bg-orange-400" />
+                      <span className="truncate">{dl.title}</span>
                     </div>
                   ))}
+                  {dayEvents.length + dayDeadlines.length > 2 && (
+                    <span className="pl-1 text-[10px] text-[var(--text-faint)]">
+                      +{dayEvents.length + dayDeadlines.length - 2} more
+                    </span>
+                  )}
                 </div>
               )}
 

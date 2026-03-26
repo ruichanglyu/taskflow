@@ -72,6 +72,8 @@ export interface GoogleCalendarListItem {
   id: string;
   summary: string;
   primary?: boolean;
+  backgroundColor?: string;
+  foregroundColor?: string;
 }
 
 export interface GoogleCalendarEvent {
@@ -91,6 +93,9 @@ export interface GoogleCalendarEvent {
     dateTime?: string;
     timeZone?: string;
   };
+  calendarId?: string;
+  calendarSummary?: string;
+  calendarColor?: string;
 }
 
 async function googleFetch<T>(path: string, accessToken: string, options?: RequestInit) {
@@ -149,7 +154,11 @@ export async function deleteGoogleCalendarEvent(
   );
 }
 
-export async function fetchGoogleCalendarEvents(accessToken: string, calendarId: string) {
+export async function fetchGoogleCalendarEvents(
+  accessToken: string,
+  calendarId: string,
+  calendarMeta?: Pick<GoogleCalendarListItem, 'summary' | 'backgroundColor'>
+) {
   const params = new URLSearchParams({
     singleEvents: 'true',
     orderBy: 'startTime',
@@ -162,5 +171,10 @@ export async function fetchGoogleCalendarEvents(accessToken: string, calendarId:
     accessToken
   );
 
-  return data.items ?? [];
+  return (data.items ?? []).map(event => ({
+    ...event,
+    calendarId,
+    calendarSummary: calendarMeta?.summary,
+    calendarColor: calendarMeta?.backgroundColor,
+  }));
 }

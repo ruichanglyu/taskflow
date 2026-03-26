@@ -23,12 +23,14 @@ export function useGoogleCalendar(userId: string) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [calendars, setCalendars] = useState<GoogleCalendarListItem[]>([]);
   const [selectedCalendarId, setSelectedCalendarId] = useState<string>('');
+  const [visibleCalendarIds, setVisibleCalendarIds] = useState<string[]>([]);
   const [events, setEvents] = useState<GoogleCalendarEvent[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const calendarStorageKey = useMemo(() => getStorageKey(userId, 'selected-calendar'), [userId]);
+  const visibleCalendarsStorageKey = useMemo(() => getStorageKey(userId, 'visible-calendars'), [userId]);
   const tokenStorageKey = useMemo(() => getStorageKey(userId, 'access-token'), [userId]);
   const tokenExpiryStorageKey = useMemo(() => getStorageKey(userId, 'access-token-expiry'), [userId]);
   const connectedStorageKey = useMemo(() => getStorageKey(userId, 'connected'), [userId]);
@@ -39,6 +41,19 @@ export function useGoogleCalendar(userId: string) {
       setSelectedCalendarId(storedCalendarId);
     }
   }, [calendarStorageKey]);
+
+  useEffect(() => {
+    const storedVisible = localStorage.getItem(visibleCalendarsStorageKey);
+    if (!storedVisible) return;
+    try {
+      const parsed = JSON.parse(storedVisible);
+      if (Array.isArray(parsed)) {
+        setVisibleCalendarIds(parsed.filter((value): value is string => typeof value === 'string'));
+      }
+    } catch {
+      // ignore malformed local state
+    }
+  }, [visibleCalendarsStorageKey]);
 
   useEffect(() => {
     const storedToken = localStorage.getItem(tokenStorageKey);
@@ -64,6 +79,10 @@ export function useGoogleCalendar(userId: string) {
   }, [calendarStorageKey, selectedCalendarId]);
 
   useEffect(() => {
+    localStorage.setItem(visibleCalendarsStorageKey, JSON.stringify(visibleCalendarIds));
+  }, [visibleCalendarIds, visibleCalendarsStorageKey]);
+
+  useEffect(() => {
     if (accessToken) {
       localStorage.setItem(tokenStorageKey, accessToken);
       localStorage.setItem(connectedStorageKey, 'true');
@@ -71,6 +90,54 @@ export function useGoogleCalendar(userId: string) {
       localStorage.removeItem(tokenStorageKey);
     }
   }, [accessToken, connectedStorageKey, tokenStorageKey]);
+
+  const loadEventsForCalendars = useCallback(async (
+    token: string,
+    targetCalendars: GoogleCalendarListItem[],
+    nextVisibleIds?: string[],
+    nextSelectedCalendarId?: string
+  ) => {
+    const idsToShow = nextVisibleIds && nextVisibleIds.length > 0
+      ? nextVisibleIds
+      : nextSelectedCalendarId
+        ? [nextSelectedCalendarId]
+        : targetCalendars.find(calendar => calendar.primary)?.id
+          ? [targetCalendars.find(calendar => calendar.primary)!.id]
+          : targetCalendars[0]?.id
+            ? [targetCalendars[0].id]
+            : [];
+
+    const validIds = idsToShow.filter(id => targetCalendars.some(calendar => calendar.id === id));
+
+    if (validIds.length === 0) {
+      setEvents([]);
+      setVisibleCalendarIds([]);
+      return;
+    }
+
+    setVisibleCalendarIds(validIds);
+
+    const calendarLookup = new Map(targetCalendars.map(calendar => [calendar.id, calendar]));
+    const eventGroups = await Promise.all(
+      validIds.map(async calendarId => {
+        const calendarMeta = calendarLookup.get(calendarId);
+        return fetchGoogleCalendarEvents(token, calendarId, {
+          summary: calendarMeta?.summary,
+          backgroundColor: calendarMeta?.backgroundColor,
+        });
+      })
+    );
+
+    const mergedEvents = eventGroups
+      .flat()
+      .sort((a, b) => {
+        const aTime = a.start?.dateTime || a.start?.date || '';
+        const bTime = b.start?.dateTime || b.start?.date || '';
+        return aTime.localeCompare(bTime);
+      });
+
+    setEvents(mergedEvents);
+  }, []);
 
   const loadCalendarData = useCallback(async (token: string, nextCalendarId?: string) => {
     setIsLoading(true);
@@ -90,18 +157,18 @@ export function useGoogleCalendar(userId: string) {
       setSelectedCalendarId(fallbackCalendarId);
 
       if (!fallbackCalendarId) {
+        setVisibleCalendarIds([]);
         setEvents([]);
         return;
       }
 
-      const googleEvents = await fetchGoogleCalendarEvents(token, fallbackCalendarId);
-      setEvents(googleEvents);
+      await loadEventsForCalendars(token, googleCalendars, visibleCalendarIds, fallbackCalendarId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load Google Calendar.');
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCalendarId]);
+  }, [loadEventsForCalendars, selectedCalendarId, visibleCalendarIds]);
 
   const requestAccessToken = useCallback(async (prompt: '' | 'consent', silent = false) => {
     if (!isGoogleCalendarConfigured || !googleClientId) {
@@ -195,12 +262,14 @@ export function useGoogleCalendar(userId: string) {
     setCalendars([]);
     setEvents([]);
     setSelectedCalendarId('');
+    setVisibleCalendarIds([]);
     localStorage.removeItem(calendarStorageKey);
+    localStorage.removeItem(visibleCalendarsStorageKey);
     localStorage.removeItem(tokenStorageKey);
     localStorage.removeItem(tokenExpiryStorageKey);
     localStorage.removeItem(connectedStorageKey);
     setError(null);
-  }, [accessToken, calendarStorageKey, connectedStorageKey, tokenExpiryStorageKey, tokenStorageKey]);
+  }, [accessToken, calendarStorageKey, connectedStorageKey, tokenExpiryStorageKey, tokenStorageKey, visibleCalendarsStorageKey]);
 
   const refresh = useCallback(async () => {
     if (!accessToken) return;
@@ -211,7 +280,6 @@ export function useGoogleCalendar(userId: string) {
     setSelectedCalendarId(calendarId);
 
     if (!accessToken || !calendarId) {
-      setEvents([]);
       return;
     }
 
@@ -219,14 +287,38 @@ export function useGoogleCalendar(userId: string) {
     setError(null);
 
     try {
-      const googleEvents = await fetchGoogleCalendarEvents(accessToken, calendarId);
-      setEvents(googleEvents);
+      const nextVisible = visibleCalendarIds.length === 0 ? [calendarId] : visibleCalendarIds;
+      await loadEventsForCalendars(accessToken, calendars, nextVisible, calendarId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load calendar events.');
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, calendars, loadEventsForCalendars, visibleCalendarIds]);
+
+  const toggleCalendarVisibility = useCallback(async (calendarId: string) => {
+    if (!accessToken) return;
+
+    const nextVisible = visibleCalendarIds.includes(calendarId)
+      ? visibleCalendarIds.filter(id => id !== calendarId)
+      : [...visibleCalendarIds, calendarId];
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const fallbackSelected = nextVisible.includes(selectedCalendarId)
+        ? selectedCalendarId
+        : nextVisible[0] || calendars.find(calendar => calendar.primary)?.id || calendars[0]?.id || '';
+
+      setSelectedCalendarId(fallbackSelected);
+      await loadEventsForCalendars(accessToken, calendars, nextVisible, fallbackSelected);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update visible calendars.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [accessToken, calendars, loadEventsForCalendars, selectedCalendarId, visibleCalendarIds]);
 
   const createEvent = useCallback(async (event: NewGoogleCalendarEvent): Promise<boolean> => {
     if (!accessToken || !selectedCalendarId) return false;
@@ -274,11 +366,13 @@ export function useGoogleCalendar(userId: string) {
     error,
     calendars,
     selectedCalendarId,
+    visibleCalendarIds,
     events,
     connect,
     disconnect,
     refresh,
     chooseCalendar,
+    toggleCalendarVisibility,
     createEvent,
     deleteEvent,
   };

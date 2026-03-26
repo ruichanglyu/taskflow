@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { CalendarDays, ExternalLink, List, LayoutGrid, Plus, RefreshCcw, Trash2, Unplug } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ExternalLink, List, LayoutGrid, Plus, RefreshCcw, Trash2, Unplug } from 'lucide-react';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import { GoogleCalendarEvent } from '../lib/googleCalendar';
 import { CreateEventModal } from './CreateEventModal';
@@ -65,6 +65,106 @@ function getEventDateKey(event: GoogleCalendarEvent): string | null {
   if (event.start?.date) return event.start.date;
   if (event.start?.dateTime) return event.start.dateTime.slice(0, 10);
   return null;
+}
+
+function CalendarChecklist({
+  calendars,
+  visibleCalendarIds,
+  selectedCalendarId,
+  isLoading,
+  open,
+  onToggleOpen,
+  onToggleVisibility,
+  onChooseCalendar,
+}: {
+  calendars: ReturnType<typeof useGoogleCalendar>['calendars'];
+  visibleCalendarIds: string[];
+  selectedCalendarId: string;
+  isLoading: boolean;
+  open: boolean;
+  onToggleOpen: () => void;
+  onToggleVisibility: (id: string) => void;
+  onChooseCalendar: (id: string) => void;
+}) {
+  return (
+    <div className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm sm:p-5">
+      <button
+        type="button"
+        onClick={onToggleOpen}
+        className="mb-3 flex w-full items-center justify-between gap-2 text-left"
+      >
+        <span className="flex items-center gap-2">
+          <CalendarDays size={16} className="text-[var(--text-muted)]" />
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">My calendars</h2>
+        </span>
+        <ChevronDown
+          size={16}
+          className={cn(
+            'text-[var(--text-faint)] transition-transform',
+            open ? 'rotate-180' : 'rotate-0'
+          )}
+        />
+      </button>
+      {open && (
+        <div className="space-y-1.5">
+          {calendars.map(item => {
+            const checked = visibleCalendarIds.includes(item.id);
+            const isActive = selectedCalendarId === item.id;
+            const color = item.backgroundColor || '#818cf8';
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onToggleVisibility(item.id)}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left transition',
+                  checked ? 'bg-[var(--surface-muted)]' : 'hover:bg-[var(--surface-muted)]'
+                )}
+              >
+                <span
+                  className="flex h-5 w-5 items-center justify-center rounded-[6px] border-2"
+                  style={{
+                    borderColor: color,
+                    backgroundColor: checked ? color : 'transparent',
+                    color: checked ? '#111827' : 'transparent',
+                  }}
+                >
+                  <Check size={12} strokeWidth={3} />
+                </span>
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+                <span
+                  className={cn(
+                    'min-w-0 flex-1 truncate text-sm',
+                    checked ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+                  )}
+                >
+                  {item.summary}
+                  {item.primary ? ' (Primary)' : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={event => {
+                    event.stopPropagation();
+                    onChooseCalendar(item.id);
+                  }}
+                  className={cn(
+                    'rounded-full px-2 py-0.5 text-[10px] font-medium transition',
+                    isActive
+                      ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+                      : 'bg-[var(--surface)] text-[var(--text-faint)]'
+                  )}
+                >
+                  {isActive ? 'Active' : 'Use'}
+                </button>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {isLoading && <p className="mt-2 text-xs text-[var(--text-faint)]">Loading...</p>}
+    </div>
+  );
 }
 
 interface CalendarViewProps {
@@ -136,7 +236,10 @@ function DayPanel({
               key={event.id}
               className="group flex items-start gap-3 rounded-2xl bg-[var(--surface-muted)] p-3"
             >
-              <div className="mt-0.5 flex h-8 w-1 shrink-0 rounded-full bg-indigo-400" />
+              <div
+                className="mt-1 flex h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: event.calendarColor || '#818cf8' }}
+              />
               <div className="min-w-0 flex-1">
                 <h4 className="text-sm font-medium text-[var(--text-primary)] truncate">
                   {event.summary || 'Untitled event'}
@@ -182,6 +285,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createDate, setCreateDate] = useState<string | undefined>(undefined);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showCalendarList, setShowCalendarList] = useState(true);
 
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -357,25 +461,16 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
           />
 
           <div className="space-y-4">
-            <div className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm sm:p-5">
-              <div className="mb-3 flex items-center gap-2">
-                <CalendarDays size={16} className="text-[var(--text-muted)]" />
-                <h2 className="text-sm font-semibold text-[var(--text-primary)]">Calendar</h2>
-              </div>
-              <select
-                value={calendar.selectedCalendarId}
-                onChange={event => void calendar.chooseCalendar(event.target.value)}
-                className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
-              >
-                {calendar.calendars.map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.summary}
-                    {item.primary ? ' (Primary)' : ''}
-                  </option>
-                ))}
-              </select>
-              {calendar.isLoading && <p className="mt-2 text-xs text-[var(--text-faint)]">Loading...</p>}
-            </div>
+            <CalendarChecklist
+              calendars={calendar.calendars}
+              visibleCalendarIds={calendar.visibleCalendarIds}
+              selectedCalendarId={calendar.selectedCalendarId}
+              isLoading={calendar.isLoading}
+              open={showCalendarList}
+              onToggleOpen={() => setShowCalendarList(open => !open)}
+              onToggleVisibility={id => void calendar.toggleCalendarVisibility(id)}
+              onChooseCalendar={id => void calendar.chooseCalendar(id)}
+            />
 
             <DayPanel
               dateStr={selectedDate}
@@ -389,25 +484,16 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
         </div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <section className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <CalendarDays size={18} className="text-[var(--text-muted)]" />
-              <h2 className="text-sm font-semibold text-[var(--text-primary)]">Calendar</h2>
-            </div>
-            <select
-              value={calendar.selectedCalendarId}
-              onChange={event => void calendar.chooseCalendar(event.target.value)}
-              className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
-            >
-              {calendar.calendars.map(item => (
-                <option key={item.id} value={item.id}>
-                  {item.summary}
-                  {item.primary ? ' (Primary)' : ''}
-                </option>
-              ))}
-            </select>
-            {calendar.isLoading && <p className="mt-2 text-xs text-[var(--text-faint)]">Loading...</p>}
-          </section>
+          <CalendarChecklist
+            calendars={calendar.calendars}
+            visibleCalendarIds={calendar.visibleCalendarIds}
+            selectedCalendarId={calendar.selectedCalendarId}
+            isLoading={calendar.isLoading}
+            open={showCalendarList}
+            onToggleOpen={() => setShowCalendarList(open => !open)}
+            onToggleVisibility={id => void calendar.toggleCalendarVisibility(id)}
+            onChooseCalendar={id => void calendar.chooseCalendar(id)}
+          />
 
           <section className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
             <div className="mb-6 flex items-center justify-between gap-3">

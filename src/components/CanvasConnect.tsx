@@ -27,6 +27,7 @@ export function CanvasConnect({
   onClearError,
 }: CanvasConnectProps) {
   const [canvasUrl, setCanvasUrl] = useState('');
+  const [pendingDisconnect, setPendingDisconnect] = useState(false);
   const oauthConfigured = isCanvasOAuthConfigured();
 
   const handleSignIn = () => {
@@ -40,14 +41,8 @@ export function CanvasConnect({
     window.location.href = oauthUrl;
   };
 
-  const handleDisconnect = () => {
-    if (confirm('Disconnect Canvas? Imported deadlines will remain but won\'t sync anymore.')) {
-      onDisconnect();
-    }
-  };
-
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
       <div className="w-full max-w-lg rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
           <div className="flex items-center gap-2.5">
@@ -121,7 +116,7 @@ export function CanvasConnect({
                   {isSyncing ? 'Syncing...' : 'Sync Now'}
                 </button>
                 <button
-                  onClick={handleDisconnect}
+                  onClick={() => setPendingDisconnect(true)}
                   className="flex items-center gap-2 rounded-lg border border-[var(--border-soft)] px-4 py-2.5 text-sm font-medium text-red-400 transition hover:bg-red-400/10"
                 >
                   <Unplug size={15} />
@@ -197,6 +192,40 @@ export function CanvasConnect({
           )}
         </div>
       </div>
+      {pendingDisconnect && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setPendingDisconnect(false)}>
+          <div className="w-full max-w-md rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-[var(--text-primary)]">Disconnect Canvas?</h3>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  Imported deadlines will remain, but Canvas will stop syncing until you reconnect.
+                </p>
+              </div>
+              <button onClick={() => setPendingDisconnect(false)} className="rounded-xl p-1.5 text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setPendingDisconnect(false)}
+                className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  onDisconnect();
+                  setPendingDisconnect(false);
+                }}
+                className="rounded-xl border border-rose-500/30 bg-rose-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-600"
+              >
+                Disconnect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

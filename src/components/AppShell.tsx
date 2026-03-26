@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { LogOut, Menu, Search, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { View } from '../types';
 import { useStore } from '../hooks/useStore';
 import { useDeadlines } from '../hooks/useDeadlines';
@@ -33,21 +34,44 @@ interface Toast {
   message?: string;
 }
 
+const VIEW_PATHS: Record<View, string> = {
+  dashboard: '/dashboard',
+  deadlines: '/deadlines',
+  tasks: '/tasks',
+  projects: '/courses',
+  calendar: '/calendar',
+  timeline: '/timeline',
+  gym: '/gym',
+};
+
+function getViewFromPath(pathname: string): View {
+  if (pathname === '/deadlines') return 'deadlines';
+  if (pathname === '/tasks') return 'tasks';
+  if (pathname === '/courses') return 'projects';
+  if (pathname === '/calendar') return 'calendar';
+  if (pathname === '/timeline') return 'timeline';
+  if (pathname === '/gym') return 'gym';
+  return 'dashboard';
+}
+
 export function AppShell({ user }: AppShellProps) {
-  const [currentView, setCurrentView] = useState<View>('dashboard');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const currentView = getViewFromPath(location.pathname);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [projectFocusId, setProjectFocusId] = useState<string | null>(null);
-  const [deadlineCourseFilterId, setDeadlineCourseFilterId] = useState<string | null>(null);
-  const [deadlineFocusId, setDeadlineFocusId] = useState<string | null>(null);
-  const [taskProjectFilterId, setTaskProjectFilterId] = useState<string>('all');
   const store = useStore(user.id);
   const deadlineStore = useDeadlines(user.id);
   const canvasStore = useCanvas(user.id, store.projects);
   const gym = useGym(user.id);
   const { requestPermission } = useNotifications(store.tasks);
+  const searchParams = new URLSearchParams(location.search);
+  const projectFocusId = searchParams.get('project');
+  const deadlineCourseFilterId = searchParams.get('course');
+  const deadlineFocusId = searchParams.get('deadline');
+  const taskProjectFilterId = searchParams.get('project') ?? 'all';
 
   const pushToast = useCallback((tone: ToastTone, title: string, message?: string) => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
@@ -95,39 +119,39 @@ export function AppShell({ user }: AppShellProps) {
   };
 
   const handleViewChange = useCallback((view: View) => {
-    setCurrentView(view);
-    if (view !== 'projects') setProjectFocusId(null);
-    if (view !== 'deadlines') {
-      setDeadlineCourseFilterId(null);
-      setDeadlineFocusId(null);
-    }
-    if (view !== 'tasks') setTaskProjectFilterId('all');
-  }, []);
+    navigate(VIEW_PATHS[view]);
+  }, [navigate]);
 
   const openCourse = useCallback((projectId: string) => {
-    setProjectFocusId(projectId);
-    setCurrentView('projects');
-  }, []);
+    navigate(`/courses?project=${encodeURIComponent(projectId)}`);
+  }, [navigate]);
 
   const openCourseTasks = useCallback((projectId: string) => {
-    setTaskProjectFilterId(projectId);
-    setCurrentView('tasks');
-  }, []);
+    navigate(`/tasks?project=${encodeURIComponent(projectId)}`);
+  }, [navigate]);
 
   const openCourseDeadlines = useCallback((projectId: string) => {
-    setDeadlineCourseFilterId(projectId);
-    setDeadlineFocusId(null);
-    setCurrentView('deadlines');
-  }, []);
+    navigate(`/deadlines?course=${encodeURIComponent(projectId)}`);
+  }, [navigate]);
 
   const openDeadline = useCallback((deadlineId: string) => {
     const deadline = deadlineStore.deadlines.find(item => item.id === deadlineId);
-    if (deadline?.projectId) {
-      setDeadlineCourseFilterId(deadline.projectId);
+    const params = new URLSearchParams();
+    params.set('deadline', deadlineId);
+    if (deadline?.projectId) params.set('course', deadline.projectId);
+    navigate(`/deadlines?${params.toString()}`);
+  }, [deadlineStore.deadlines, navigate]);
+
+  useEffect(() => {
+    if (location.pathname === '/') {
+      navigate('/dashboard', { replace: true });
+      return;
     }
-    setDeadlineFocusId(deadlineId);
-    setCurrentView('deadlines');
-  }, [deadlineStore.deadlines]);
+
+    if (!Object.values(VIEW_PATHS).includes(location.pathname as View extends never ? never : string)) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [location.pathname, navigate]);
 
   const handleAddDeadline = useCallback(async (...args: Parameters<typeof deadlineStore.addDeadline>) => {
     const ok = await deadlineStore.addDeadline(...args);

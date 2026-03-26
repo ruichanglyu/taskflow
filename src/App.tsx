@@ -20,10 +20,9 @@ function handleCanvasCallback() {
     const state = params.get('state');
     if (code && state) {
       const newParams = new URLSearchParams({ canvas_code: code, canvas_state: state });
-      window.history.replaceState({}, '', `/?${newParams.toString()}`);
+      window.history.replaceState({}, '', `/calendar?${newParams.toString()}`);
     } else {
-      // No code — just go home
-      window.history.replaceState({}, '', '/');
+      window.history.replaceState({}, '', '/calendar');
     }
   }
 }

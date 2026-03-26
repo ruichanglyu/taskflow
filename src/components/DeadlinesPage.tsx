@@ -281,6 +281,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [quickFilter, setQuickFilter] = useState<DeadlineQuickFilter>('all');
   const [viewMode, setViewMode] = useState<DeadlineViewMode>('table');
+  const [showCompletedHistory, setShowCompletedHistory] = useState(false);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -367,6 +368,35 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
         deadlines: courseDeadlines,
       }));
   }, [filtered, projects]);
+
+  const canCollapseCompletedHistory =
+    !search.trim() &&
+    !filterCourse &&
+    !filterType &&
+    !filterStatus &&
+    quickFilter === 'all' &&
+    sortField === 'dueDate' &&
+    sortDir === 'asc';
+
+  const leadingCompletedCount = useMemo(() => {
+    if (!canCollapseCompletedHistory) return 0;
+    let count = 0;
+    for (const deadline of filtered) {
+      if (deadline.status === 'done' || deadline.status === 'missed') {
+        count++;
+      } else {
+        break;
+      }
+    }
+    return count;
+  }, [canCollapseCompletedHistory, filtered]);
+
+  const visibleDeadlines = useMemo(() => {
+    if (!canCollapseCompletedHistory || showCompletedHistory || leadingCompletedCount === 0) {
+      return filtered;
+    }
+    return filtered.slice(leadingCompletedCount);
+  }, [canCollapseCompletedHistory, filtered, leadingCompletedCount, showCompletedHistory]);
 
   const activeFilters = [search, filterCourse, filterType, filterStatus, quickFilter !== 'all' ? quickFilter : ''].filter(Boolean).length;
   const detailDeadline = detailId ? deadlines.find(d => d.id === detailId) : null;
@@ -652,14 +682,49 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
         </div>
       )}
 
+      {leadingCompletedCount > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 shadow-sm">
+          <div className="text-sm text-[var(--text-secondary)]">
+            {showCompletedHistory
+              ? `Showing ${leadingCompletedCount} older completed or missed deadlines first.`
+              : `Collapsed ${leadingCompletedCount} older completed or missed deadlines so you can focus on what is still active.`}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCompletedHistory(current => !current)}
+            className="rounded-xl border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+          >
+            {showCompletedHistory ? 'Hide History' : 'Show History'}
+          </button>
+        </div>
+      )}
+
       {viewMode === 'course' ? (
         <div className="space-y-4">
-          {groupedByCourse.length === 0 ? (
+          {(canCollapseCompletedHistory && !showCompletedHistory
+            ? groupedByCourse
+                .map(group => ({
+                  ...group,
+                  deadlines: group.deadlines.filter(deadline =>
+                    visibleDeadlines.some(visible => visible.id === deadline.id)
+                  ),
+                }))
+                .filter(group => group.deadlines.length > 0)
+            : groupedByCourse).length === 0 ? (
             <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
               No deadlines match your filters.
             </div>
           ) : (
-            groupedByCourse.map(group => (
+            (canCollapseCompletedHistory && !showCompletedHistory
+              ? groupedByCourse
+                  .map(group => ({
+                    ...group,
+                    deadlines: group.deadlines.filter(deadline =>
+                      visibleDeadlines.some(visible => visible.id === deadline.id)
+                    ),
+                  }))
+                  .filter(group => group.deadlines.length > 0)
+              : groupedByCourse).map(group => (
               <div key={group.courseName} className="overflow-hidden rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm">
                 <div className="flex items-center justify-between border-b border-[var(--border-soft)] bg-[var(--surface-muted)]/60 px-4 py-3">
                   <div>
@@ -705,12 +770,16 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
       ) : (
       <>
       <div className="grid gap-3 md:hidden">
-        {filtered.length === 0 ? (
+        {visibleDeadlines.length === 0 ? (
           <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
-            {deadlines.length === 0 ? 'No deadlines yet. Click "Add Deadline" to get started.' : 'No deadlines match your filters.'}
+            {deadlines.length === 0
+              ? 'No deadlines yet. Click "Add Deadline" to get started.'
+              : leadingCompletedCount > 0 && !showCompletedHistory
+                ? 'Everything currently visible is in completed history. Use "Show History" to review it.'
+                : 'No deadlines match your filters.'}
           </div>
         ) : (
-          filtered.map(dl => {
+          visibleDeadlines.map(dl => {
             const project = projects.find(p => p.id === dl.projectId);
             const days = daysUntil(dl.dueDate);
             const sm = statusMeta(dl.status);
@@ -788,14 +857,18 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {visibleDeadlines.length === 0 ? (
                 <tr>
                   <td colSpan={viewMode === 'table' ? 10 : 7} className="py-12 text-center text-sm text-[var(--text-faint)]">
-                    {deadlines.length === 0 ? 'No deadlines yet. Click "Add Deadline" to get started.' : 'No deadlines match your filters.'}
+                    {deadlines.length === 0
+                      ? 'No deadlines yet. Click "Add Deadline" to get started.'
+                      : leadingCompletedCount > 0 && !showCompletedHistory
+                        ? 'Everything currently visible is in completed history. Use "Show History" to review it.'
+                        : 'No deadlines match your filters.'}
                   </td>
                 </tr>
               ) : (
-                filtered.map(dl => {
+                visibleDeadlines.map(dl => {
                   const project = projects.find(p => p.id === dl.projectId);
                   const days = daysUntil(dl.dueDate);
                   const sm = statusMeta(dl.status);

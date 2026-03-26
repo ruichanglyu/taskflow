@@ -227,12 +227,6 @@ export function GymPage(props: GymPageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Gym</h1>
-        </div>
-      </div>
-
       {/* Tab bar */}
       <div className="flex gap-1 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 shadow-sm">
         {tabs.map(t => (
@@ -271,6 +265,7 @@ function PlanTab(props: GymPageProps) {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(activePlan?.id ?? plans[0]?.id ?? null);
   const [showNewPlan, setShowNewPlan] = useState(false);
   const [showImportPlan, setShowImportPlan] = useState(false);
+  const [pendingDeletePlan, setPendingDeletePlan] = useState<WorkoutPlan | null>(null);
   const [newPlanName, setNewPlanName] = useState('');
   const [newPlanDays, setNewPlanDays] = useState(5);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
@@ -407,31 +402,6 @@ function PlanTab(props: GymPageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(34,197,94,0.16),rgba(56,189,248,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-2xl">
-            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Gym</h1>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">Manage workout plans on the left, open one to edit its days, and keep the active plan ready for training.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setShowNewPlan(true)}
-              className="flex items-center gap-1.5 rounded-2xl px-4 py-2 text-xs font-medium text-[var(--accent-contrast)] shadow-lg"
-              style={{ backgroundColor: 'var(--accent-strong)', boxShadow: '0 16px 34px var(--glow-accent)' }}
-            >
-              <Plus size={14} />
-              New Plan
-            </button>
-            <button
-              onClick={() => setShowImportPlan(true)}
-              className="flex items-center gap-1.5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
-            >
-              Import Plan
-            </button>
-          </div>
-        </div>
-      </div>
-
       <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-4">
           <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
@@ -593,7 +563,7 @@ function PlanTab(props: GymPageProps) {
                       Import plan
                     </button>
                     <button
-                      onClick={() => { if (confirm('Delete this plan?')) props.onDeletePlan(selectedPlan.id); }}
+                      onClick={() => setPendingDeletePlan(selectedPlan)}
                       className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs font-medium text-[var(--text-faint)] transition hover:text-red-400"
                     >
                       Delete
@@ -744,6 +714,47 @@ function PlanTab(props: GymPageProps) {
                 style={{ backgroundColor: 'var(--accent-strong)' }}
               >
                 {isImporting ? 'Importing...' : 'Import Plan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDeletePlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setPendingDeletePlan(null)}>
+          <div
+            className="w-full max-w-md rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-5 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-[var(--text-primary)]">Delete workout plan?</h3>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  This will permanently remove <span className="font-medium text-[var(--text-primary)]">{pendingDeletePlan.name}</span> and its days.
+                </p>
+              </div>
+              <button
+                onClick={() => setPendingDeletePlan(null)}
+                className="text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setPendingDeletePlan(null)}
+                className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  props.onDeletePlan(pendingDeletePlan.id);
+                  setPendingDeletePlan(null);
+                }}
+                className="rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-2 text-sm font-medium text-rose-200 transition hover:border-rose-400/30 hover:bg-rose-400/15"
+              >
+                Delete Plan
               </button>
             </div>
           </div>

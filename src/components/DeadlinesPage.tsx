@@ -1318,7 +1318,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                 type="button"
                 onClick={() => void handleDeleteAll()}
                 disabled={isDeletingAll}
-                className="flex-1 rounded-lg border border-rose-400/20 bg-rose-400/10 py-2.5 text-sm font-medium text-rose-200 transition hover:bg-rose-400/15 disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex-1 rounded-lg bg-rose-500 py-2.5 text-sm font-medium text-white transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {isDeletingAll ? 'Deleting...' : 'Delete All'}
               </button>

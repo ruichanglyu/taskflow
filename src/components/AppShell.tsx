@@ -326,7 +326,7 @@ export function AppShell({ user }: AppShellProps) {
           </div>
         </header>
 
-        <main className="relative z-[1] flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main className="relative flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           {(store.error || deadlineStore.error || canvasStore.error) && (
             <div className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
               <p>{store.error || deadlineStore.error || canvasStore.error}</p>

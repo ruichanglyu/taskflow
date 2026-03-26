@@ -282,6 +282,7 @@ function PlanTab(props: GymPageProps) {
   const [importText, setImportText] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [pendingDeleteDay, setPendingDeleteDay] = useState<WorkoutDayTemplate | null>(null);
 
   // Wizard modal state
   const [wizardStep, setWizardStep] = useState<'days' | 'exercises' | null>(null);
@@ -616,7 +617,7 @@ function PlanTab(props: GymPageProps) {
                                       exercises={exercises}
                                       dayExercises={dayExercises.filter(de => de.workoutDayTemplateId === day.id).sort((a, b) => a.position - b.position)}
                                       onUpdateDay={props.onUpdateDayTemplate}
-                                      onDeleteDay={props.onDeleteDayTemplate}
+                                      onRequestDeleteDay={() => setPendingDeleteDay(day)}
                                       onUpdateDayExercise={props.onUpdateDayExercise}
                                       onDeleteDayExercise={props.onDeleteDayExercise}
                                       onOpenExerciseWizard={() => openExerciseWizardForDay(day.id)}
@@ -1171,7 +1172,7 @@ function ExerciseLibraryTab(props: GymPageProps) {
 // --- Workout Day Card ---
 function WorkoutDayCard({
   day, dayNumber, isExpanded, onToggle, exercises, dayExercises,
-  onUpdateDay, onDeleteDay, onUpdateDayExercise, onDeleteDayExercise, onOpenExerciseWizard,
+  onUpdateDay, onRequestDeleteDay, onUpdateDayExercise, onDeleteDayExercise, onOpenExerciseWizard,
   dragHandleProps, isDragging,
 }: {
   day: WorkoutDayTemplate;
@@ -1181,7 +1182,7 @@ function WorkoutDayCard({
   exercises: Exercise[];
   dayExercises: WorkoutDayExercise[];
   onUpdateDay: GymPageProps['onUpdateDayTemplate'];
-  onDeleteDay: GymPageProps['onDeleteDayTemplate'];
+  onRequestDeleteDay: () => void;
   onUpdateDayExercise: GymPageProps['onUpdateDayExercise'];
   onDeleteDayExercise: GymPageProps['onDeleteDayExercise'];
   onOpenExerciseWizard: () => void;
@@ -1238,7 +1239,7 @@ function WorkoutDayCard({
           </div>
           <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
             <button onClick={() => { setEditName(day.name); setIsEditing(true); }} className="p-1.5 text-[var(--text-faint)] hover:text-[var(--text-primary)] transition"><Edit3 size={14} /></button>
-            <button onClick={() => { if (confirm('Delete this day?')) onDeleteDay(day.id); }} className="p-1.5 text-[var(--text-faint)] hover:text-red-400 transition"><Trash2 size={14} /></button>
+            <button onClick={onRequestDeleteDay} className="p-1.5 text-[var(--text-faint)] hover:text-red-400 transition"><Trash2 size={14} /></button>
           </div>
           {isExpanded ? <ChevronDown size={16} className="text-[var(--text-faint)]" /> : <ChevronRight size={16} className="text-[var(--text-faint)]" />}
         </button>
@@ -1711,6 +1712,59 @@ function ExerciseEditorModal({
             style={{ backgroundColor: 'var(--accent-strong)' }}
           >
             {isSaving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmModal({
+  title,
+  message,
+  confirmLabel,
+  confirmTone = 'danger',
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  message: ReactNode;
+  confirmLabel: string;
+  confirmTone?: 'danger' | 'primary';
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onCancel}>
+      <div className="w-full max-w-md rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h3>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">{message}</p>
+          </div>
+          <button onClick={onCancel} className="rounded-xl p-1.5 text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className={cn(
+              'rounded-xl px-4 py-2 text-sm font-medium transition',
+              confirmTone === 'danger'
+                ? 'border border-rose-500/30 bg-rose-500 text-white hover:bg-rose-600'
+                : 'text-[var(--accent-contrast)]'
+            )}
+            style={confirmTone === 'primary' ? { backgroundColor: 'var(--accent-strong)' } : undefined}
+          >
+            {confirmLabel}
           </button>
         </div>
       </div>

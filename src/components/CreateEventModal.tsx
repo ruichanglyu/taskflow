@@ -31,7 +31,7 @@ export function CreateEventModal({
   const [allDay, setAllDay] = useState(false);
   const [startDate, setStartDate] = useState(initialDate ?? '');
   const [startTime, setStartTime] = useState(initialStartTime ?? '09:00');
-  const [endDate, setEndDate] = useState('');
+  const [endDate, setEndDate] = useState(initialDate ?? '');
   const [endTime, setEndTime] = useState(initialEndTime ?? '10:00');
   const [calendarId, setCalendarId] = useState(initialCalendarId ?? '');
   const [isSaving, setIsSaving] = useState(false);

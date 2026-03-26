@@ -330,6 +330,7 @@ function WeekCalendarGrid({
   events,
   deadlines = [],
   selectedDate,
+  draftPreview,
   onSelectDate,
   onCreateEventAt,
 }: {
@@ -337,6 +338,7 @@ function WeekCalendarGrid({
   events: GoogleCalendarEvent[];
   deadlines?: import('../types').Deadline[];
   selectedDate: string;
+  draftPreview: { dateKey: string; startMinutes: number; endMinutes: number } | null;
   onSelectDate: (date: string) => void;
   onCreateEventAt: (
     date: string,
@@ -535,7 +537,7 @@ function WeekCalendarGrid({
             const previewEndMinutes = dragSelection?.dateKey === key
               ? Math.max(dragSelection.startMinutes, dragSelection.currentMinutes) + 15
               : previewStartMinutes !== null
-                ? Math.min(previewStartMinutes + 60, 24 * 60)
+                ? Math.min(previewStartMinutes + 15, 24 * 60)
                 : null;
 
             return (
@@ -603,9 +605,25 @@ function WeekCalendarGrid({
                   />
                 ))}
 
+                {draftPreview?.dateKey === key && (
+                  <div
+                    className="pointer-events-none absolute left-1.5 right-1.5 z-10 overflow-hidden rounded-lg"
+                    style={{
+                      top: `${((draftPreview.startMinutes - 300) / 60) * rowHeight}px`,
+                      height: `${Math.max(((draftPreview.endMinutes - draftPreview.startMinutes) / 60) * rowHeight, rowHeight / 4)}px`,
+                      backgroundColor: 'var(--accent-soft)',
+                      borderLeft: '3px solid var(--accent)',
+                    }}
+                  >
+                    <div className="px-2 py-1 text-[10px] font-medium text-[var(--accent)]">
+                      (No title)
+                    </div>
+                  </div>
+                )}
+
                 {previewStartMinutes !== null && previewEndMinutes !== null && (
                   <div
-                    className="pointer-events-none absolute left-1.5 right-1.5 z-10 overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--surface-muted)]/95 shadow-sm"
+                    className="pointer-events-none absolute left-1.5 right-1.5 z-20 overflow-hidden rounded-md bg-[var(--surface-muted)]/95"
                     style={{
                       top: `${((previewStartMinutes - 300) / 60) * rowHeight}px`,
                       height: `${Math.max(((previewEndMinutes - previewStartMinutes) / 60) * rowHeight, rowHeight / 4)}px`,
@@ -663,6 +681,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
   const [createStartTime, setCreateStartTime] = useState<string | undefined>(undefined);
   const [createEndTime, setCreateEndTime] = useState<string | undefined>(undefined);
   const [createAnchorRect, setCreateAnchorRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const [weekDraftPreview, setWeekDraftPreview] = useState<{ dateKey: string; startMinutes: number; endMinutes: number } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showCalendarList, setShowCalendarList] = useState(true);
 
@@ -695,6 +714,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
     setCreateStartTime(undefined);
     setCreateEndTime(undefined);
     setCreateAnchorRect(null);
+    setWeekDraftPreview(null);
     setShowCreateModal(true);
   };
 
@@ -708,7 +728,27 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
     setCreateStartTime(startTime);
     setCreateEndTime(endTime);
     setCreateAnchorRect(anchorRect);
+    const [startHour, startMinute] = startTime.split(':').map(Number);
+    const [endHour, endMinute] = endTime.split(':').map(Number);
+    setWeekDraftPreview({
+      dateKey: date,
+      startMinutes: startHour * 60 + startMinute,
+      endMinutes: endHour * 60 + endMinute,
+    });
     setShowCreateModal(true);
+  };
+
+  const handleCloseCreateModal = () => {
+    setShowCreateModal(false);
+    setWeekDraftPreview(null);
+  };
+
+  const handleSaveEvent = async (event: import('../lib/googleCalendar').NewGoogleCalendarEvent, calendarId?: string) => {
+    const ok = await calendar.createEvent(event, calendarId);
+    if (ok) {
+      setWeekDraftPreview(null);
+    }
+    return ok;
   };
 
   const handleDelete = async (eventId: string) => {
@@ -927,6 +967,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
               events={calendar.events}
               deadlines={deadlines}
               selectedDate={selectedDate}
+              draftPreview={weekDraftPreview}
               onSelectDate={setSelectedDate}
               onCreateEventAt={handleCreateFromWeekSlot}
             />
@@ -1055,8 +1096,8 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
           initialCalendarId={calendar.selectedCalendarId}
           compact={viewMode === 'week'}
           anchorRect={createAnchorRect}
-          onSave={calendar.createEvent}
-          onClose={() => setShowCreateModal(false)}
+          onSave={handleSaveEvent}
+          onClose={handleCloseCreateModal}
         />
       )}
     </div>

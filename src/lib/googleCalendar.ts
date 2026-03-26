@@ -160,14 +160,19 @@ export async function deleteGoogleCalendarEvent(
 export async function fetchGoogleCalendarEvents(
   accessToken: string,
   calendarId: string,
-  calendarMeta?: Pick<GoogleCalendarListItem, 'summary' | 'backgroundColor'>
+  calendarMeta?: Pick<GoogleCalendarListItem, 'summary' | 'backgroundColor'>,
+  range?: { timeMin?: string; timeMax?: string }
 ) {
   const params = new URLSearchParams({
     singleEvents: 'true',
     orderBy: 'startTime',
     maxResults: '50',
-    timeMin: new Date().toISOString(),
+    timeMin: range?.timeMin || new Date().toISOString(),
   });
+
+  if (range?.timeMax) {
+    params.set('timeMax', range.timeMax);
+  }
 
   const data = await googleFetch<{ items?: GoogleCalendarEvent[] }>(
     `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,

@@ -25,6 +25,18 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
+function startOfMonthGrid(year: number, month: number) {
+  const first = new Date(year, month, 1);
+  first.setHours(0, 0, 0, 0);
+  return addDays(first, -first.getDay());
+}
+
+function endOfMonthGrid(year: number, month: number) {
+  const last = new Date(year, month + 1, 0);
+  last.setHours(0, 0, 0, 0);
+  return addDays(last, 7 - last.getDay());
+}
+
 function formatWeekRangeLabel(start: Date) {
   const end = addDays(start, 6);
   const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
@@ -692,6 +704,38 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
   const todayStr = formatDateKey(now);
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const weekStart = useMemo(() => startOfWeek(new Date(`${selectedDate}T00:00:00`)), [selectedDate]);
+  const visibleRange = useMemo(() => {
+    if (viewMode === 'week') {
+      const rangeStart = new Date(weekStart);
+      rangeStart.setHours(0, 0, 0, 0);
+      const rangeEnd = addDays(rangeStart, 7);
+      rangeEnd.setHours(0, 0, 0, 0);
+      return {
+        timeMin: rangeStart.toISOString(),
+        timeMax: rangeEnd.toISOString(),
+      };
+    }
+
+    if (viewMode === 'month') {
+      const rangeStart = startOfMonthGrid(year, month);
+      const rangeEnd = endOfMonthGrid(year, month);
+      rangeStart.setHours(0, 0, 0, 0);
+      rangeEnd.setHours(0, 0, 0, 0);
+      return {
+        timeMin: rangeStart.toISOString(),
+        timeMax: rangeEnd.toISOString(),
+      };
+    }
+
+    return {
+      timeMin: new Date().toISOString(),
+      timeMax: undefined,
+    };
+  }, [month, viewMode, weekStart, year]);
+
+  useEffect(() => {
+    calendar.setVisibleRange(visibleRange);
+  }, [calendar, visibleRange]);
 
   const handlePrevMonth = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1); }

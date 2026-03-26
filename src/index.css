@@ -52,6 +52,130 @@
   --glow-warm: rgba(249, 115, 22, 0.10);
 }
 
+/* Matcha theme */
+:root[data-theme="matcha"] {
+  --bg-app: #f5f0e8;
+  --bg-app-soft: rgba(245, 240, 232, 0.92);
+  --bg-auth: radial-gradient(circle at top left, rgba(143, 174, 126, 0.18), transparent 24%), radial-gradient(circle at top right, rgba(198, 167, 120, 0.14), transparent 28%), linear-gradient(180deg, #f5f0e8 0%, #ebe4d6 100%);
+  --surface: rgba(255, 252, 247, 0.96);
+  --surface-muted: rgba(143, 174, 126, 0.08);
+  --surface-strong: #faf7f2;
+  --surface-elevated: rgba(255, 253, 250, 0.98);
+  --border-soft: rgba(107, 114, 86, 0.12);
+  --border-strong: rgba(107, 114, 86, 0.24);
+  --text-primary: #2d3a24;
+  --text-secondary: #4a5940;
+  --text-muted: #7a8672;
+  --text-faint: #a3ac98;
+  --accent: #7a9e65;
+  --accent-strong: #5e8248;
+  --accent-soft: rgba(122, 158, 101, 0.14);
+  --accent-contrast: #ffffff;
+  --sidebar-gradient: linear-gradient(135deg, #7a9e65 0%, #c6a778 100%);
+  --avatar-gradient: linear-gradient(135deg, #7a9e65 0%, #d4a76a 100%);
+  --shadow-color: rgba(45, 58, 36, 0.08);
+  --glow-accent: rgba(122, 158, 101, 0.14);
+  --glow-warm: rgba(198, 167, 120, 0.10);
+}
+
+/* Sakura theme */
+:root[data-theme="sakura"] {
+  --bg-app: #fef6f6;
+  --bg-app-soft: rgba(254, 246, 246, 0.92);
+  --bg-auth: radial-gradient(circle at top left, rgba(232, 160, 191, 0.18), transparent 24%), radial-gradient(circle at top right, rgba(248, 187, 208, 0.14), transparent 28%), linear-gradient(180deg, #fef6f6 0%, #fce8ef 100%);
+  --surface: rgba(255, 253, 253, 0.96);
+  --surface-muted: rgba(232, 160, 191, 0.08);
+  --surface-strong: #fffbfc;
+  --surface-elevated: rgba(255, 254, 254, 0.98);
+  --border-soft: rgba(180, 100, 130, 0.10);
+  --border-strong: rgba(180, 100, 130, 0.20);
+  --text-primary: #3d2432;
+  --text-secondary: #5e3d4e;
+  --text-muted: #9a7387;
+  --text-faint: #c4a3b3;
+  --accent: #d4829e;
+  --accent-strong: #c06888;
+  --accent-soft: rgba(212, 130, 158, 0.14);
+  --accent-contrast: #ffffff;
+  --sidebar-gradient: linear-gradient(135deg, #d4829e 0%, #e8a0bf 100%);
+  --avatar-gradient: linear-gradient(135deg, #d4829e 0%, #f0b8a8 100%);
+  --shadow-color: rgba(61, 36, 50, 0.08);
+  --glow-accent: rgba(212, 130, 158, 0.14);
+  --glow-warm: rgba(240, 184, 168, 0.10);
+}
+
+/* Cloud theme */
+:root[data-theme="cloud"] {
+  --bg-app: #f0f5ff;
+  --bg-app-soft: rgba(240, 245, 255, 0.92);
+  --bg-auth: radial-gradient(circle at top left, rgba(137, 180, 232, 0.18), transparent 24%), radial-gradient(circle at top right, rgba(180, 160, 212, 0.14), transparent 28%), linear-gradient(180deg, #f0f5ff 0%, #e4ecfa 100%);
+  --surface: rgba(255, 255, 255, 0.96);
+  --surface-muted: rgba(137, 180, 232, 0.08);
+  --surface-strong: #f8faff;
+  --surface-elevated: rgba(255, 255, 255, 0.98);
+  --border-soft: rgba(70, 100, 160, 0.10);
+  --border-strong: rgba(70, 100, 160, 0.20);
+  --text-primary: #1e2d48;
+  --text-secondary: #3a4e6c;
+  --text-muted: #6b82a6;
+  --text-faint: #9fb0c8;
+  --accent: #6a9fd8;
+  --accent-strong: #4d86c6;
+  --accent-soft: rgba(106, 159, 216, 0.14);
+  --accent-contrast: #ffffff;
+  --sidebar-gradient: linear-gradient(135deg, #6a9fd8 0%, #a890d0 100%);
+  --avatar-gradient: linear-gradient(135deg, #6a9fd8 0%, #e8a0bf 100%);
+  --shadow-color: rgba(30, 45, 72, 0.08);
+  --glow-accent: rgba(106, 159, 216, 0.14);
+  --glow-warm: rgba(168, 144, 208, 0.10);
+}
+
+/* Lavender theme */
+:root[data-theme="lavender"] {
+  --bg-app: #f5f0ff;
+  --bg-app-soft: rgba(245, 240, 255, 0.92);
+  --bg-auth: radial-gradient(circle at top left, rgba(180, 160, 212, 0.18), transparent 24%), radial-gradient(circle at top right, rgba(200, 170, 230, 0.14), transparent 28%), linear-gradient(180deg, #f5f0ff 0%, #ece4fa 100%);
+  --surface: rgba(255, 253, 255, 0.96);
+  --surface-muted: rgba(160, 140, 200, 0.08);
+  --surface-strong: #faf8ff;
+  --surface-elevated: rgba(255, 254, 255, 0.98);
+  --border-soft: rgba(120, 90, 170, 0.10);
+  --border-strong: rgba(120, 90, 170, 0.20);
+  --text-primary: #2e2244;
+  --text-secondary: #4a3d62;
+  --text-muted: #8272a0;
+  --text-faint: #b0a4c4;
+  --accent: #9b7ec8;
+  --accent-strong: #8264b4;
+  --accent-soft: rgba(155, 126, 200, 0.14);
+  --accent-contrast: #ffffff;
+  --sidebar-gradient: linear-gradient(135deg, #9b7ec8 0%, #d4829e 100%);
+  --avatar-gradient: linear-gradient(135deg, #9b7ec8 0%, #6a9fd8 100%);
+  --shadow-color: rgba(46, 34, 68, 0.08);
+  --glow-accent: rgba(155, 126, 200, 0.14);
+  --glow-warm: rgba(212, 130, 158, 0.10);
+}
+
+/* Font family variable */
+:root {
+  --font-family: 'Inter', system-ui, sans-serif;
+  --font-size-base: 14px;
+}
+
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+}
+
+/* Date input styling for new themes */
+:root[data-theme="matcha"] input[type="date"]::-webkit-calendar-picker-indicator,
+:root[data-theme="sakura"] input[type="date"]::-webkit-calendar-picker-indicator,
+:root[data-theme="cloud"] input[type="date"]::-webkit-calendar-picker-indicator,
+:root[data-theme="lavender"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none;
+  cursor: pointer;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

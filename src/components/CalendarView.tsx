@@ -356,6 +356,16 @@ function DayPanel({
   deletingId: string | null;
   onCreateEvent: () => void;
 }) {
+  if (!dateStr) {
+    return (
+      <div className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+        <div className="flex min-h-[180px] items-center justify-center rounded-2xl border border-dashed border-[var(--border-soft)] text-sm text-[var(--text-faint)]">
+          Select a day to see its events.
+        </div>
+      </div>
+    );
+  }
+
   const dayDeadlines = deadlines.filter(d => d.dueDate === dateStr);
   const dateLabel = new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', {
     weekday: 'long',
@@ -851,6 +861,10 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
   }, [calendar, visibleRange]);
 
   const selectDate = (date: string) => {
+    if (selectedDate === date) {
+      setSelectedDate('');
+      return;
+    }
     setSelectedDate(date);
     setViewDate(date);
   };
@@ -866,6 +880,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
   };
 
   const handleCreateFromDate = (date: string) => {
+    if (!date) return;
     setCreateDate(date);
     setCreateStartTime(undefined);
     setCreateEndTime(undefined);
@@ -1178,7 +1193,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
               selectedDate={selectedDate}
               onPrevMonth={() => handleShiftMonth(-1)}
               onNextMonth={() => handleShiftMonth(1)}
-              onSelectDate={syncSelectedDate}
+              onSelectDate={selectDate}
             />
 
             <CalendarChecklist

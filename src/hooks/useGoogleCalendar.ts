@@ -99,7 +99,7 @@ export function useGoogleCalendar(userId: string) {
     nextVisibleIds?: string[],
     nextSelectedCalendarId?: string
   ) => {
-    const idsToShow = nextVisibleIds && nextVisibleIds.length > 0
+    const idsToShow = nextVisibleIds !== undefined
       ? nextVisibleIds
       : nextSelectedCalendarId
         ? [nextSelectedCalendarId]
@@ -164,13 +164,19 @@ export function useGoogleCalendar(userId: string) {
         return;
       }
 
-      await loadEventsForCalendars(token, googleCalendars, visibleCalendarIdsRef.current, fallbackCalendarId);
+      const hasStoredVisiblePreference = localStorage.getItem(visibleCalendarsStorageKey) !== null;
+      await loadEventsForCalendars(
+        token,
+        googleCalendars,
+        hasStoredVisiblePreference ? visibleCalendarIdsRef.current : undefined,
+        fallbackCalendarId
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load Google Calendar.');
     } finally {
       setIsLoading(false);
     }
-  }, [loadEventsForCalendars, selectedCalendarId]);
+  }, [loadEventsForCalendars, selectedCalendarId, visibleCalendarsStorageKey]);
 
   const requestAccessToken = useCallback(async (prompt: '' | 'consent', silent = false) => {
     if (!isGoogleCalendarConfigured || !googleClientId) {
@@ -289,7 +295,7 @@ export function useGoogleCalendar(userId: string) {
     setError(null);
 
     try {
-      const nextVisible = visibleCalendarIds.length === 0 ? [calendarId] : visibleCalendarIds;
+      const nextVisible = visibleCalendarIds;
       await loadEventsForCalendars(accessToken, calendars, nextVisible, calendarId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load calendar events.');
@@ -309,9 +315,11 @@ export function useGoogleCalendar(userId: string) {
     setError(null);
 
     try {
-      const fallbackSelected = nextVisible.includes(selectedCalendarId)
-        ? selectedCalendarId
-        : nextVisible[0] || calendars.find(calendar => calendar.primary)?.id || calendars[0]?.id || '';
+      const fallbackSelected = nextVisible.length === 0
+        ? ''
+        : nextVisible.includes(selectedCalendarId)
+          ? selectedCalendarId
+          : nextVisible[0];
 
       setSelectedCalendarId(fallbackSelected);
       await loadEventsForCalendars(accessToken, calendars, nextVisible, fallbackSelected);

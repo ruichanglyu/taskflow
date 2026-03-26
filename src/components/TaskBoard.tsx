@@ -220,7 +220,7 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
             placeholder="Search tasks..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] py-2.5 pr-4 pl-9 text-sm text-[var(--text-secondary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+            className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] py-2.5 pr-4 pl-9 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
           />
         </div>
         <div className="flex flex-wrap gap-2">

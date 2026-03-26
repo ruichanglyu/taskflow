@@ -227,6 +227,12 @@ export function GymPage(props: GymPageProps) {
 
   return (
     <div className="space-y-6">
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Gym</h1>
+        </div>
+      </div>
+
       {/* Tab bar */}
       <div className="flex gap-1 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 shadow-sm">
         {tabs.map(t => (

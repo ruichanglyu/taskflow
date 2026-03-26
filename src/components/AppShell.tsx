@@ -273,7 +273,6 @@ export function AppShell({ user }: AppShellProps) {
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-48 bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.14),transparent_60%)]" />
         <header className="sticky top-0 z-10 flex items-center gap-4 border-b border-[var(--border-soft)] bg-[var(--bg-app-soft)] px-4 py-4 backdrop-blur-xl sm:px-6">
           <button
             onClick={() => setSidebarOpen(true)}

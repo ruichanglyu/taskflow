@@ -277,7 +277,6 @@ function PlanTab(props: GymPageProps) {
   const [newPlanName, setNewPlanName] = useState('');
   const [newPlanDays, setNewPlanDays] = useState(5);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
-  const [showAddDay, setShowAddDay] = useState(false);
   const [newDayName, setNewDayName] = useState('');
   const [importText, setImportText] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
@@ -290,6 +289,7 @@ function PlanTab(props: GymPageProps) {
   const [wizExName, setWizExName] = useState('');
   const [wizExMuscle, setWizExMuscle] = useState('');
   const [wizExId, setWizExId] = useState('');
+  const [wizExImage, setWizExImage] = useState('');
   const [wizSets, setWizSets] = useState(3);
   const [wizReps, setWizReps] = useState('10');
   const [wizRest, setWizRest] = useState(45);
@@ -308,7 +308,6 @@ function PlanTab(props: GymPageProps) {
 
   useEffect(() => {
     setExpandedDay(null);
-    setShowAddDay(false);
   }, [selectedPlanId]);
 
   const selectedPlan = selectedPlanId
@@ -345,6 +344,7 @@ function PlanTab(props: GymPageProps) {
       setSelectedPlanId(planId);
       // Auto-open wizard to add days
       setWizardStep('days');
+      setWizardDayIndex(0);
       setNewDayName('');
     }
     setNewPlanName('');
@@ -355,10 +355,6 @@ function PlanTab(props: GymPageProps) {
     if (!selectedPlan || !newDayName.trim()) return;
     await props.onAddDayTemplate(selectedPlan.id, newDayName.trim());
     setNewDayName('');
-    // If in wizard, stay in the modal (don't close)
-    if (!wizardStep) {
-      setShowAddDay(false);
-    }
   };
 
   const handleImportPlan = async () => {
@@ -421,7 +417,7 @@ function PlanTab(props: GymPageProps) {
       await props.onAddDayExercise(currentDay.id, wizExId, wizSets, wizReps, wizRest);
     } else if (wizExName.trim()) {
       // Create new exercise + add
-      const exId = await props.onAddExercise(wizExName.trim(), wizExMuscle.trim(), '', undefined);
+      const exId = await props.onAddExercise(wizExName.trim(), wizExMuscle.trim(), '', wizExImage.trim() || undefined);
       if (exId) {
         await props.onAddDayExercise(currentDay.id, exId, wizSets, wizReps, wizRest);
       }
@@ -430,6 +426,26 @@ function PlanTab(props: GymPageProps) {
     setWizExName('');
     setWizExMuscle('');
     setWizExId('');
+    setWizExImage('');
+    setWizSets(3);
+    setWizReps('10');
+    setWizRest(45);
+  };
+
+  const openDayWizard = () => {
+    setWizardStep('days');
+    setNewDayName('');
+  };
+
+  const openExerciseWizardForDay = (dayId: string) => {
+    const dayIndex = selectedPlanDays.findIndex(day => day.id === dayId);
+    if (dayIndex < 0) return;
+    setWizardDayIndex(dayIndex);
+    setWizardStep('exercises');
+    setWizExName('');
+    setWizExMuscle('');
+    setWizExId('');
+    setWizExImage('');
     setWizSets(3);
     setWizReps('10');
     setWizRest(45);
@@ -524,42 +540,25 @@ function PlanTab(props: GymPageProps) {
                     <h3 className="text-sm font-semibold text-[var(--text-primary)]">Workout Days</h3>
                     <p className="mt-1 text-xs text-[var(--text-muted)]">{selectedPlanDays.length > 0 ? 'Click a day to see and edit exercises.' : 'Add days to structure your weekly routine.'}</p>
                   </div>
-                  {selectedPlanDays.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setShowAddDay(true)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                      >
-                        <Plus size={14} />
-                        Add Day
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={openDayWizard}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                    >
+                      <Plus size={14} />
+                      Add Day
+                    </button>
+                  </div>
                 </div>
 
-                {showAddDay && (
-                  <div className="mt-4 flex flex-col gap-2 rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] p-3 sm:flex-row">
-                    <input
-                      value={newDayName}
-                      onChange={e => setNewDayName(e.target.value)}
-                      placeholder="What's this day focused on? (e.g. Push, Upper Body, Chest + Triceps)"
-                      className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-                      onKeyDown={e => { if (e.key === 'Enter') handleAddDay(); if (e.key === 'Escape') setShowAddDay(false); }}
-                      autoFocus
-                    />
-                    <button onClick={handleAddDay} disabled={!newDayName.trim()} className="rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add</button>
-                    <button onClick={() => setShowAddDay(false)} className="rounded-lg border border-[var(--border-soft)] px-3 py-2.5 text-sm text-[var(--text-muted)]"><X size={16} /></button>
-                  </div>
-                )}
-
                 <div className="mt-4">
-                  {selectedPlanDays.length === 0 && !showAddDay ? (
+                  {selectedPlanDays.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-[var(--border-soft)] px-4 py-10 text-center">
                       <CalendarDays size={32} className="mx-auto mb-3 text-[var(--text-faint)]" />
                       <p className="mb-1 text-sm font-medium text-[var(--text-primary)]">No workout days yet</p>
                       <p className="mb-4 text-xs text-[var(--text-muted)]">Each day represents a workout session in your routine (e.g. Push, Pull, Legs).</p>
                       <button
-                        onClick={() => setShowAddDay(true)}
+                        onClick={openDayWizard}
                         className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium text-[var(--accent-contrast)]"
                         style={{ backgroundColor: 'var(--accent-strong)' }}
                       >
@@ -567,8 +566,6 @@ function PlanTab(props: GymPageProps) {
                         Add Your First Day
                       </button>
                     </div>
-                  ) : selectedPlanDays.length === 0 && showAddDay ? (
-                    <div />
                   ) : (
                     <DragDropContext onDragEnd={handleDayDragEnd}>
                       <Droppable droppableId="workout-days">
@@ -591,10 +588,9 @@ function PlanTab(props: GymPageProps) {
                                       dayExercises={dayExercises.filter(de => de.workoutDayTemplateId === day.id).sort((a, b) => a.position - b.position)}
                                       onUpdateDay={props.onUpdateDayTemplate}
                                       onDeleteDay={props.onDeleteDayTemplate}
-                                      onAddDayExercise={props.onAddDayExercise}
                                       onUpdateDayExercise={props.onUpdateDayExercise}
                                       onDeleteDayExercise={props.onDeleteDayExercise}
-                                      onAddExercise={props.onAddExercise}
+                                      onOpenExerciseWizard={() => openExerciseWizardForDay(day.id)}
                                       dragHandleProps={dragProvided.dragHandleProps}
                                       isDragging={dragSnapshot.isDragging}
                                     />
@@ -875,7 +871,17 @@ function PlanTab(props: GymPageProps) {
             <div className="mt-5 flex gap-2">
               {selectedPlanDays.length > 0 && (
                 <button
-                  onClick={() => { setWizardStep('exercises'); setWizardDayIndex(0); }}
+                  onClick={() => {
+                    setWizardStep('exercises');
+                    setWizardDayIndex(0);
+                    setWizExName('');
+                    setWizExMuscle('');
+                    setWizExId('');
+                    setWizExImage('');
+                    setWizSets(3);
+                    setWizReps('10');
+                    setWizRest(45);
+                  }}
                   className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)]"
                   style={{ backgroundColor: 'var(--accent-strong)' }}
                 >
@@ -942,6 +948,13 @@ function PlanTab(props: GymPageProps) {
                   className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none sm:w-48"
                 />
               </div>
+
+              <input
+                value={wizExImage}
+                onChange={e => setWizExImage(e.target.value)}
+                placeholder="Image URL (optional)"
+                className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+              />
 
               {exercises.length > 0 && (
                 <select
@@ -1078,7 +1091,7 @@ function ExerciseLibraryTab(props: GymPageProps) {
 // --- Workout Day Card ---
 function WorkoutDayCard({
   day, dayNumber, isExpanded, onToggle, exercises, dayExercises,
-  onUpdateDay, onDeleteDay, onAddDayExercise, onUpdateDayExercise, onDeleteDayExercise, onAddExercise,
+  onUpdateDay, onDeleteDay, onUpdateDayExercise, onDeleteDayExercise, onOpenExerciseWizard,
   dragHandleProps, isDragging,
 }: {
   day: WorkoutDayTemplate;
@@ -1089,52 +1102,20 @@ function WorkoutDayCard({
   dayExercises: WorkoutDayExercise[];
   onUpdateDay: GymPageProps['onUpdateDayTemplate'];
   onDeleteDay: GymPageProps['onDeleteDayTemplate'];
-  onAddDayExercise: GymPageProps['onAddDayExercise'];
   onUpdateDayExercise: GymPageProps['onUpdateDayExercise'];
   onDeleteDayExercise: GymPageProps['onDeleteDayExercise'];
-  onAddExercise: GymPageProps['onAddExercise'];
+  onOpenExerciseWizard: () => void;
   dragHandleProps?: DraggableProvidedDragHandleProps | null;
   isDragging?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(day.name);
-  const [showAddExercise, setShowAddExercise] = useState(false);
-  const [addExerciseId, setAddExerciseId] = useState('');
-  const [addSets, setAddSets] = useState(3);
-  const [addReps, setAddReps] = useState('10');
-  const [addRest, setAddRest] = useState(45);
-  const [showNewExercise, setShowNewExercise] = useState(true);
-  const [newExName, setNewExName] = useState('');
-  const [newExMuscle, setNewExMuscle] = useState('');
-  const [newExImage, setNewExImage] = useState('');
 
   const handleRename = async () => {
     if (editName.trim() && editName.trim() !== day.name) {
       await onUpdateDay(day.id, { name: editName.trim() });
     }
     setIsEditing(false);
-  };
-
-  const handleAddExerciseToPlan = async () => {
-    if (!addExerciseId) return;
-    await onAddDayExercise(day.id, addExerciseId, addSets, addReps, addRest);
-    setShowAddExercise(false);
-    setAddExerciseId('');
-    setAddSets(3);
-    setAddReps('10');
-    setAddRest(45);
-  };
-
-  const handleCreateAndAdd = async () => {
-    if (!newExName.trim()) return;
-    const exId = await onAddExercise(newExName.trim(), newExMuscle.trim(), '', newExImage.trim() || undefined);
-    if (exId) {
-      setAddExerciseId(exId);
-      setShowNewExercise(false);
-      setNewExName('');
-      setNewExMuscle('');
-      setNewExImage('');
-    }
   };
 
   return (
@@ -1203,52 +1184,13 @@ function WorkoutDayCard({
             <p className="py-2 text-center text-xs text-[var(--text-faint)]">No exercises yet</p>
           )}
 
-          {/* Add exercise */}
-          {showAddExercise ? (
-            <div className="space-y-3 rounded-xl border border-[var(--accent)]/20 bg-[var(--accent-soft)]/40 p-3">
-              {/* Create new exercise */}
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input value={newExName} onChange={e => { setNewExName(e.target.value); setAddExerciseId(''); }} placeholder="Exercise name (e.g. Bench Press)" className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none" autoFocus />
-                <input value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} placeholder="Muscle group (optional)" className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none sm:w-48" />
-              </div>
-
-              {/* Or pick from library */}
-              {exercises.length > 0 && (
-                <select
-                  value={addExerciseId}
-                  onChange={e => { setAddExerciseId(e.target.value); if (e.target.value) { setNewExName(''); setNewExMuscle(''); } }}
-                  className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
-                >
-                  <option value="">Choose from exercise library...</option>
-                  {exercises.map(ex => (
-                    <option key={ex.id} value={ex.id}>{ex.name}{ex.muscleGroup ? ` (${ex.muscleGroup})` : ''}</option>
-                  ))}
-                </select>
-              )}
-
-              <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
-                <label className="flex items-center gap-1.5">Sets: <input type="number" value={addSets} onChange={e => setAddSets(Number(e.target.value))} min={1} max={20} className="w-12 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-1.5 py-1.5 text-center text-sm text-[var(--text-primary)] focus:outline-none" /></label>
-                <label className="flex items-center gap-1.5">Reps: <input value={addReps} onChange={e => setAddReps(e.target.value)} className="w-20 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-1.5 py-1.5 text-sm text-[var(--text-primary)] focus:outline-none" placeholder="e.g. 12,10,8" /></label>
-                <label className="flex items-center gap-1.5">Rest: <input type="number" value={addRest} onChange={e => setAddRest(Number(e.target.value))} min={0} step={15} className="w-14 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-1.5 py-1.5 text-center text-sm text-[var(--text-primary)] focus:outline-none" /><span>s</span></label>
-              </div>
-
-              <div className="flex gap-2">
-                {addExerciseId
-                  ? <button onClick={handleAddExerciseToPlan} className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)]" style={{ backgroundColor: 'var(--accent-strong)' }}>Add to Day</button>
-                  : <button onClick={handleCreateAndAdd} disabled={!newExName.trim()} className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create & Add</button>
-                }
-                <button onClick={() => { setShowAddExercise(false); }} className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-[var(--text-muted)]">Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowAddExercise(true)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--border-soft)] py-2.5 text-xs font-medium text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-            >
-              <Plus size={14} />
-              Add Exercise
-            </button>
-          )}
+          <button
+            onClick={onOpenExerciseWizard}
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--border-soft)] py-2.5 text-xs font-medium text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          >
+            <Plus size={14} />
+            Add Exercise
+          </button>
         </div>
       )}
     </div>

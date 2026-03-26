@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createGoogleCalendarEvent,
   deleteGoogleCalendarEvent,
@@ -28,6 +28,7 @@ export function useGoogleCalendar(userId: string) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const visibleCalendarIdsRef = useRef<string[]>([]);
 
   const calendarStorageKey = useMemo(() => getStorageKey(userId, 'selected-calendar'), [userId]);
   const visibleCalendarsStorageKey = useMemo(() => getStorageKey(userId, 'visible-calendars'), [userId]);
@@ -80,6 +81,7 @@ export function useGoogleCalendar(userId: string) {
 
   useEffect(() => {
     localStorage.setItem(visibleCalendarsStorageKey, JSON.stringify(visibleCalendarIds));
+    visibleCalendarIdsRef.current = visibleCalendarIds;
   }, [visibleCalendarIds, visibleCalendarsStorageKey]);
 
   useEffect(() => {
@@ -162,13 +164,13 @@ export function useGoogleCalendar(userId: string) {
         return;
       }
 
-      await loadEventsForCalendars(token, googleCalendars, visibleCalendarIds, fallbackCalendarId);
+      await loadEventsForCalendars(token, googleCalendars, visibleCalendarIdsRef.current, fallbackCalendarId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load Google Calendar.');
     } finally {
       setIsLoading(false);
     }
-  }, [loadEventsForCalendars, selectedCalendarId, visibleCalendarIds]);
+  }, [loadEventsForCalendars, selectedCalendarId]);
 
   const requestAccessToken = useCallback(async (prompt: '' | 'consent', silent = false) => {
     if (!isGoogleCalendarConfigured || !googleClientId) {

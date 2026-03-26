@@ -349,11 +349,14 @@ function CourseDetailModal({ project, tasks, deadlines, onOpenTasks, onOpenDeadl
   onOpenDeadlines?: (projectId: string) => void;
   onClose: () => void;
 }) {
+  const [showCompletedDeadlines, setShowCompletedDeadlines] = useState(false);
   const today = startOfToday();
   const sortedDeadlines = useMemo(
     () => [...deadlines].sort((a, b) => a.dueDate.localeCompare(b.dueDate) || (a.dueTime ?? '').localeCompare(b.dueTime ?? '')),
     [deadlines]
   );
+  const activeDeadlines = sortedDeadlines.filter(deadline => deadline.status !== 'done' && deadline.status !== 'missed');
+  const completedDeadlines = sortedDeadlines.filter(deadline => deadline.status === 'done' || deadline.status === 'missed');
   const upcomingDeadlines = sortedDeadlines.filter(deadline => {
     if (deadline.status === 'done' || deadline.status === 'missed') return false;
     return deadlineDate(deadline) >= today;
@@ -364,6 +367,10 @@ function CourseDetailModal({ project, tasks, deadlines, onOpenTasks, onOpenDeadl
   });
   const activeTasks = tasks.filter(task => task.status !== 'done');
   const completedTasks = tasks.filter(task => task.status === 'done');
+
+  useEffect(() => {
+    setShowCompletedDeadlines(false);
+  }, [project.id]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -421,47 +428,113 @@ function CourseDetailModal({ project, tasks, deadlines, onOpenTasks, onOpenDeadl
                   {sortedDeadlines.length === 0 ? (
                     <EmptyState text="No deadlines for this course yet." />
                   ) : (
-                    sortedDeadlines.map(deadline => {
-                      const overdue = deadlineDate(deadline) < today && deadline.status !== 'done' && deadline.status !== 'missed';
-                      return (
-                        <div key={deadline.id} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <h4 className="truncate text-sm font-medium text-[var(--text-primary)]">{deadline.title}</h4>
-                                <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--text-faint)]">
-                                  {deadline.type}
+                    <>
+                      {activeDeadlines.length > 0 ? (
+                        activeDeadlines.map(deadline => {
+                          const overdue = deadlineDate(deadline) < today && deadline.status !== 'done' && deadline.status !== 'missed';
+                          return (
+                            <div key={deadline.id} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="truncate text-sm font-medium text-[var(--text-primary)]">{deadline.title}</h4>
+                                    <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--text-faint)]">
+                                      {deadline.type}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-faint)]">
+                                    <span>{new Date(`${deadline.dueDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                    {deadline.dueTime && (
+                                      <span className="flex items-center gap-1">
+                                        <Clock3 size={11} />
+                                        {deadline.dueTime}
+                                      </span>
+                                    )}
+                                    {deadline.notes && <span className="truncate">{deadline.notes}</span>}
+                                  </div>
+                                </div>
+                                <span
+                                  className={cn(
+                                    'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                                    deadline.status === 'done'
+                                      ? 'bg-emerald-400/10 text-emerald-400'
+                                      : deadline.status === 'missed' || overdue
+                                        ? 'bg-red-400/10 text-red-400'
+                                        : deadline.status === 'in-progress'
+                                          ? 'bg-blue-400/10 text-blue-400'
+                                          : 'bg-[var(--surface)] text-[var(--text-faint)]'
+                                  )}
+                                >
+                                  {overdue ? 'Overdue' : deadline.status.replace('-', ' ')}
                                 </span>
                               </div>
-                              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-faint)]">
-                                <span>{new Date(`${deadline.dueDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                                {deadline.dueTime && (
-                                  <span className="flex items-center gap-1">
-                                    <Clock3 size={11} />
-                                    {deadline.dueTime}
-                                  </span>
-                                )}
-                                {deadline.notes && <span className="truncate">{deadline.notes}</span>}
-                              </div>
                             </div>
-                            <span
-                              className={cn(
-                                'rounded-full px-2 py-0.5 text-[10px] font-medium',
-                                deadline.status === 'done'
-                                  ? 'bg-emerald-400/10 text-emerald-400'
-                                  : deadline.status === 'missed' || overdue
-                                    ? 'bg-red-400/10 text-red-400'
-                                    : deadline.status === 'in-progress'
-                                      ? 'bg-blue-400/10 text-blue-400'
-                                      : 'bg-[var(--surface)] text-[var(--text-faint)]'
-                              )}
+                          );
+                        })
+                      ) : (
+                        <EmptyState text="No active deadlines for this course right now." />
+                      )}
+
+                      {completedDeadlines.length > 0 && (
+                        <>
+                          <div className="flex items-center gap-3 py-1">
+                            <div className="h-px flex-1 bg-[var(--border-soft)]" />
+                            <button
+                              type="button"
+                              onClick={() => setShowCompletedDeadlines(current => !current)}
+                              className="rounded-full border border-[var(--border-soft)] px-3 py-1 text-[10px] font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
                             >
-                              {overdue ? 'Overdue' : deadline.status.replace('-', ' ')}
-                            </span>
+                              {showCompletedDeadlines
+                                ? `Hide ${completedDeadlines.length} completed`
+                                : `Show ${completedDeadlines.length} completed`}
+                            </button>
+                            <div className="h-px flex-1 bg-[var(--border-soft)]" />
                           </div>
-                        </div>
-                      );
-                    })
+
+                          {showCompletedDeadlines && completedDeadlines.map(deadline => {
+                            const overdue = deadlineDate(deadline) < today && deadline.status !== 'done' && deadline.status !== 'missed';
+                            return (
+                              <div key={deadline.id} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 opacity-80">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="truncate text-sm font-medium text-[var(--text-primary)]">{deadline.title}</h4>
+                                      <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[var(--text-faint)]">
+                                        {deadline.type}
+                                      </span>
+                                    </div>
+                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-faint)]">
+                                      <span>{new Date(`${deadline.dueDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                      {deadline.dueTime && (
+                                        <span className="flex items-center gap-1">
+                                          <Clock3 size={11} />
+                                          {deadline.dueTime}
+                                        </span>
+                                      )}
+                                      {deadline.notes && <span className="truncate">{deadline.notes}</span>}
+                                    </div>
+                                  </div>
+                                  <span
+                                    className={cn(
+                                      'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                                      deadline.status === 'done'
+                                        ? 'bg-emerald-400/10 text-emerald-400'
+                                        : deadline.status === 'missed' || overdue
+                                          ? 'bg-red-400/10 text-red-400'
+                                          : deadline.status === 'in-progress'
+                                            ? 'bg-blue-400/10 text-blue-400'
+                                            : 'bg-[var(--surface)] text-[var(--text-faint)]'
+                                    )}
+                                  >
+                                    {overdue ? 'Overdue' : deadline.status.replace('-', ' ')}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
+                    </>
                   )}
                 </div>
               </section>

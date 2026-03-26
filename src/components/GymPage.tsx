@@ -1101,6 +1101,20 @@ function PlanTab(props: GymPageProps) {
           onUploadImage={props.onUploadExerciseImage}
         />
       )}
+
+      {pendingDeleteDay && (
+        <ConfirmModal
+          title="Delete workout day?"
+          message={<>This will permanently remove <span className="font-medium text-[var(--text-primary)]">{pendingDeleteDay.name}</span> and its exercises.</>}
+          confirmLabel="Delete Day"
+          confirmTone="danger"
+          onCancel={() => setPendingDeleteDay(null)}
+          onConfirm={() => {
+            props.onDeleteDayTemplate(pendingDeleteDay.id);
+            setPendingDeleteDay(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1783,6 +1797,7 @@ function WorkoutTab(props: GymPageProps) {
   } = props;
 
   const [currentExIdx, setCurrentExIdx] = useState(0);
+  const [pendingAbandonWorkout, setPendingAbandonWorkout] = useState(false);
 
   if (!activePlan) {
     return (
@@ -1823,9 +1838,7 @@ function WorkoutTab(props: GymPageProps) {
   };
 
   const handleAbandon = () => {
-    if (confirm('Abandon this workout? Progress will still be saved.')) {
-      props.onCompleteSession(activeSession.id, 'abandoned');
-    }
+    setPendingAbandonWorkout(true);
   };
 
   return (
@@ -1896,6 +1909,20 @@ function WorkoutTab(props: GymPageProps) {
           onUploadPhoto={props.onUploadExercisePhoto}
           onNext={() => setCurrentExIdx(Math.min(currentExIdx + 1, sessionLogs.length - 1))}
           isLast={currentExIdx === sessionLogs.length - 1}
+        />
+      )}
+
+      {pendingAbandonWorkout && (
+        <ConfirmModal
+          title="Abandon workout?"
+          message="Progress will still be saved, but the session will be marked as abandoned."
+          confirmLabel="Abandon"
+          confirmTone="danger"
+          onCancel={() => setPendingAbandonWorkout(false)}
+          onConfirm={() => {
+            props.onCompleteSession(activeSession.id, 'abandoned');
+            setPendingAbandonWorkout(false);
+          }}
         />
       )}
     </div>
@@ -2368,6 +2395,7 @@ function HistoryExerciseRow({
 function HistoryTab(props: GymPageProps) {
   const { sessions, dayTemplates, exerciseLogs, setLogs, exercises } = props;
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
+  const [pendingDeleteSession, setPendingDeleteSession] = useState<WorkoutSession | null>(null);
 
   const completedSessions = sessions
     .filter(s => s.status === 'completed' || s.status === 'abandoned')
@@ -2446,7 +2474,7 @@ function HistoryTab(props: GymPageProps) {
                   {isExpanded ? <ChevronDown size={16} className="text-[var(--text-faint)]" /> : <ChevronRight size={16} className="text-[var(--text-faint)]" />}
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); if (confirm('Delete this workout session?')) props.onDeleteSession(session.id); }}
+                  onClick={(e) => { e.stopPropagation(); setPendingDeleteSession(session); }}
                   className="mr-3 p-1.5 text-[var(--text-faint)] hover:text-red-400 transition rounded-lg hover:bg-red-400/10"
                 >
                   <Trash2 size={14} />
@@ -2475,6 +2503,20 @@ function HistoryTab(props: GymPageProps) {
           );
         })}
       </div>
+
+      {pendingDeleteSession && (
+        <ConfirmModal
+          title="Delete workout session?"
+          message="This will permanently remove the session and its saved logs."
+          confirmLabel="Delete Session"
+          confirmTone="danger"
+          onCancel={() => setPendingDeleteSession(null)}
+          onConfirm={() => {
+            props.onDeleteSession(pendingDeleteSession.id);
+            setPendingDeleteSession(null);
+          }}
+        />
+      )}
     </div>
   );
 }

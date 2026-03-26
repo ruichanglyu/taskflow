@@ -313,6 +313,20 @@ export function useGym(userId: string) {
     return publicUrl;
   }, [userId]);
 
+  const uploadExerciseImage = useCallback(async (exerciseId: string, file: File): Promise<string | null> => {
+    if (!supabase) return null;
+    const ext = file.name.split('.').pop() ?? 'jpg';
+    const path = `exercise-images/${userId}/${exerciseId}-${Date.now()}.${ext}`;
+    const { error: uploadErr } = await supabase.storage.from('workout-photos').upload(path, file, { upsert: true });
+    if (uploadErr) { setError(uploadErr.message); return null; }
+    const { data: urlData } = supabase.storage.from('workout-photos').getPublicUrl(path);
+    const publicUrl = urlData.publicUrl;
+    const { error: updateErr } = await supabase.from('exercises').update({ reference_image_url: publicUrl }).eq('id', exerciseId);
+    if (updateErr) { setError(updateErr.message); return null; }
+    setExercises(prev => prev.map(ex => ex.id === exerciseId ? { ...ex, referenceImageUrl: publicUrl } : ex));
+    return publicUrl;
+  }, [userId]);
+
   const activePlan = plans.find(p => p.isActive) ?? null;
   const activeSession = sessions.find(s => s.status === 'in-progress') ?? null;
 
@@ -326,6 +340,6 @@ export function useGym(userId: string) {
     addExercise, updateExercise, deleteExercise,
     addDayExercise, updateDayExercise, deleteDayExercise,
     startSession, completeSession, deleteSession, updateSetLog,
-    getLastPerformance, uploadExercisePhoto,
+    getLastPerformance, uploadExercisePhoto, uploadExerciseImage,
   };
 }

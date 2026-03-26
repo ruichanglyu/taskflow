@@ -437,6 +437,7 @@ export function AppShell({ user }: AppShellProps) {
               onUpdateSetLog={gym.updateSetLog}
               getLastPerformance={gym.getLastPerformance}
               onUploadExercisePhoto={gym.uploadExercisePhoto}
+              onUploadExerciseImage={gym.uploadExerciseImage}
             />
           )}
             </>

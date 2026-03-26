@@ -207,6 +207,7 @@ interface GymPageProps {
   onUpdateSetLog: (id: string, updates: Partial<Pick<WorkoutSetLog, 'weight' | 'reps' | 'completed'>>) => Promise<boolean>;
   getLastPerformance: (exerciseId: string, currentSessionId?: string) => WorkoutSetLog[];
   onUploadExercisePhoto: (exerciseLogId: string, file: File) => Promise<string | null>;
+  onUploadExerciseImage: (exerciseId: string, file: File) => Promise<string | null>;
 }
 
 export function GymPage(props: GymPageProps) {
@@ -289,7 +290,8 @@ function PlanTab(props: GymPageProps) {
   const [wizExName, setWizExName] = useState('');
   const [wizExMuscle, setWizExMuscle] = useState('');
   const [wizExId, setWizExId] = useState('');
-  const [wizExImage, setWizExImage] = useState('');
+  const [wizExImageFile, setWizExImageFile] = useState<File | null>(null);
+  const [wizExImagePreview, setWizExImagePreview] = useState<string | null>(null);
   const [wizSets, setWizSets] = useState(3);
   const [wizReps, setWizReps] = useState('10');
   const [wizRest, setWizRest] = useState(45);
@@ -309,6 +311,12 @@ function PlanTab(props: GymPageProps) {
   useEffect(() => {
     setExpandedDay(null);
   }, [selectedPlanId]);
+
+  useEffect(() => {
+    return () => {
+      if (wizExImagePreview) URL.revokeObjectURL(wizExImagePreview);
+    };
+  }, [wizExImagePreview]);
 
   const selectedPlan = selectedPlanId
     ? plans.find(plan => plan.id === selectedPlanId) ?? null
@@ -417,8 +425,11 @@ function PlanTab(props: GymPageProps) {
       await props.onAddDayExercise(currentDay.id, wizExId, wizSets, wizReps, wizRest);
     } else if (wizExName.trim()) {
       // Create new exercise + add
-      const exId = await props.onAddExercise(wizExName.trim(), wizExMuscle.trim(), '', wizExImage.trim() || undefined);
+      const exId = await props.onAddExercise(wizExName.trim(), wizExMuscle.trim(), '', undefined);
       if (exId) {
+        if (wizExImageFile) {
+          await props.onUploadExerciseImage(exId, wizExImageFile);
+        }
         await props.onAddDayExercise(currentDay.id, exId, wizSets, wizReps, wizRest);
       }
     }
@@ -426,7 +437,11 @@ function PlanTab(props: GymPageProps) {
     setWizExName('');
     setWizExMuscle('');
     setWizExId('');
-    setWizExImage('');
+    setWizExImageFile(null);
+    if (wizExImagePreview) {
+      URL.revokeObjectURL(wizExImagePreview);
+      setWizExImagePreview(null);
+    }
     setWizSets(3);
     setWizReps('10');
     setWizRest(45);
@@ -445,10 +460,28 @@ function PlanTab(props: GymPageProps) {
     setWizExName('');
     setWizExMuscle('');
     setWizExId('');
-    setWizExImage('');
+    setWizExImageFile(null);
+    if (wizExImagePreview) {
+      URL.revokeObjectURL(wizExImagePreview);
+      setWizExImagePreview(null);
+    }
     setWizSets(3);
     setWizReps('10');
     setWizRest(45);
+  };
+
+  const handleWizardImageFile = (file: File | null | undefined) => {
+    if (!file) return;
+    if (wizExImagePreview) URL.revokeObjectURL(wizExImagePreview);
+    const preview = URL.createObjectURL(file);
+    setWizExImageFile(file);
+    setWizExImagePreview(preview);
+  };
+
+  const clearWizardImageFile = () => {
+    if (wizExImagePreview) URL.revokeObjectURL(wizExImagePreview);
+    setWizExImageFile(null);
+    setWizExImagePreview(null);
   };
 
   const wizardCurrentDay = wizardStep === 'exercises' ? selectedPlanDays[wizardDayIndex] : null;
@@ -949,12 +982,55 @@ function PlanTab(props: GymPageProps) {
                 />
               </div>
 
-              <input
-                value={wizExImage}
-                onChange={e => setWizExImage(e.target.value)}
-                placeholder="Image URL (optional)"
-                className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-              />
+              <div className="rounded-2xl border border-dashed border-[var(--border-soft)] bg-[var(--surface)] p-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)]">
+                    {wizExImagePreview ? (
+                      <img src={wizExImagePreview} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <Camera size={18} className="text-[var(--text-faint)]" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-[var(--text-primary)]">Add an exercise photo</p>
+                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                      Choose from your phone photos, take a camera picture, or drop an image file here.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border-soft)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]">
+                        <Camera size={14} />
+                        {wizExImagePreview ? 'Change image' : 'Choose image'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={e => handleWizardImageFile(e.target.files?.[0])}
+                        />
+                      </label>
+                      {wizExImagePreview && (
+                        <button
+                          type="button"
+                          onClick={clearWizardImageFile}
+                          className="rounded-lg border border-[var(--border-soft)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div
+                  className="mt-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-4 text-center text-xs text-[var(--text-muted)]"
+                  onDragOver={e => { e.preventDefault(); }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    handleWizardImageFile(e.dataTransfer.files?.[0]);
+                  }}
+                >
+                  Drop an image here from Downloads or Finder
+                </div>
+              </div>
 
               {exercises.length > 0 && (
                 <select
@@ -1066,7 +1142,12 @@ function ExerciseLibraryTab(props: GymPageProps) {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
-          <ExerciseLibrary exercises={exercises} onAdd={props.onAddExercise} onDelete={props.onDeleteExercise} />
+          <ExerciseLibrary
+            exercises={exercises}
+            onAdd={props.onAddExercise}
+            onDelete={props.onDeleteExercise}
+            onUploadImage={props.onUploadExerciseImage}
+          />
         </div>
 
         <div className="space-y-4">
@@ -1256,24 +1337,53 @@ function DayExerciseRow({
 
 // --- Exercise Library ---
 function ExerciseLibrary({
-  exercises, onAdd, onDelete,
+  exercises, onAdd, onDelete, onUploadImage,
 }: {
   exercises: Exercise[];
   onAdd: GymPageProps['onAddExercise'];
   onDelete: GymPageProps['onDeleteExercise'];
+  onUploadImage: GymPageProps['onUploadExerciseImage'];
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState('');
   const [muscle, setMuscle] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+    };
+  }, [imagePreview]);
 
   const handleAdd = async () => {
     if (!name.trim()) return;
-    await onAdd(name.trim(), muscle.trim(), '', imageUrl.trim() || undefined);
+    const exId = await onAdd(name.trim(), muscle.trim(), '', undefined);
+    if (exId && imageFile) {
+      await onUploadImage(exId, imageFile);
+    }
     setName('');
     setMuscle('');
-    setImageUrl('');
+    setImageFile(null);
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview);
+      setImagePreview(null);
+    }
     setShowAdd(false);
+  };
+
+  const handlePickImage = (file: File | null | undefined) => {
+    if (!file) return;
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    const preview = URL.createObjectURL(file);
+    setImageFile(file);
+    setImagePreview(preview);
+  };
+
+  const clearPickedImage = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview(null);
   };
 
   const muscleGroups = [...new Set(exercises.map(e => e.muscleGroup).filter(Boolean))];
@@ -1286,15 +1396,12 @@ function ExerciseLibrary({
         <div key={group}>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-1">{group}</p>
           {exercises.filter(e => e.muscleGroup === group).map(ex => (
-            <div key={ex.id} className="flex items-center gap-2 py-1 px-2 rounded hover:bg-[var(--surface-muted)] group">
-              {ex.referenceImageUrl ? (
-                <img src={ex.referenceImageUrl} alt="" className="h-6 w-6 rounded object-cover" />
-              ) : (
-                <Dumbbell size={12} className="text-[var(--text-faint)]" />
-              )}
-              <span className="flex-1 text-sm text-[var(--text-primary)]">{ex.name}</span>
-              <button onClick={() => onDelete(ex.id)} className="p-1 text-[var(--text-faint)] opacity-100 transition hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"><Trash2 size={12} /></button>
-            </div>
+            <ExerciseLibraryItem
+              key={ex.id}
+              exercise={ex}
+              onDelete={onDelete}
+              onUploadImage={onUploadImage}
+            />
           ))}
         </div>
       ))}
@@ -1304,11 +1411,12 @@ function ExerciseLibrary({
         <div>
           {muscleGroups.length > 0 && <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-1">Other</p>}
           {exercises.filter(e => !e.muscleGroup).map(ex => (
-            <div key={ex.id} className="flex items-center gap-2 py-1 px-2 rounded hover:bg-[var(--surface-muted)] group">
-              <Dumbbell size={12} className="text-[var(--text-faint)]" />
-              <span className="flex-1 text-sm text-[var(--text-primary)]">{ex.name}</span>
-              <button onClick={() => onDelete(ex.id)} className="p-1 text-[var(--text-faint)] opacity-100 transition hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"><Trash2 size={12} /></button>
-            </div>
+            <ExerciseLibraryItem
+              key={ex.id}
+              exercise={ex}
+              onDelete={onDelete}
+              onUploadImage={onUploadImage}
+            />
           ))}
         </div>
       )}
@@ -1316,9 +1424,42 @@ function ExerciseLibrary({
       {showAdd ? (
         <div className="space-y-2 border-t border-[var(--border-soft)] pt-3">
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Exercise name" className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-2.5 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none" autoFocus onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }} />
-          <div className="flex gap-2">
-            <input value={muscle} onChange={e => setMuscle(e.target.value)} placeholder="Muscle group" className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-2.5 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none" />
-            <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="Image URL (optional)" className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-2.5 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none" />
+          <input value={muscle} onChange={e => setMuscle(e.target.value)} placeholder="Muscle group" className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-2.5 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none" />
+          <div
+            className="rounded-xl border border-dashed border-[var(--border-soft)] bg-[var(--surface-muted)] p-3"
+            onDragOver={e => { e.preventDefault(); }}
+            onDrop={e => {
+              e.preventDefault();
+              handlePickImage(e.dataTransfer.files?.[0]);
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)]">
+                {imagePreview ? <img src={imagePreview} alt="" className="h-full w-full object-cover" /> : <Camera size={16} className="text-[var(--text-faint)]" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-[var(--text-primary)]">Add an exercise image</p>
+                <p className="mt-0.5 text-xs text-[var(--text-muted)]">Choose a photo from your phone, camera, or drag in an image file.</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border-soft)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]">
+                    <Camera size={14} />
+                    {imagePreview ? 'Change image' : 'Choose image'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={e => handlePickImage(e.target.files?.[0])}
+                    />
+                  </label>
+                  {imagePreview && (
+                    <button type="button" onClick={clearPickedImage} className="rounded-lg border border-[var(--border-soft)] px-3 py-2 text-xs font-medium text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]">
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
           <div className="flex gap-2">
             <button onClick={handleAdd} disabled={!name.trim()} className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add</button>
@@ -1331,6 +1472,56 @@ function ExerciseLibrary({
           Add Exercise
         </button>
       )}
+    </div>
+  );
+}
+
+function ExerciseLibraryItem({
+  exercise, onDelete, onUploadImage,
+}: {
+  exercise: Exercise;
+  onDelete: GymPageProps['onDeleteExercise'];
+  onUploadImage: GymPageProps['onUploadExerciseImage'];
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handlePick = async (file?: File | null) => {
+    if (!file) return;
+    setIsUploading(true);
+    await onUploadImage(exercise.id, file);
+    setIsUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  return (
+    <div className="group flex items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-[var(--surface-muted)]">
+      {exercise.referenceImageUrl ? (
+        <img src={exercise.referenceImageUrl} alt="" className="h-7 w-7 rounded object-cover" />
+      ) : (
+        <div className="flex h-7 w-7 items-center justify-center rounded bg-[var(--surface-muted)] text-[var(--text-faint)]">
+          <Dumbbell size={12} />
+        </div>
+      )}
+      <span className="flex-1 text-sm text-[var(--text-primary)]">{exercise.name}</span>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={e => void handlePick(e.target.files?.[0])}
+      />
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        className="rounded-md border border-[var(--border-soft)] px-2 py-1 text-[10px] font-medium text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+      >
+        {isUploading ? 'Uploading…' : exercise.referenceImageUrl ? 'Change image' : 'Add image'}
+      </button>
+      <button onClick={() => onDelete(exercise.id)} className="p-1 text-[var(--text-faint)] opacity-100 transition hover:text-red-400 md:opacity-0 md:group-hover:opacity-100">
+        <Trash2 size={12} />
+      </button>
     </div>
   );
 }

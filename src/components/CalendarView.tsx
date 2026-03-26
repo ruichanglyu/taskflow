@@ -345,6 +345,7 @@ function WeekCalendarGrid({
   const hourRows = Array.from({ length: 19 }, (_, index) => 5 + index);
   const rowHeight = 44;
   const todayKey = formatDateKey(new Date());
+  const [hoverSlot, setHoverSlot] = useState<{ dateKey: string; top: number } | null>(null);
 
   const timedEvents = events.filter(event => event.start?.dateTime && event.end?.dateTime);
   const allDayEvents = events.filter(event => event.start?.date && !event.start?.dateTime);
@@ -491,6 +492,18 @@ function WeekCalendarGrid({
                   <button
                     key={hour}
                     type="button"
+                    onMouseMove={event => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const relativeY = Math.max(0, Math.min(event.clientY - rect.top, rect.height));
+                      const quarterIndex = Math.min(3, Math.floor((relativeY / rect.height) * 4));
+                      setHoverSlot({
+                        dateKey: key,
+                        top: hourRows.indexOf(hour) * rowHeight + quarterIndex * (rowHeight / 4),
+                      });
+                    }}
+                    onMouseLeave={() => {
+                      setHoverSlot(current => (current?.dateKey === key ? null : current));
+                    }}
                     onClick={event => {
                       const rect = event.currentTarget.getBoundingClientRect();
                       const relativeY = Math.max(0, Math.min(event.clientY - rect.top, rect.height));
@@ -509,6 +522,16 @@ function WeekCalendarGrid({
                     style={{ height: `${rowHeight}px` }}
                   />
                 ))}
+
+                {hoverSlot?.dateKey === key && (
+                  <div
+                    className="pointer-events-none absolute left-0 right-0 rounded-sm bg-[var(--surface-muted)]/90"
+                    style={{
+                      top: `${hoverSlot.top}px`,
+                      height: `${rowHeight / 4}px`,
+                    }}
+                  />
+                )}
 
                 {dayEvents.map(event => {
                   const startMinutes = getMinutesFromStart(event.start?.dateTime);

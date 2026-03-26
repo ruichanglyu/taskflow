@@ -167,7 +167,7 @@ export function AIPanel({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">AI Assistant</h3>
-              <p className="text-[10px] text-[var(--text-faint)]">Powered by Gemini 2.5 Flash</p>
+              <p className="text-[10px] text-[var(--text-faint)]">Powered by Gemini</p>
             </div>
           </div>
           <div className="flex items-center gap-1">

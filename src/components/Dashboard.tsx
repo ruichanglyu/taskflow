@@ -109,21 +109,6 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          { label: 'Tasks Open', value: todo.length + inProgress.length },
-          { label: 'Courses', value: projects.length },
-          { label: 'Deadlines', value: deadlines.length },
-          { label: 'Done Rate', value: `${completionRate}%` },
-        ].map(stat => (
-          <div key={stat.label} className="flex flex-col items-center justify-center rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4">
-            <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)] text-center">{stat.label}</div>
-            <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{stat.value}</div>
-          </div>
-        ))}
-      </div>
-
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={<ListTodo size={22} />} label="Total Tasks" value={tasks.length} color="text-indigo-400" bg="bg-indigo-400/10" />

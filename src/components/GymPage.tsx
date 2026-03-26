@@ -211,9 +211,6 @@ interface GymPageProps {
 
 export function GymPage(props: GymPageProps) {
   const { activeSession } = props;
-  const totalPlans = props.plans.length;
-  const totalSessions = props.sessions.filter(session => session.status === 'completed' || session.status === 'abandoned').length;
-  const totalExercises = props.exercises.length;
 
   const [tab, setTab] = useState<GymTab>(activeSession ? 'workout' : 'plan');
 
@@ -234,20 +231,6 @@ export function GymPage(props: GymPageProps) {
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Gym</h1>
         </div>
-      </div>
-
-      {/* Quick Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Plans', value: totalPlans },
-          { label: 'Sessions', value: totalSessions },
-          { label: 'Exercises', value: totalExercises },
-        ].map(stat => (
-          <div key={stat.label} className="flex flex-col items-center justify-center rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4">
-            <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)] text-center">{stat.label}</div>
-            <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{stat.value}</div>
-          </div>
-        ))}
       </div>
 
       {/* Tab bar */}

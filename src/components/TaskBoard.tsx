@@ -201,10 +201,6 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
     }
   };
 
-  const todoCount = filteredTasks.filter(t => t.status === 'todo').length;
-  const inProgressCount = filteredTasks.filter(t => t.status === 'in-progress').length;
-  const doneCount = filteredTasks.filter(t => t.status === 'done').length;
-  const linkedCount = filteredTasks.filter(task => deadlines.some(d => d.linkedTaskIds.includes(task.id))).length;
 
   return (
     <div className="space-y-6">
@@ -212,21 +208,6 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Tasks</h1>
         </div>
-      </div>
-
-      {/* Quick Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          { label: 'To Do', value: todoCount, color: 'text-[var(--text-primary)]' },
-          { label: 'In Progress', value: inProgressCount, color: 'text-blue-400' },
-          { label: 'Done', value: doneCount, color: 'text-emerald-400' },
-          { label: 'Linked', value: linkedCount, color: 'text-[var(--text-primary)]' },
-        ].map(stat => (
-          <div key={stat.label} className="flex flex-col items-center justify-center rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4">
-            <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)] text-center">{stat.label}</div>
-            <div className={cn('mt-1 text-2xl font-semibold', stat.color)}>{stat.value}</div>
-          </div>
-        ))}
       </div>
 
       {/* Filters */}

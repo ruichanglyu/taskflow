@@ -261,9 +261,13 @@
   --font-size-base: 14px;
 }
 
+html {
+  font-size: var(--font-size-base);
+}
+
 body {
   font-family: var(--font-family);
-  font-size: var(--font-size-base);
+  font-size: 1rem;
 }
 
 /* Date input styling */

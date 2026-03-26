@@ -518,7 +518,7 @@ function WeekCalendarGrid({
                         rect
                       );
                     }}
-                    className="block w-full border-b border-[var(--border-soft)] transition hover:bg-[var(--surface-muted)]"
+                    className="block w-full border-b border-[var(--border-soft)] transition"
                     style={{ height: `${rowHeight}px` }}
                   />
                 ))}

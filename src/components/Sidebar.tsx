@@ -32,7 +32,7 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail,
     <>
       {/* Mobile overlay */}
       {isOpen && (
-        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={onClose} />
+        <div className="fixed inset-0 z-40 bg-black/75 lg:hidden" onClick={onClose} />
       )}
 
       <aside

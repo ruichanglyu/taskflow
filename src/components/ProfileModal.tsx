@@ -277,7 +277,7 @@ export function ProfileModal({ user, open, onClose, tasks, deadlines, projects, 
   if (cropImage) {
     return createPortal(
       <>
-        <div className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm" />
+        <div className="fixed inset-0 z-[9998] bg-black/75 backdrop-blur-sm" />
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div
             className="flex w-full max-w-md flex-col overflow-hidden rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl"
@@ -378,7 +378,7 @@ export function ProfileModal({ user, open, onClose, tasks, deadlines, projects, 
   // ── Main modal ──
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[9998] bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[9998] bg-black/75 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
         <div
           className="w-full max-w-lg overflow-hidden rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl"

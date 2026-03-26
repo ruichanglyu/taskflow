@@ -309,7 +309,7 @@ function DeleteCourseConfirmModal({ project, onCancel, onConfirm }: {
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4" onClick={onCancel}>
       <div className="w-full max-w-md rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="border-b border-[var(--border-soft)] px-5 py-4">
           <h3 className="text-lg font-semibold text-[var(--text-primary)]">Delete course?</h3>
@@ -373,7 +373,7 @@ function CourseDetailModal({ project, tasks, deadlines, onOpenTasks, onOpenDeadl
   }, [project.id]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
       <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="shrink-0 flex items-start justify-between gap-3 border-b border-[var(--border-soft)] px-4 py-4 sm:px-6 sm:py-5">
           <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">

@@ -40,6 +40,10 @@ function getMinutesFromStart(dateTime?: string) {
   return date.getHours() * 60 + date.getMinutes();
 }
 
+function hourToTime(hour: number) {
+  return `${String(hour).padStart(2, '0')}:00`;
+}
+
 function getEventStartLabel(date?: { date?: string; dateTime?: string }) {
   if (!date) return 'No start time';
 
@@ -317,12 +321,14 @@ function WeekCalendarGrid({
   deadlines = [],
   selectedDate,
   onSelectDate,
+  onCreateEventAt,
 }: {
   weekStart: Date;
   events: GoogleCalendarEvent[];
   deadlines?: import('../types').Deadline[];
   selectedDate: string;
   onSelectDate: (date: string) => void;
+  onCreateEventAt: (date: string, startTime: string, endTime: string) => void;
 }) {
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const hourRows = Array.from({ length: 19 }, (_, index) => 5 + index);
@@ -471,7 +477,13 @@ function WeekCalendarGrid({
                 )}
               >
                 {hourRows.map(hour => (
-                  <div key={hour} className="border-b border-[var(--border-soft)]" style={{ height: `${rowHeight}px` }} />
+                  <button
+                    key={hour}
+                    type="button"
+                    onClick={() => onCreateEventAt(key, hourToTime(hour), hourToTime(Math.min(hour + 1, 23)))}
+                    className="block w-full border-b border-[var(--border-soft)] transition hover:bg-[var(--surface-muted)]"
+                    style={{ height: `${rowHeight}px` }}
+                  />
                 ))}
 
                 {dayEvents.map(event => {
@@ -521,6 +533,8 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createDate, setCreateDate] = useState<string | undefined>(undefined);
+  const [createStartTime, setCreateStartTime] = useState<string | undefined>(undefined);
+  const [createEndTime, setCreateEndTime] = useState<string | undefined>(undefined);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showCalendarList, setShowCalendarList] = useState(true);
 
@@ -550,6 +564,15 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
 
   const handleCreateFromDate = (date: string) => {
     setCreateDate(date);
+    setCreateStartTime(undefined);
+    setCreateEndTime(undefined);
+    setShowCreateModal(true);
+  };
+
+  const handleCreateFromWeekSlot = (date: string, startTime: string, endTime: string) => {
+    setCreateDate(date);
+    setCreateStartTime(startTime);
+    setCreateEndTime(endTime);
     setShowCreateModal(true);
   };
 
@@ -770,6 +793,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
               deadlines={deadlines}
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}
+              onCreateEventAt={handleCreateFromWeekSlot}
             />
 
             <div className="space-y-4">
@@ -890,6 +914,11 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
       {showCreateModal && (
         <CreateEventModal
           initialDate={createDate}
+          initialStartTime={createStartTime}
+          initialEndTime={createEndTime}
+          calendars={calendar.calendars}
+          initialCalendarId={calendar.selectedCalendarId}
+          compact={viewMode === 'week'}
           onSave={calendar.createEvent}
           onClose={() => setShowCreateModal(false)}
         />

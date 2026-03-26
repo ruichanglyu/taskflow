@@ -330,15 +330,25 @@ export function useGoogleCalendar(userId: string) {
     }
   }, [accessToken, calendars, loadEventsForCalendars, selectedCalendarId, visibleCalendarIds]);
 
-  const createEvent = useCallback(async (event: NewGoogleCalendarEvent): Promise<boolean> => {
-    if (!accessToken || !selectedCalendarId) return false;
+  const createEvent = useCallback(async (event: NewGoogleCalendarEvent, calendarIdOverride?: string): Promise<boolean> => {
+    const targetCalendarId = calendarIdOverride || selectedCalendarId;
+    if (!accessToken || !targetCalendarId) return false;
 
     setError(null);
 
     try {
-      const created = await createGoogleCalendarEvent(accessToken, selectedCalendarId, event);
+      const created = await createGoogleCalendarEvent(accessToken, targetCalendarId, event);
+      const calendarMeta = calendars.find(calendar => calendar.id === targetCalendarId);
       setEvents(prev => {
-        const next = [...prev, created];
+        const next = [
+          ...prev,
+          {
+            ...created,
+            calendarId: targetCalendarId,
+            calendarSummary: calendarMeta?.summary,
+            calendarColor: calendarMeta?.backgroundColor,
+          },
+        ];
         next.sort((a, b) => {
           const aTime = a.start?.dateTime || a.start?.date || '';
           const bTime = b.start?.dateTime || b.start?.date || '';
@@ -351,7 +361,7 @@ export function useGoogleCalendar(userId: string) {
       setError(err instanceof Error ? err.message : 'Failed to create event.');
       return false;
     }
-  }, [accessToken, selectedCalendarId]);
+  }, [accessToken, calendars, selectedCalendarId]);
 
   const deleteEvent = useCallback(async (eventId: string): Promise<boolean> => {
     if (!accessToken || !selectedCalendarId) return false;

@@ -13,6 +13,7 @@ interface DeadlinesPageProps {
   onAddProject: (name: string, description: string) => Promise<string | null> | void;
   onUpdate: (id: string, updates: Partial<Pick<Deadline, 'title' | 'projectId' | 'status' | 'type' | 'dueDate' | 'dueTime' | 'notes'>>) => Promise<boolean>;
   onDelete: (id: string) => void;
+  onDeleteAll: () => Promise<boolean>;
   onLinkTask: (deadlineId: string, taskId: string) => Promise<boolean>;
   onUnlinkTask: (deadlineId: string, taskId: string) => void;
   onCreateTask: (title: string, description: string, projectId: string | null, dueDate: string | null) => Promise<string | null>;
@@ -263,9 +264,11 @@ function parseDeadlineCsv(fileName: string, text: string): ImportPreview {
   return { fileName, rows: parsedRows, skippedRows };
 }
 
-export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter = null, initialDetailId = null, onAdd, onAddProject, onUpdate, onDelete, onLinkTask, onUnlinkTask, onCreateTask, onNavigateToCourse, onNavigateToTasks }: DeadlinesPageProps) {
+export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter = null, initialDetailId = null, onAdd, onAddProject, onUpdate, onDelete, onDeleteAll, onLinkTask, onUnlinkTask, onCreateTask, onNavigateToCourse, onNavigateToTasks }: DeadlinesPageProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(initialDetailId);
   const [sortField, setSortField] = useState<SortField>('dueDate');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -433,6 +436,16 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
     setImportMessage(parts.join(' • '));
   };
 
+  const handleDeleteAll = async () => {
+    if (isDeletingAll) return;
+    setIsDeletingAll(true);
+    const ok = await onDeleteAll();
+    setIsDeletingAll(false);
+    if (ok) {
+      setShowDeleteAllModal(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(14,165,233,0.14),rgba(249,115,22,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
@@ -459,6 +472,14 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
             >
               <Upload size={14} />
               Import CSV
+            </button>
+            <button
+              onClick={() => setShowDeleteAllModal(true)}
+              disabled={deadlines.length === 0}
+              className="flex items-center gap-1.5 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-xs font-medium text-rose-200 shadow-sm transition hover:border-rose-400/30 hover:bg-rose-400/15 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 size={14} />
+              Delete All
             </button>
             <button
               onClick={() => setShowAddModal(true)}
@@ -932,6 +953,39 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
           onImport={handleImport}
           onClose={() => setShowImportModal(false)}
         />
+      )}
+
+      {showDeleteAllModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowDeleteAllModal(false)}>
+          <div
+            className="w-full max-w-md rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="border-b border-[var(--border-soft)] px-5 py-4">
+              <h2 className="text-lg font-semibold text-[var(--text-primary)]">Delete all deadlines</h2>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                This will remove all {deadlines.length} deadlines from your tracker. This cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-3 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setShowDeleteAllModal(false)}
+                className="flex-1 rounded-lg border border-[var(--border-soft)] py-2.5 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteAll()}
+                disabled={isDeletingAll}
+                className="flex-1 rounded-lg border border-rose-400/20 bg-rose-400/10 py-2.5 text-sm font-medium text-rose-200 transition hover:bg-rose-400/15 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isDeletingAll ? 'Deleting...' : 'Delete All'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Detail Modal */}

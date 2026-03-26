@@ -182,6 +182,16 @@ export function AppShell({ user }: AppShellProps) {
     }
   }, [deadlineStore, pushToast]);
 
+  const handleDeleteAllDeadlines = useCallback(async () => {
+    const ok = await deadlineStore.deleteAllDeadlines();
+    if (ok) {
+      pushToast('success', 'All deadlines deleted');
+    } else {
+      pushToast('error', 'Could not delete deadlines', deadlineStore.error ?? 'Please try again.');
+    }
+    return ok;
+  }, [deadlineStore, pushToast]);
+
   const handleLinkTask = useCallback(async (...args: Parameters<typeof deadlineStore.linkTask>) => {
     const ok = await deadlineStore.linkTask(...args);
     if (ok) {
@@ -340,6 +350,7 @@ export function AppShell({ user }: AppShellProps) {
               onAddProject={handleAddProject}
               onUpdate={handleUpdateDeadline}
               onDelete={handleDeleteDeadline}
+              onDeleteAll={handleDeleteAllDeadlines}
               onLinkTask={handleLinkTask}
               onUnlinkTask={handleUnlinkTask}
               onCreateTask={async (title, desc, projId, dueDate) => handleAddTask(title, desc, 'medium', projId, dueDate, 'none')}

@@ -204,6 +204,25 @@ export function useDeadlines(userId: string) {
     }
   }, [userId]);
 
+  const deleteAllDeadlines = useCallback(async (): Promise<boolean> => {
+    if (!supabase) return false;
+    setError(null);
+    try {
+      const { error: deleteError } = await supabase
+        .from('deadlines')
+        .delete()
+        .eq('user_id', userId);
+
+      if (deleteError) throw deleteError;
+
+      setDeadlines([]);
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete all deadlines.');
+      return false;
+    }
+  }, [userId]);
+
   const linkTask = useCallback(async (deadlineId: string, taskId: string): Promise<boolean> => {
     if (!supabase) return false;
     setError(null);
@@ -253,6 +272,7 @@ export function useDeadlines(userId: string) {
     addDeadline,
     updateDeadline,
     deleteDeadline,
+    deleteAllDeadlines,
     linkTask,
     unlinkTask,
   };

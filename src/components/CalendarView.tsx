@@ -328,7 +328,12 @@ function WeekCalendarGrid({
   deadlines?: import('../types').Deadline[];
   selectedDate: string;
   onSelectDate: (date: string) => void;
-  onCreateEventAt: (date: string, startTime: string, endTime: string) => void;
+  onCreateEventAt: (
+    date: string,
+    startTime: string,
+    endTime: string,
+    anchorRect: { top: number; left: number; width: number; height: number }
+  ) => void;
 }) {
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const hourRows = Array.from({ length: 19 }, (_, index) => 5 + index);
@@ -480,7 +485,14 @@ function WeekCalendarGrid({
                   <button
                     key={hour}
                     type="button"
-                    onClick={() => onCreateEventAt(key, hourToTime(hour), hourToTime(Math.min(hour + 1, 23)))}
+                    onClick={event =>
+                      onCreateEventAt(
+                        key,
+                        hourToTime(hour),
+                        hourToTime(Math.min(hour + 1, 23)),
+                        event.currentTarget.getBoundingClientRect()
+                      )
+                    }
                     className="block w-full border-b border-[var(--border-soft)] transition hover:bg-[var(--surface-muted)]"
                     style={{ height: `${rowHeight}px` }}
                   />
@@ -535,6 +547,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
   const [createDate, setCreateDate] = useState<string | undefined>(undefined);
   const [createStartTime, setCreateStartTime] = useState<string | undefined>(undefined);
   const [createEndTime, setCreateEndTime] = useState<string | undefined>(undefined);
+  const [createAnchorRect, setCreateAnchorRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showCalendarList, setShowCalendarList] = useState(true);
 
@@ -566,13 +579,20 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
     setCreateDate(date);
     setCreateStartTime(undefined);
     setCreateEndTime(undefined);
+    setCreateAnchorRect(null);
     setShowCreateModal(true);
   };
 
-  const handleCreateFromWeekSlot = (date: string, startTime: string, endTime: string) => {
+  const handleCreateFromWeekSlot = (
+    date: string,
+    startTime: string,
+    endTime: string,
+    anchorRect: { top: number; left: number; width: number; height: number }
+  ) => {
     setCreateDate(date);
     setCreateStartTime(startTime);
     setCreateEndTime(endTime);
+    setCreateAnchorRect(anchorRect);
     setShowCreateModal(true);
   };
 
@@ -919,6 +939,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
           calendars={calendar.calendars}
           initialCalendarId={calendar.selectedCalendarId}
           compact={viewMode === 'week'}
+          anchorRect={createAnchorRect}
           onSave={calendar.createEvent}
           onClose={() => setShowCreateModal(false)}
         />

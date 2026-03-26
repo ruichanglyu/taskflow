@@ -9,6 +9,7 @@ interface CreateEventModalProps {
   calendars?: GoogleCalendarListItem[];
   initialCalendarId?: string;
   compact?: boolean;
+  anchorRect?: { top: number; left: number; width: number; height: number } | null;
   onSave: (event: NewGoogleCalendarEvent, calendarId?: string) => Promise<boolean>;
   onClose: () => void;
 }
@@ -20,6 +21,7 @@ export function CreateEventModal({
   calendars = [],
   initialCalendarId,
   compact = false,
+  anchorRect,
   onSave,
   onClose,
 }: CreateEventModalProps) {
@@ -60,16 +62,28 @@ export function CreateEventModal({
     }
   };
 
+  const compactTop = anchorRect ? Math.max(16, Math.min(anchorRect.top - 12, window.innerHeight - 520)) : 96;
+  const compactLeft = anchorRect
+    ? Math.max(16, Math.min(anchorRect.left + anchorRect.width + 12, window.innerWidth - 420))
+    : Math.max(16, window.innerWidth - 420);
+
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div
+      className={compact ? 'fixed inset-0 z-50' : 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4'}
+      onClick={onClose}
+    >
+      <div
+        className={compact ? 'absolute w-full max-w-[380px] rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl' : 'w-full max-w-md rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl'}
+        style={compact ? { top: `${compactTop}px`, left: `${compactLeft}px` } : undefined}
+        onClick={e => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">{compact ? 'Quick event' : 'New Event'}</h2>
           <button onClick={onClose} className="text-[var(--text-faint)] transition-colors hover:text-[var(--text-primary)]">
             <X size={18} />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className={compact ? 'space-y-4 p-4' : 'space-y-4 p-5'}>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Title *</label>
             <input

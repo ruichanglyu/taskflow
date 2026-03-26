@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { LogOut, Menu, Search, CheckCircle2, AlertCircle, X } from 'lucide-react';
+import { LogOut, Menu, Search, CheckCircle2, AlertCircle, X, Sparkles } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { View } from '../types';
@@ -21,6 +21,7 @@ import { useGym } from '../hooks/useGym';
 import { supabase } from '../lib/supabase';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import { ProfileModal } from './ProfileModal';
+import { AIPanel } from './AIPanel';
 
 interface AppShellProps {
   user: User;
@@ -63,6 +64,7 @@ export function AppShell({ user }: AppShellProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const store = useStore(user.id);
   const deadlineStore = useDeadlines(user.id);
@@ -309,6 +311,15 @@ export function AppShell({ user }: AppShellProps) {
             </span>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setAiOpen(true)}
+              className="flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:border-[var(--accent)] hover:shadow-md"
+              style={{ color: 'var(--accent)' }}
+              title="AI Assistant"
+            >
+              <Sparkles size={16} />
+              <span className="hidden sm:inline text-xs font-medium">AI</span>
+            </button>
             <ThemeSwitcher />
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium text-[var(--text-primary)]">
@@ -476,6 +487,21 @@ export function AppShell({ user }: AppShellProps) {
         deadlines={deadlineStore.deadlines}
         projects={store.projects}
         onUserUpdated={handleUserUpdated}
+      />
+
+      <AIPanel
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        tasks={store.tasks}
+        deadlines={deadlineStore.deadlines}
+        projects={store.projects}
+        plans={gym.plans}
+        dayTemplates={gym.dayTemplates}
+        exercises={gym.exercises}
+        dayExercises={gym.dayExercises}
+        onAddTask={store.addTask}
+        onAddDeadline={deadlineStore.addDeadline}
+        onAddProject={store.addProject}
       />
 
       <div className="pointer-events-none fixed right-4 top-20 z-[80] flex w-full max-w-sm flex-col gap-2 sm:right-6">

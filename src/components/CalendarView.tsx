@@ -44,6 +44,12 @@ function hourToTime(hour: number) {
   return `${String(hour).padStart(2, '0')}:00`;
 }
 
+function minutesToTime(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
 function getEventStartLabel(date?: { date?: string; dateTime?: string }) {
   if (!date) return 'No start time';
 
@@ -485,14 +491,20 @@ function WeekCalendarGrid({
                   <button
                     key={hour}
                     type="button"
-                    onClick={event =>
+                    onClick={event => {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const relativeY = Math.max(0, Math.min(event.clientY - rect.top, rect.height));
+                      const quarterIndex = Math.min(3, Math.floor((relativeY / rect.height) * 4));
+                      const startMinutes = hour * 60 + quarterIndex * 15;
+                      const endMinutes = Math.min(startMinutes + 60, 24 * 60 - 1);
+
                       onCreateEventAt(
                         key,
-                        hourToTime(hour),
-                        hourToTime(Math.min(hour + 1, 23)),
-                        event.currentTarget.getBoundingClientRect()
-                      )
-                    }
+                        minutesToTime(startMinutes),
+                        minutesToTime(endMinutes),
+                        rect
+                      );
+                    }}
                     className="block w-full border-b border-[var(--border-soft)] transition hover:bg-[var(--surface-muted)]"
                     style={{ height: `${rowHeight}px` }}
                   />

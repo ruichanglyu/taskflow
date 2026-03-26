@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { CalendarDays, Check, ChevronDown, ExternalLink, List, LayoutGrid, Plus, RefreshCcw, Trash2, Unplug } from 'lucide-react';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import { GoogleCalendarEvent } from '../lib/googleCalendar';
@@ -48,6 +48,10 @@ function minutesToTime(totalMinutes: number) {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function snapMinutesToQuarter(minutes: number) {
+  return Math.max(300, Math.min(1425, Math.floor(minutes / 15) * 15));
 }
 
 function getEventStartLabel(date?: { date?: string; dateTime?: string }) {
@@ -346,6 +350,50 @@ function WeekCalendarGrid({
   const rowHeight = 44;
   const todayKey = formatDateKey(new Date());
   const [hoverSlot, setHoverSlot] = useState<{ dateKey: string; startMinutes: number } | null>(null);
+  const [dragSelection, setDragSelection] = useState<{
+    dateKey: string;
+    startMinutes: number;
+    currentMinutes: number;
+    anchorRect: { top: number; left: number; width: number; height: number };
+  } | null>(null);
+  const dayColumnRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const finalizeDragSelection = (selection: NonNullable<typeof dragSelection>) => {
+    const startMinutes = Math.min(selection.startMinutes, selection.currentMinutes);
+    const endMinutes =
+      selection.startMinutes === selection.currentMinutes
+        ? Math.min(startMinutes + 60, 24 * 60)
+        : Math.min(Math.max(selection.startMinutes, selection.currentMinutes) + 15, 24 * 60);
+
+    const columnRect = dayColumnRefs.current[selection.dateKey]?.getBoundingClientRect();
+    const anchorTop = columnRect
+      ? columnRect.top + window.scrollY + ((startMinutes - 300) / 60) * rowHeight
+      : selection.anchorRect.top;
+
+    onCreateEventAt(
+      selection.dateKey,
+      minutesToTime(startMinutes),
+      minutesToTime(endMinutes),
+      {
+        top: anchorTop,
+        left: selection.anchorRect.left,
+        width: selection.anchorRect.width,
+        height: Math.max(((endMinutes - startMinutes) / 60) * rowHeight, rowHeight),
+      }
+    );
+    setDragSelection(null);
+  };
+
+  useEffect(() => {
+    if (!dragSelection) return;
+
+    const handleWindowMouseUp = () => {
+      finalizeDragSelection(dragSelection);
+    };
+
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    return () => window.removeEventListener('mouseup', handleWindowMouseUp);
+  }, [dragSelection]);
 
   const timedEvents = events.filter(event => event.start?.dateTime && event.end?.dateTime);
   const allDayEvents = events.filter(event => event.start?.date && !event.start?.dateTime);
@@ -479,10 +527,23 @@ function WeekCalendarGrid({
             const key = formatDateKey(day);
             const dayEvents = eventsByDay.get(key) ?? [];
             const isSelected = key === selectedDate;
+            const previewStartMinutes = dragSelection?.dateKey === key
+              ? Math.min(dragSelection.startMinutes, dragSelection.currentMinutes)
+              : hoverSlot?.dateKey === key
+                ? hoverSlot.startMinutes
+                : null;
+            const previewEndMinutes = dragSelection?.dateKey === key
+              ? Math.max(dragSelection.startMinutes, dragSelection.currentMinutes) + 15
+              : previewStartMinutes !== null
+                ? Math.min(previewStartMinutes + 60, 24 * 60)
+                : null;
 
             return (
               <div
                 key={key}
+                ref={node => {
+                  dayColumnRefs.current[key] = node;
+                }}
                 className={cn(
                   'relative border-r border-[var(--border-soft)] last:border-r-0',
                   isSelected && 'bg-[var(--accent-soft)]/40'
@@ -497,39 +558,57 @@ function WeekCalendarGrid({
                       const relativeY = Math.max(0, Math.min(event.clientY - rect.top, rect.height));
                       const quarterIndex = Math.min(3, Math.floor((relativeY / rect.height) * 4));
                       const startMinutes = hour * 60 + quarterIndex * 15;
-                      setHoverSlot({
-                        dateKey: key,
-                        startMinutes,
-                      });
+                      if (dragSelection?.dateKey === key) {
+                        setDragSelection(current =>
+                          current && current.dateKey === key
+                            ? { ...current, currentMinutes: startMinutes }
+                            : current
+                        );
+                      } else {
+                        setHoverSlot({
+                          dateKey: key,
+                          startMinutes,
+                        });
+                      }
                     }}
                     onMouseLeave={() => {
-                      setHoverSlot(current => (current?.dateKey === key ? null : current));
+                      if (!dragSelection || dragSelection.dateKey !== key) {
+                        setHoverSlot(current => (current?.dateKey === key ? null : current));
+                      }
                     }}
-                    onClick={event => {
+                    onMouseDown={event => {
                       const rect = event.currentTarget.getBoundingClientRect();
                       const relativeY = Math.max(0, Math.min(event.clientY - rect.top, rect.height));
                       const quarterIndex = Math.min(3, Math.floor((relativeY / rect.height) * 4));
                       const startMinutes = hour * 60 + quarterIndex * 15;
-                      const endMinutes = Math.min(startMinutes + 60, 24 * 60 - 1);
-
-                      onCreateEventAt(
-                        key,
-                        minutesToTime(startMinutes),
-                        minutesToTime(endMinutes),
-                        rect
-                      );
+                      const columnRect = dayColumnRefs.current[key]?.getBoundingClientRect() ?? rect;
+                      setDragSelection({
+                        dateKey: key,
+                        startMinutes,
+                        currentMinutes: startMinutes,
+                        anchorRect: {
+                          top: columnRect.top + window.scrollY + ((startMinutes - 300) / 60) * rowHeight,
+                          left: columnRect.left + window.scrollX,
+                          width: columnRect.width,
+                          height: rowHeight,
+                        },
+                      });
+                      setHoverSlot({
+                        dateKey: key,
+                        startMinutes,
+                      });
                     }}
                     className="block w-full border-b border-[var(--border-soft)] transition"
                     style={{ height: `${rowHeight}px` }}
                   />
                 ))}
 
-                {hoverSlot?.dateKey === key && (
+                {previewStartMinutes !== null && previewEndMinutes !== null && (
                   <div
                     className="pointer-events-none absolute left-1.5 right-1.5 z-10 overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--surface-muted)]/95 shadow-sm"
                     style={{
-                      top: `${((hoverSlot.startMinutes - 300) / 60) * rowHeight}px`,
-                      height: `${rowHeight}px`,
+                      top: `${((previewStartMinutes - 300) / 60) * rowHeight}px`,
+                      height: `${Math.max(((previewEndMinutes - previewStartMinutes) / 60) * rowHeight, rowHeight / 4)}px`,
                     }}
                   />
                 )}

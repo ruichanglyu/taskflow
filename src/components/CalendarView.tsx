@@ -590,8 +590,7 @@ function WeekCalendarGrid({
                         startMinutes,
                         currentMinutes: startMinutes,
                         anchorRect: {
-                          top: columnRect.top + window.scrollY + ((startMinutes - 300) / 60) * rowHeight,
-                          
+                          top: columnRect.top + window.scrollY + ((startMinutes - weekStartHour * 60) / 60) * rowHeight,
                           left: columnRect.left + window.scrollX,
                           width: columnRect.width,
                           height: rowHeight,
@@ -611,8 +610,7 @@ function WeekCalendarGrid({
                   <div
                     className="pointer-events-none absolute left-1.5 right-1.5 z-10 overflow-hidden rounded-lg"
                     style={{
-                      top: `${((draftPreview.startMinutes - 300) / 60) * rowHeight}px`,
-                      
+                      top: `${((draftPreview.startMinutes - weekStartHour * 60) / 60) * rowHeight}px`,
                       height: `${Math.max(((draftPreview.endMinutes - draftPreview.startMinutes) / 60) * rowHeight, rowHeight / 4)}px`,
                       backgroundColor: 'var(--accent-soft)',
                       borderLeft: '3px solid var(--accent)',
@@ -628,8 +626,7 @@ function WeekCalendarGrid({
                   <div
                     className="pointer-events-none absolute left-1.5 right-1.5 z-20 overflow-hidden rounded-md bg-[var(--surface-muted)]/95"
                     style={{
-                      top: `${((previewStartMinutes - 300) / 60) * rowHeight}px`,
-                      
+                      top: `${((previewStartMinutes - weekStartHour * 60) / 60) * rowHeight}px`,
                       height: `${Math.max(((previewEndMinutes - previewStartMinutes) / 60) * rowHeight, rowHeight / 4)}px`,
                     }}
                   />

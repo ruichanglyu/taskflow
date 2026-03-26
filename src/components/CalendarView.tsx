@@ -25,6 +25,17 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
+function addMonths(date: Date, months: number) {
+  const next = new Date(date);
+  const day = next.getDate();
+  next.setDate(1);
+  next.setMonth(next.getMonth() + months);
+  const maxDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(day, maxDay));
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
 function startOfMonthGrid(year: number, month: number) {
   const first = new Date(year, month, 1);
   first.setHours(0, 0, 0, 0);
@@ -221,6 +232,106 @@ function CalendarChecklist({
         </div>
       )}
       {isLoading && <p className="mt-2 text-xs text-[var(--text-faint)]">Loading...</p>}
+    </div>
+  );
+}
+
+function CalendarMiniMonth({
+  year,
+  month,
+  selectedDate,
+  onPrevMonth,
+  onNextMonth,
+  onSelectDate,
+}: {
+  year: number;
+  month: number;
+  selectedDate: string;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
+  onSelectDate: (date: string) => void;
+}) {
+  const today = new Date();
+  const todayKey = formatDateKey(today);
+  const monthLabel = new Date(year, month).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const cells = useMemo(() => {
+    const first = startOfMonthGrid(year, month);
+    const last = endOfMonthGrid(year, month);
+    const days: { date: Date; dateKey: string; isCurrentMonth: boolean }[] = [];
+
+    for (let cursor = new Date(first); cursor <= last; cursor = addDays(cursor, 1)) {
+      days.push({
+        date: new Date(cursor),
+        dateKey: formatDateKey(cursor),
+        isCurrentMonth: cursor.getMonth() === month,
+      });
+    }
+
+    return days;
+  }, [month, year]);
+
+  return (
+    <div className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm sm:p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-[var(--text-primary)]">{monthLabel}</h2>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onPrevMonth}
+            className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+            aria-label="Previous month"
+          >
+            <ChevronDown size={14} className="rotate-90" />
+          </button>
+          <button
+            type="button"
+            onClick={onNextMonth}
+            className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+            aria-label="Next month"
+          >
+            <ChevronDown size={14} className="-rotate-90" />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-7 gap-y-1 text-center text-[10px] font-medium text-[var(--text-faint)]">
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(day => (
+          <div key={day} className="py-1">
+            {day}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-1 grid grid-cols-7 gap-y-1">
+        {cells.map(({ date, dateKey, isCurrentMonth }) => {
+          const isToday = dateKey === todayKey;
+          const isSelected = dateKey === selectedDate;
+
+          return (
+            <button
+              key={dateKey}
+              type="button"
+              onClick={() => onSelectDate(dateKey)}
+              className={cn(
+                'mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium transition',
+                isSelected
+                  ? 'bg-[var(--accent)] text-[var(--accent-contrast)]'
+                  : isToday
+                    ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+                    : isCurrentMonth
+                      ? 'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]'
+                      : 'text-[var(--text-faint)] hover:bg-[var(--surface-muted)]/70'
+              )}
+            >
+              {date.getDate()}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -737,21 +848,21 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
     calendar.setVisibleRange(visibleRange);
   }, [calendar, visibleRange]);
 
-  const handlePrevMonth = () => {
-    if (month === 0) { setMonth(11); setYear(y => y - 1); }
-    else setMonth(m => m - 1);
+  const syncSelectedDate = (date: string) => {
+    const selected = new Date(`${date}T00:00:00`);
+    setSelectedDate(date);
+    setYear(selected.getFullYear());
+    setMonth(selected.getMonth());
   };
 
-  const handleNextMonth = () => {
-    if (month === 11) { setMonth(0); setYear(y => y + 1); }
-    else setMonth(m => m + 1);
+  const handleShiftMonth = (delta: number) => {
+    const baseDate = new Date(`${selectedDate}T00:00:00`);
+    const nextDate = addMonths(baseDate, delta);
+    syncSelectedDate(formatDateKey(nextDate));
   };
 
   const handleToday = () => {
-    const t = new Date();
-    setYear(t.getFullYear());
-    setMonth(t.getMonth());
-    setSelectedDate(todayStr);
+    syncSelectedDate(todayStr);
   };
 
   const handleCreateFromDate = (date: string) => {
@@ -946,14 +1057,23 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
             events={calendar.events}
             deadlines={deadlines}
             selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            onPrevMonth={handlePrevMonth}
-            onNextMonth={handleNextMonth}
+            onSelectDate={syncSelectedDate}
+            onPrevMonth={() => handleShiftMonth(-1)}
+            onNextMonth={() => handleShiftMonth(1)}
             onToday={handleToday}
             onCreateEvent={handleCreateFromDate}
           />
 
           <div className="space-y-4">
+            <CalendarMiniMonth
+              year={year}
+              month={month}
+              selectedDate={selectedDate}
+              onPrevMonth={() => handleShiftMonth(-1)}
+              onNextMonth={() => handleShiftMonth(1)}
+              onSelectDate={syncSelectedDate}
+            />
+
             <CalendarChecklist
               calendars={calendar.calendars}
               visibleCalendarIds={calendar.visibleCalendarIds}
@@ -984,21 +1104,21 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setSelectedDate(formatDateKey(addDays(weekStart, -7)))}
+                onClick={() => syncSelectedDate(formatDateKey(addDays(weekStart, -7)))}
                 className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
               >
                 ←
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedDate(todayStr)}
+                onClick={() => syncSelectedDate(todayStr)}
                 className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
               >
                 This week
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedDate(formatDateKey(addDays(weekStart, 7)))}
+                onClick={() => syncSelectedDate(formatDateKey(addDays(weekStart, 7)))}
                 className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
               >
                 →
@@ -1018,6 +1138,15 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
             />
 
             <div className="space-y-4">
+              <CalendarMiniMonth
+                year={year}
+                month={month}
+                selectedDate={selectedDate}
+                onPrevMonth={() => handleShiftMonth(-1)}
+                onNextMonth={() => handleShiftMonth(1)}
+                onSelectDate={syncSelectedDate}
+              />
+
               <CalendarChecklist
                 calendars={calendar.calendars}
                 visibleCalendarIds={calendar.visibleCalendarIds}
@@ -1042,16 +1171,27 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
         </div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <CalendarChecklist
-            calendars={calendar.calendars}
-            visibleCalendarIds={calendar.visibleCalendarIds}
-            selectedCalendarId={calendar.selectedCalendarId}
-            isLoading={calendar.isLoading}
-            open={showCalendarList}
-            onToggleOpen={() => setShowCalendarList(open => !open)}
-            onToggleVisibility={id => void calendar.toggleCalendarVisibility(id)}
-            onChooseCalendar={id => void calendar.chooseCalendar(id)}
-          />
+          <div className="space-y-4">
+            <CalendarMiniMonth
+              year={year}
+              month={month}
+              selectedDate={selectedDate}
+              onPrevMonth={() => handleShiftMonth(-1)}
+              onNextMonth={() => handleShiftMonth(1)}
+              onSelectDate={syncSelectedDate}
+            />
+
+            <CalendarChecklist
+              calendars={calendar.calendars}
+              visibleCalendarIds={calendar.visibleCalendarIds}
+              selectedCalendarId={calendar.selectedCalendarId}
+              isLoading={calendar.isLoading}
+              open={showCalendarList}
+              onToggleOpen={() => setShowCalendarList(open => !open)}
+              onToggleVisibility={id => void calendar.toggleCalendarVisibility(id)}
+              onChooseCalendar={id => void calendar.chooseCalendar(id)}
+            />
+          </div>
 
           <section className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
             <div className="mb-6 flex items-center justify-between gap-3">

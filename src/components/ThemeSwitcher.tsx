@@ -4,15 +4,11 @@ import { useTheme } from '../hooks/useTheme';
 import { ThemeSettings } from './ThemeSettings';
 
 export function ThemeSwitcher() {
-  const { isDark, setTheme } = useTheme();
+  const { isDark, setMode } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const toggleDarkLight = () => {
-    if (isDark) {
-      setTheme('light');
-    } else {
-      setTheme('dark');
-    }
+    setMode(isDark ? 'light' : 'dark');
   };
 
   return (

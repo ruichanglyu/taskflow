@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import {
   Dumbbell, Plus, Play, Square, ChevronRight, ChevronDown,
   Trash2, Edit3, Check, X, Timer, RotateCcw, History,
-  Trophy, TrendingUp, GripVertical, Camera,
+  Trophy, TrendingUp, GripVertical, Camera, CalendarDays,
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, type DropResult, type DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 import type {
@@ -475,39 +475,54 @@ function PlanTab(props: GymPageProps) {
               <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">Plan Days</h3>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">Click a day to open the exercises inside it.</p>
+                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">Workout Days</h3>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">{selectedPlanDays.length > 0 ? 'Click a day to see and edit exercises.' : 'Add days to structure your weekly routine.'}</p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setShowAddDay(true)}
-                      className="rounded-xl border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                    >
-                      Add Day
-                    </button>
-                  </div>
+                  {selectedPlanDays.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowAddDay(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                      >
+                        <Plus size={14} />
+                        Add Day
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {showAddDay && (
-                  <div className="mt-4 flex flex-col gap-2 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-3 sm:flex-row">
+                  <div className="mt-4 flex flex-col gap-2 rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] p-3 sm:flex-row">
                     <input
                       value={newDayName}
                       onChange={e => setNewDayName(e.target.value)}
-                      placeholder="Day name (e.g. Push, Pull, Legs)"
-                      className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                      placeholder="What's this day focused on? (e.g. Push, Upper Body, Chest + Triceps)"
+                      className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
                       onKeyDown={e => { if (e.key === 'Enter') handleAddDay(); if (e.key === 'Escape') setShowAddDay(false); }}
                       autoFocus
                     />
-                    <button onClick={handleAddDay} disabled={!newDayName.trim()} className="rounded-lg px-3 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add</button>
-                    <button onClick={() => setShowAddDay(false)} className="rounded-lg border border-[var(--border-soft)] px-3 py-2 text-sm text-[var(--text-muted)]"><X size={16} /></button>
+                    <button onClick={handleAddDay} disabled={!newDayName.trim()} className="rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add</button>
+                    <button onClick={() => setShowAddDay(false)} className="rounded-lg border border-[var(--border-soft)] px-3 py-2.5 text-sm text-[var(--text-muted)]"><X size={16} /></button>
                   </div>
                 )}
 
                 <div className="mt-4">
-                  {selectedPlanDays.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-[var(--border-soft)] px-4 py-8 text-center text-sm text-[var(--text-muted)]">
-                      Add workout days to this plan to build it out.
+                  {selectedPlanDays.length === 0 && !showAddDay ? (
+                    <div className="rounded-2xl border border-dashed border-[var(--border-soft)] px-4 py-10 text-center">
+                      <CalendarDays size={32} className="mx-auto mb-3 text-[var(--text-faint)]" />
+                      <p className="mb-1 text-sm font-medium text-[var(--text-primary)]">No workout days yet</p>
+                      <p className="mb-4 text-xs text-[var(--text-muted)]">Each day represents a workout session in your routine (e.g. Push, Pull, Legs).</p>
+                      <button
+                        onClick={() => setShowAddDay(true)}
+                        className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium text-[var(--accent-contrast)]"
+                        style={{ backgroundColor: 'var(--accent-strong)' }}
+                      >
+                        <Plus size={16} />
+                        Add Your First Day
+                      </button>
                     </div>
+                  ) : selectedPlanDays.length === 0 && showAddDay ? (
+                    <div />
                   ) : (
                     <DragDropContext onDragEnd={handleDayDragEnd}>
                       <Droppable droppableId="workout-days">
@@ -613,54 +628,59 @@ function PlanTab(props: GymPageProps) {
             </div>
           </div>
 
-          {showNewPlan && (
-            <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">Create Plan</h3>
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">Make a new plan without replacing the active one.</p>
-                </div>
-                <button onClick={() => setShowNewPlan(false)} className="text-[var(--text-faint)] transition hover:text-[var(--text-primary)]">
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="mt-4 space-y-3">
+        </aside>
+      </div>
+
+      {/* Create Plan Modal */}
+      {showNewPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowNewPlan(false)}>
+          <div className="w-full max-w-sm rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-[var(--text-primary)]">Create Workout Plan</h3>
+              <button onClick={() => setShowNewPlan(false)} className="rounded-xl p-1.5 text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]">
+                <X size={16} />
+              </button>
+            </div>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">Give your plan a name and pick how many days per week.</p>
+            <div className="mt-5 space-y-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-[var(--text-faint)]">Plan Name</label>
                 <input
                   value={newPlanName}
                   onChange={e => setNewPlanName(e.target.value)}
-                  placeholder="Plan name"
-                  className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-                  onKeyDown={e => { if (e.key === 'Enter') handleCreatePlan(); }}
+                  placeholder="e.g. Push Pull Legs, Upper Lower, Full Body"
+                  className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                  onKeyDown={e => { if (e.key === 'Enter' && newPlanName.trim()) handleCreatePlan(); }}
                   autoFocus
                 />
-                <div>
-                  <div className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-[var(--text-faint)]">Days per week</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[3, 4, 5, 6, 7].map(n => (
-                      <button
-                        key={n}
-                        onClick={() => setNewPlanDays(n)}
-                        className={cn(
-                          'h-8 w-8 rounded-lg text-sm font-medium transition',
-                          newPlanDays === n
-                            ? 'bg-[var(--accent)] text-[var(--accent-contrast)]'
-                            : 'border border-[var(--border-soft)] text-[var(--text-muted)] hover:bg-[var(--surface-muted)]'
-                        )}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              </div>
+              <div>
+                <label className="mb-2 block text-xs font-medium text-[var(--text-faint)]">Days per week</label>
                 <div className="flex gap-2">
-                  <button onClick={handleCreatePlan} disabled={!newPlanName.trim()} className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create</button>
-                  <button onClick={() => setShowNewPlan(false)} className="rounded-lg border border-[var(--border-soft)] px-4 py-2 text-sm text-[var(--text-muted)]">Cancel</button>
+                  {[3, 4, 5, 6, 7].map(n => (
+                    <button
+                      key={n}
+                      onClick={() => setNewPlanDays(n)}
+                      className={cn(
+                        'flex h-10 w-10 items-center justify-center rounded-xl text-sm font-semibold transition',
+                        newPlanDays === n
+                          ? 'bg-[var(--accent)] text-[var(--accent-contrast)] shadow-md'
+                          : 'border border-[var(--border-soft)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]'
+                      )}
+                    >
+                      {n}
+                    </button>
+                  ))}
                 </div>
               </div>
+              <div className="flex gap-2 pt-2">
+                <button onClick={handleCreatePlan} disabled={!newPlanName.trim()} className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create Plan</button>
+                <button onClick={() => setShowNewPlan(false)} className="rounded-xl border border-[var(--border-soft)] px-4 py-2.5 text-sm text-[var(--text-muted)] transition hover:border-[var(--border-strong)]">Cancel</button>
+              </div>
             </div>
-          )}
-        </aside>
-      </div>
+          </div>
+        </div>
+      )}
 
       {showImportPlan && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowImportPlan(false)}>
@@ -846,8 +866,8 @@ function WorkoutDayCard({
   const [addExerciseId, setAddExerciseId] = useState('');
   const [addSets, setAddSets] = useState(3);
   const [addReps, setAddReps] = useState('10');
-  const [addRest, setAddRest] = useState(90);
-  const [showNewExercise, setShowNewExercise] = useState(false);
+  const [addRest, setAddRest] = useState(45);
+  const [showNewExercise, setShowNewExercise] = useState(exercises.length === 0);
   const [newExName, setNewExName] = useState('');
   const [newExMuscle, setNewExMuscle] = useState('');
   const [newExImage, setNewExImage] = useState('');
@@ -866,7 +886,7 @@ function WorkoutDayCard({
     setAddExerciseId('');
     setAddSets(3);
     setAddReps('10');
-    setAddRest(90);
+    setAddRest(45);
   };
 
   const handleCreateAndAdd = async () => {
@@ -949,52 +969,50 @@ function WorkoutDayCard({
 
           {/* Add exercise */}
           {showAddExercise ? (
-            <div className="space-y-3 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
-              <div className="flex gap-2">
-                <select
-                  value={addExerciseId}
-                  onChange={e => setAddExerciseId(e.target.value)}
-                  className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2 py-1.5 text-sm text-[var(--text-primary)] focus:outline-none"
-                >
-                  <option value="">Select exercise...</option>
-                  {exercises.map(ex => (
-                    <option key={ex.id} value={ex.id}>{ex.name}{ex.muscleGroup ? ` (${ex.muscleGroup})` : ''}</option>
-                  ))}
-                </select>
-                <button onClick={() => setShowNewExercise(true)} className="rounded-lg border border-[var(--border-soft)] px-2 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] transition">New</button>
-              </div>
-
-              {showNewExercise && (
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input value={newExName} onChange={e => setNewExName(e.target.value)} placeholder="Exercise name" className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none" />
-                  <input value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} placeholder="Muscle group" className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none sm:w-28" />
-                  <button onClick={handleCreateAndAdd} disabled={!newExName.trim()} className="rounded-lg px-2 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create</button>
+            <div className="space-y-3 rounded-xl border border-[var(--accent)]/20 bg-[var(--accent-soft)]/40 p-3">
+              {/* If exercises exist, show select + New toggle. If none, show create inline by default */}
+              {!showNewExercise && exercises.length > 0 ? (
+                <div className="flex gap-2">
+                  <select
+                    value={addExerciseId}
+                    onChange={e => setAddExerciseId(e.target.value)}
+                    className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                  >
+                    <option value="">Pick from your exercises...</option>
+                    {exercises.map(ex => (
+                      <option key={ex.id} value={ex.id}>{ex.name}{ex.muscleGroup ? ` (${ex.muscleGroup})` : ''}</option>
+                    ))}
+                  </select>
+                  <button onClick={() => setShowNewExercise(true)} className="shrink-0 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]">+ New</button>
                 </div>
-              )}
-              {showNewExercise && (
-                <input
-                  value={newExImage}
-                  onChange={e => setNewExImage(e.target.value)}
-                  placeholder="Image URL (optional)"
-                  className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none"
-                />
+              ) : (
+                <div className="space-y-2">
+                  {exercises.length > 0 && (
+                    <button onClick={() => setShowNewExercise(false)} className="text-xs text-[var(--accent)] hover:underline">← Pick from existing exercises</button>
+                  )}
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input value={newExName} onChange={e => setNewExName(e.target.value)} placeholder="Exercise name (e.g. Bench Press)" className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none" autoFocus />
+                    <input value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} placeholder="Muscle (optional)" className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none sm:w-32" />
+                    <button onClick={handleCreateAndAdd} disabled={!newExName.trim()} className="shrink-0 rounded-lg px-3 py-2 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create & Add</button>
+                  </div>
+                </div>
               )}
 
               <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
-                <label className="flex items-center gap-1">Sets: <input type="number" value={addSets} onChange={e => setAddSets(Number(e.target.value))} min={1} max={20} className="w-12 rounded border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-1.5 py-1 text-center text-sm text-[var(--text-primary)] focus:outline-none" /></label>
-                <label className="flex items-center gap-1">Reps: <input value={addReps} onChange={e => setAddReps(e.target.value)} className="w-20 rounded border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-1.5 py-1 text-sm text-[var(--text-primary)] focus:outline-none" placeholder="e.g. 12,10,8" /></label>
-                <label className="flex items-center gap-1">Rest: <input type="number" value={addRest} onChange={e => setAddRest(Number(e.target.value))} min={0} step={15} className="w-14 rounded border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-1.5 py-1 text-center text-sm text-[var(--text-primary)] focus:outline-none" />s</label>
+                <label className="flex items-center gap-1.5">Sets: <input type="number" value={addSets} onChange={e => setAddSets(Number(e.target.value))} min={1} max={20} className="w-12 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-1.5 py-1.5 text-center text-sm text-[var(--text-primary)] focus:outline-none" /></label>
+                <label className="flex items-center gap-1.5">Reps: <input value={addReps} onChange={e => setAddReps(e.target.value)} className="w-20 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-1.5 py-1.5 text-sm text-[var(--text-primary)] focus:outline-none" placeholder="e.g. 12,10,8" /></label>
+                <label className="flex items-center gap-1.5">Rest: <input type="number" value={addRest} onChange={e => setAddRest(Number(e.target.value))} min={0} step={15} className="w-14 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-1.5 py-1.5 text-center text-sm text-[var(--text-primary)] focus:outline-none" /><span>s</span></label>
               </div>
 
               <div className="flex gap-2">
-                <button onClick={handleAddExerciseToPlan} disabled={!addExerciseId} className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add to Day</button>
-                <button onClick={() => setShowAddExercise(false)} className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-[var(--text-muted)]">Cancel</button>
+                {!showNewExercise && <button onClick={handleAddExerciseToPlan} disabled={!addExerciseId} className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add to Day</button>}
+                <button onClick={() => { setShowAddExercise(false); setShowNewExercise(exercises.length === 0); }} className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-[var(--text-muted)]">Cancel</button>
               </div>
             </div>
           ) : (
             <button
               onClick={() => setShowAddExercise(true)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--border-soft)] py-2 text-xs text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--border-soft)] py-2.5 text-xs font-medium text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
               <Plus size={14} />
               Add Exercise

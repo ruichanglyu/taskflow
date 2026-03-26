@@ -810,11 +810,13 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
   const [showCalendarList, setShowCalendarList] = useState(true);
 
   const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
   const todayStr = formatDateKey(now);
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
-  const weekStart = useMemo(() => startOfWeek(new Date(`${selectedDate}T00:00:00`)), [selectedDate]);
+  const [viewDate, setViewDate] = useState<string>(todayStr);
+  const viewAnchor = useMemo(() => new Date(`${viewDate}T00:00:00`), [viewDate]);
+  const year = viewAnchor.getFullYear();
+  const month = viewAnchor.getMonth();
+  const weekStart = useMemo(() => startOfWeek(viewAnchor), [viewAnchor]);
   const visibleRange = useMemo(() => {
     if (viewMode === 'week') {
       const rangeStart = new Date(weekStart);
@@ -848,21 +850,19 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
     calendar.setVisibleRange(visibleRange);
   }, [calendar, visibleRange]);
 
-  const syncSelectedDate = (date: string) => {
-    const selected = new Date(`${date}T00:00:00`);
+  const selectDate = (date: string) => {
     setSelectedDate(date);
-    setYear(selected.getFullYear());
-    setMonth(selected.getMonth());
+    setViewDate(date);
   };
 
   const handleShiftMonth = (delta: number) => {
-    const baseDate = new Date(`${selectedDate}T00:00:00`);
-    const nextDate = addMonths(baseDate, delta);
-    syncSelectedDate(formatDateKey(nextDate));
+    const nextDate = addMonths(viewAnchor, delta);
+    setViewDate(formatDateKey(nextDate));
   };
 
   const handleToday = () => {
-    syncSelectedDate(todayStr);
+    setSelectedDate(todayStr);
+    setViewDate(todayStr);
   };
 
   const handleCreateFromDate = (date: string) => {
@@ -1057,7 +1057,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
             events={calendar.events}
             deadlines={deadlines}
             selectedDate={selectedDate}
-            onSelectDate={syncSelectedDate}
+            onSelectDate={selectDate}
             onPrevMonth={() => handleShiftMonth(-1)}
             onNextMonth={() => handleShiftMonth(1)}
             onToday={handleToday}
@@ -1071,7 +1071,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
               selectedDate={selectedDate}
               onPrevMonth={() => handleShiftMonth(-1)}
               onNextMonth={() => handleShiftMonth(1)}
-              onSelectDate={syncSelectedDate}
+              onSelectDate={selectDate}
             />
 
             <CalendarChecklist
@@ -1104,21 +1104,21 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => syncSelectedDate(formatDateKey(addDays(weekStart, -7)))}
+                onClick={() => setViewDate(formatDateKey(addDays(viewAnchor, -7)))}
                 className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
               >
                 ←
               </button>
               <button
                 type="button"
-                onClick={() => syncSelectedDate(todayStr)}
+                onClick={handleToday}
                 className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
               >
                 This week
               </button>
               <button
                 type="button"
-                onClick={() => syncSelectedDate(formatDateKey(addDays(weekStart, 7)))}
+                onClick={() => setViewDate(formatDateKey(addDays(viewAnchor, 7)))}
                 className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
               >
                 →
@@ -1133,7 +1133,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
               deadlines={deadlines}
               selectedDate={selectedDate}
               draftPreview={weekDraftPreview}
-              onSelectDate={setSelectedDate}
+              onSelectDate={selectDate}
               onCreateEventAt={handleCreateFromWeekSlot}
             />
 
@@ -1144,7 +1144,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
                 selectedDate={selectedDate}
                 onPrevMonth={() => handleShiftMonth(-1)}
                 onNextMonth={() => handleShiftMonth(1)}
-                onSelectDate={syncSelectedDate}
+                onSelectDate={selectDate}
               />
 
               <CalendarChecklist

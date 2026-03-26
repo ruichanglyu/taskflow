@@ -513,3 +513,14 @@ create policy "Users can read their own workout_set_logs" on public.workout_set_
 create policy "Users can insert their own workout_set_logs" on public.workout_set_logs for insert to authenticated with check (auth.uid() = user_id);
 create policy "Users can update their own workout_set_logs" on public.workout_set_logs for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "Users can delete their own workout_set_logs" on public.workout_set_logs for delete to authenticated using (auth.uid() = user_id);
+
+-- Storage bucket for profile avatars
+insert into storage.buckets (id, name, public) values ('avatars', 'avatars', true) on conflict do nothing;
+drop policy if exists "Users can upload their avatar" on storage.objects;
+create policy "Users can upload their avatar" on storage.objects for insert to authenticated with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "Anyone can read avatars" on storage.objects;
+create policy "Anyone can read avatars" on storage.objects for select using (bucket_id = 'avatars');
+drop policy if exists "Users can update their avatar" on storage.objects;
+create policy "Users can update their avatar" on storage.objects for update to authenticated using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "Users can delete their avatar" on storage.objects;
+create policy "Users can delete their avatar" on storage.objects for delete to authenticated using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);

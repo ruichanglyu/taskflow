@@ -154,7 +154,7 @@ export function AIPanel({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">AI Assistant</h3>
-              <p className="text-[10px] text-[var(--text-faint)]">Powered by Gemini 2.0 Flash</p>
+              <p className="text-[10px] text-[var(--text-faint)]">Powered by Gemini 1.5 Flash</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -200,7 +200,7 @@ export function AIPanel({
                 type="password"
                 value={apiKey}
                 onChange={e => setApiKey(e.target.value)}
-                placeholder="AIza..."
+                placeholder="Paste your Gemini API key"
                 className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
                 onKeyDown={e => { if (e.key === 'Enter') handleSaveKey(); }}
               />

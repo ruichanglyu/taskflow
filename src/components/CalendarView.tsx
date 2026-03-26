@@ -528,7 +528,7 @@ function WeekCalendarGrid({
                     className="pointer-events-none absolute left-0 right-0 rounded-sm bg-[var(--surface-muted)]/90"
                     style={{
                       top: `${hoverSlot.top}px`,
-                      height: `${rowHeight / 4}px`,
+                      height: `${rowHeight}px`,
                     }}
                   />
                 )}

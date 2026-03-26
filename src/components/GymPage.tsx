@@ -704,7 +704,7 @@ function PlanTab(props: GymPageProps) {
 
       {/* Create Plan Modal */}
       {showNewPlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowNewPlan(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setShowNewPlan(false)}>
           <div className="w-full max-w-sm rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-[var(--text-primary)]">Create Workout Plan</h3>
@@ -754,7 +754,7 @@ function PlanTab(props: GymPageProps) {
       )}
 
       {showImportPlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowImportPlan(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setShowImportPlan(false)}>
           <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-3 border-b border-[var(--border-soft)] px-4 py-4 sm:px-5">
               <div>
@@ -809,7 +809,7 @@ function PlanTab(props: GymPageProps) {
       )}
 
       {pendingDeletePlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setPendingDeletePlan(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setPendingDeletePlan(null)}>
           <div
             className="w-full max-w-md rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-5 shadow-2xl"
             onClick={e => e.stopPropagation()}
@@ -840,7 +840,7 @@ function PlanTab(props: GymPageProps) {
                   props.onDeletePlan(pendingDeletePlan.id);
                   setPendingDeletePlan(null);
                 }}
-                className="rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-2 text-sm font-medium text-rose-200 transition hover:border-rose-400/30 hover:bg-rose-400/15"
+                className="rounded-xl border border-rose-500/30 bg-rose-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-600 hover:border-rose-500"
               >
                 Delete Plan
               </button>
@@ -851,7 +851,7 @@ function PlanTab(props: GymPageProps) {
 
       {/* ===== WIZARD: Add Days Modal ===== */}
       {wizardStep === 'days' && selectedPlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setWizardStep(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setWizardStep(null)}>
           <div className="w-full max-w-md rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-[var(--text-primary)]">Add Workout Days</h3>
@@ -927,7 +927,7 @@ function PlanTab(props: GymPageProps) {
 
       {/* ===== WIZARD: Add Exercises Modal ===== */}
       {wizardStep === 'exercises' && wizardCurrentDay && selectedPlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setWizardStep(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setWizardStep(null)}>
           <div className="w-full max-w-lg rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div>
@@ -1619,7 +1619,7 @@ function ExerciseEditorModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
       <div className="w-full max-w-lg rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>

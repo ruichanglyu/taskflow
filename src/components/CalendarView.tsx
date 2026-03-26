@@ -345,7 +345,7 @@ function WeekCalendarGrid({
   const hourRows = Array.from({ length: 19 }, (_, index) => 5 + index);
   const rowHeight = 44;
   const todayKey = formatDateKey(new Date());
-  const [hoverSlot, setHoverSlot] = useState<{ dateKey: string; top: number } | null>(null);
+  const [hoverSlot, setHoverSlot] = useState<{ dateKey: string; startMinutes: number } | null>(null);
 
   const timedEvents = events.filter(event => event.start?.dateTime && event.end?.dateTime);
   const allDayEvents = events.filter(event => event.start?.date && !event.start?.dateTime);
@@ -496,9 +496,10 @@ function WeekCalendarGrid({
                       const rect = event.currentTarget.getBoundingClientRect();
                       const relativeY = Math.max(0, Math.min(event.clientY - rect.top, rect.height));
                       const quarterIndex = Math.min(3, Math.floor((relativeY / rect.height) * 4));
+                      const startMinutes = hour * 60 + quarterIndex * 15;
                       setHoverSlot({
                         dateKey: key,
-                        top: hourRows.indexOf(hour) * rowHeight + quarterIndex * (rowHeight / 4),
+                        startMinutes,
                       });
                     }}
                     onMouseLeave={() => {
@@ -525,9 +526,9 @@ function WeekCalendarGrid({
 
                 {hoverSlot?.dateKey === key && (
                   <div
-                    className="pointer-events-none absolute left-0 right-0 rounded-sm bg-[var(--surface-muted)]/90"
+                    className="pointer-events-none absolute left-1.5 right-1.5 z-10 overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--surface-muted)]/95 shadow-sm"
                     style={{
-                      top: `${hoverSlot.top}px`,
+                      top: `${((hoverSlot.startMinutes - 300) / 60) * rowHeight}px`,
                       height: `${rowHeight}px`,
                     }}
                   />

@@ -7,6 +7,16 @@ interface ThemeSettingsProps {
   onClose: () => void;
 }
 
+// Each preset gets a pair of colors for the swatch (gradient pill)
+const SWATCH_COLORS: Record<string, [string, string]> = {
+  dark: ['#1e293b', '#38bdf8'],
+  light: ['#e2e8f0', '#0284c7'],
+  matcha: ['#d4e4c8', '#7a9e65'],
+  sakura: ['#f8d7e8', '#d4829e'],
+  cloud: ['#d0e2ff', '#6a9fd8'],
+  lavender: ['#e0d4f0', '#9b7ec8'],
+};
+
 export function ThemeSettings({ open, onClose }: ThemeSettingsProps) {
   const { theme, font, fontSize, setTheme, setFont, setFontSize } = useTheme();
 
@@ -28,36 +38,42 @@ export function ThemeSettings({ open, onClose }: ThemeSettingsProps) {
           {/* Theme Presets */}
           <div>
             <label className="mb-3 block text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--text-faint)]">Theme</label>
-            <div className="grid grid-cols-3 gap-2">
-              {THEME_PRESETS.map(preset => (
-                <button
-                  key={preset.id}
-                  onClick={() => setTheme(preset.id as ThemeId)}
-                  className={cn(
-                    'group relative flex flex-col items-center gap-2 rounded-2xl border-2 p-3 transition-all',
-                    theme === preset.id
-                      ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                      : 'border-[var(--border-soft)] hover:border-[var(--border-strong)]'
-                  )}
-                >
-                  <div
-                    className="relative h-10 w-10 rounded-full shadow-sm"
-                    style={{ backgroundColor: preset.swatch }}
-                  >
-                    {theme === preset.id && (
-                      <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/20">
-                        <Check size={14} className="text-white" />
-                      </div>
+            <div className="grid grid-cols-3 gap-3">
+              {THEME_PRESETS.map(preset => {
+                const colors = SWATCH_COLORS[preset.id] ?? [preset.swatch, preset.swatch];
+                const isActive = theme === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    onClick={() => setTheme(preset.id as ThemeId)}
+                    className={cn(
+                      'group flex flex-col items-center gap-2.5 rounded-2xl border-2 px-2 py-3.5 transition-all',
+                      isActive
+                        ? 'border-[var(--accent)] shadow-lg'
+                        : 'border-transparent hover:border-[var(--border-strong)]'
                     )}
-                  </div>
-                  <span className={cn(
-                    'text-xs font-medium',
-                    theme === preset.id ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'
-                  )}>
-                    {preset.label}
-                  </span>
-                </button>
-              ))}
+                    style={isActive ? { boxShadow: `0 0 20px ${colors[1]}33` } : undefined}
+                  >
+                    {/* Color pill */}
+                    <div
+                      className="relative h-12 w-12 overflow-hidden rounded-2xl ring-2 ring-white/20"
+                      style={{ background: `linear-gradient(135deg, ${colors[0]} 0%, ${colors[1]} 100%)` }}
+                    >
+                      {isActive && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                          <Check size={16} className="text-white drop-shadow" />
+                        </div>
+                      )}
+                    </div>
+                    <span className={cn(
+                      'text-xs font-medium',
+                      isActive ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'
+                    )}>
+                      {preset.label}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

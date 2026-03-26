@@ -894,20 +894,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
           </section>
         </div>
       ) : viewMode === 'month' ? (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
-          <CalendarGrid
-            year={year}
-            month={month}
-            events={calendar.events}
-            deadlines={deadlines}
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            onPrevMonth={handlePrevMonth}
-            onNextMonth={handleNextMonth}
-            onToday={handleToday}
-            onCreateEvent={handleCreateFromDate}
-          />
-
+        <div className="grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)]">
           <div className="space-y-4">
             <CalendarChecklist
               calendars={calendar.calendars}
@@ -929,6 +916,19 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
               onCreateEvent={() => handleCreateFromDate(selectedDate)}
             />
           </div>
+
+          <CalendarGrid
+            year={year}
+            month={month}
+            events={calendar.events}
+            deadlines={deadlines}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            onPrevMonth={handlePrevMonth}
+            onNextMonth={handleNextMonth}
+            onToday={handleToday}
+            onCreateEvent={handleCreateFromDate}
+          />
         </div>
       ) : viewMode === 'week' ? (
         <div className="space-y-5">
@@ -961,17 +961,7 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
             </div>
           </div>
 
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
-            <WeekCalendarGrid
-              weekStart={weekStart}
-              events={calendar.events}
-              deadlines={deadlines}
-              selectedDate={selectedDate}
-              draftPreview={weekDraftPreview}
-              onSelectDate={setSelectedDate}
-              onCreateEventAt={handleCreateFromWeekSlot}
-            />
-
+          <div className="grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)]">
             <div className="space-y-4">
               <CalendarChecklist
                 calendars={calendar.calendars}
@@ -993,6 +983,16 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
                 onCreateEvent={() => handleCreateFromDate(selectedDate)}
               />
             </div>
+
+            <WeekCalendarGrid
+              weekStart={weekStart}
+              events={calendar.events}
+              deadlines={deadlines}
+              selectedDate={selectedDate}
+              draftPreview={weekDraftPreview}
+              onSelectDate={setSelectedDate}
+              onCreateEventAt={handleCreateFromWeekSlot}
+            />
           </div>
         </div>
       ) : (

@@ -233,16 +233,10 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(56,189,248,0.16),rgba(99,102,241,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-6 shadow-[0_24px_80px_var(--shadow-color)]">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(56,189,248,0.16),rgba(99,102,241,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--accent)]">
-              Time view
-            </div>
-            <h1 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Calendar</h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--text-secondary)] sm:text-base">
-              See your schedule, pull in Google Calendar events, and keep deadlines visible in the same planning surface.
-            </p>
+            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Calendar</h1>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">

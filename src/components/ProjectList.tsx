@@ -79,16 +79,10 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(34,197,94,0.14),rgba(56,189,248,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-6 shadow-[0_24px_80px_var(--shadow-color)]">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(34,197,94,0.14),rgba(56,189,248,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--accent)]">
-              Course hubs
-            </div>
-            <h1 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Courses</h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--text-secondary)] sm:text-base">
-              Each course acts like a live hub for your tasks, deadlines, and study pressure instead of just another folder.
-            </p>
+            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Courses</h1>
           </div>
           <button
             onClick={() => setShowForm(!showForm)}

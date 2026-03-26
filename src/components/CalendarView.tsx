@@ -6,7 +6,39 @@ import { CreateEventModal } from './CreateEventModal';
 import { CalendarGrid } from './CalendarGrid';
 import { cn } from '../utils/cn';
 
-type CalendarViewMode = 'month' | 'list';
+type CalendarViewMode = 'month' | 'week' | 'list';
+
+function formatDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function startOfWeek(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  next.setDate(next.getDate() - next.getDay());
+  return next;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function formatWeekRangeLabel(start: Date) {
+  const end = addDays(start, 6);
+  const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
+  if (sameMonth) {
+    return `${start.toLocaleDateString('en-US', { month: 'long' })} ${start.getDate()} – ${end.getDate()}, ${end.getFullYear()}`;
+  }
+  return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+}
+
+function getMinutesFromStart(dateTime?: string) {
+  if (!dateTime) return null;
+  const date = new Date(dateTime);
+  return date.getHours() * 60 + date.getMinutes();
+}
 
 function getEventStartLabel(date?: { date?: string; dateTime?: string }) {
   if (!date) return 'No start time';
@@ -279,6 +311,210 @@ function DayPanel({
   );
 }
 
+function WeekCalendarGrid({
+  weekStart,
+  events,
+  deadlines = [],
+  selectedDate,
+  onSelectDate,
+}: {
+  weekStart: Date;
+  events: GoogleCalendarEvent[];
+  deadlines?: import('../types').Deadline[];
+  selectedDate: string;
+  onSelectDate: (date: string) => void;
+}) {
+  const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  const hourRows = Array.from({ length: 19 }, (_, index) => 5 + index);
+  const todayKey = formatDateKey(new Date());
+
+  const timedEvents = events.filter(event => event.start?.dateTime && event.end?.dateTime);
+  const allDayEvents = events.filter(event => event.start?.date && !event.start?.dateTime);
+
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, GoogleCalendarEvent[]>();
+    for (const event of timedEvents) {
+      const key = getEventDateKey(event);
+      if (!key) continue;
+      const existing = map.get(key);
+      if (existing) existing.push(event);
+      else map.set(key, [event]);
+    }
+    for (const [key, value] of map) {
+      value.sort((a, b) => (a.start?.dateTime || '').localeCompare(b.start?.dateTime || ''));
+      map.set(key, value);
+    }
+    return map;
+  }, [timedEvents]);
+
+  const allDayByDay = useMemo(() => {
+    const map = new Map<string, GoogleCalendarEvent[]>();
+    for (const event of allDayEvents) {
+      const key = getEventDateKey(event);
+      if (!key) continue;
+      const existing = map.get(key);
+      if (existing) existing.push(event);
+      else map.set(key, [event]);
+    }
+    return map;
+  }, [allDayEvents]);
+
+  const deadlinesByDay = useMemo(() => {
+    const map = new Map<string, import('../types').Deadline[]>();
+    for (const dl of deadlines) {
+      const existing = map.get(dl.dueDate);
+      if (existing) existing.push(dl);
+      else map.set(dl.dueDate, [dl]);
+    }
+    return map;
+  }, [deadlines]);
+
+  return (
+    <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)]">
+      <div className="grid grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-[var(--border-soft)]">
+        <div className="border-r border-[var(--border-soft)] bg-[var(--surface)] px-3 py-4 text-[11px] font-medium text-[var(--text-faint)]">
+          GMT-04
+        </div>
+        {days.map(day => {
+          const key = formatDateKey(day);
+          const isSelected = key === selectedDate;
+          const isToday = key === todayKey;
+
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onSelectDate(key)}
+              className={cn(
+                'border-r border-[var(--border-soft)] px-3 py-3 text-left transition last:border-r-0',
+                isSelected ? 'bg-[var(--surface-muted)]' : 'hover:bg-[var(--surface-muted)]'
+              )}
+            >
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-faint)]">
+                {day.toLocaleDateString('en-US', { weekday: 'short' })}
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <span
+                  className={cn(
+                    'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold',
+                    isToday ? 'bg-[var(--accent)] text-[var(--accent-contrast)]' : 'text-[var(--text-primary)]'
+                  )}
+                >
+                  {day.getDate()}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-[var(--border-soft)]">
+        <div className="border-r border-[var(--border-soft)] px-3 py-2 text-[11px] font-medium text-[var(--text-faint)]">
+          All-day
+        </div>
+        {days.map(day => {
+          const key = formatDateKey(day);
+          const dayEvents = allDayByDay.get(key) ?? [];
+          const dayDeadlines = deadlinesByDay.get(key) ?? [];
+
+          return (
+            <div key={key} className="min-h-[52px] border-r border-[var(--border-soft)] px-2 py-2 last:border-r-0">
+              <div className="space-y-1">
+                {dayEvents.slice(0, 2).map(event => (
+                  <div
+                    key={event.id}
+                    className="flex items-center gap-1.5 truncate rounded-md px-1.5 py-1 text-[10px] font-medium text-[var(--text-secondary)]"
+                  >
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: event.calendarColor || '#818cf8' }} />
+                    <span className="truncate">{event.summary || 'Untitled'}</span>
+                  </div>
+                ))}
+                {dayDeadlines.slice(0, Math.max(0, 2 - dayEvents.length)).map(dl => (
+                  <div
+                    key={dl.id}
+                    className="flex items-center gap-1.5 truncate rounded-md px-1.5 py-1 text-[10px] font-medium text-[var(--text-secondary)]"
+                  >
+                    <span className="h-2 w-2 shrink-0 rotate-45 bg-orange-400" />
+                    <span className="truncate">{dl.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="relative">
+        <div className="grid grid-cols-[72px_repeat(7,minmax(0,1fr))]">
+          <div className="border-r border-[var(--border-soft)]">
+            {hourRows.map(hour => (
+              <div key={hour} className="relative h-16 border-b border-[var(--border-soft)] px-2 text-[11px] text-[var(--text-faint)]">
+                <span className="absolute -top-2 right-2 bg-[var(--surface)] px-1">
+                  {new Date(2026, 0, 1, hour).toLocaleTimeString('en-US', { hour: 'numeric' })}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {days.map(day => {
+            const key = formatDateKey(day);
+            const dayEvents = eventsByDay.get(key) ?? [];
+            const isSelected = key === selectedDate;
+
+            return (
+              <div
+                key={key}
+                className={cn(
+                  'relative border-r border-[var(--border-soft)] last:border-r-0',
+                  isSelected && 'bg-[var(--accent-soft)]/40'
+                )}
+              >
+                {hourRows.map(hour => (
+                  <div key={hour} className="h-16 border-b border-[var(--border-soft)]" />
+                ))}
+
+                {dayEvents.map(event => {
+                  const startMinutes = getMinutesFromStart(event.start?.dateTime);
+                  const endMinutes = getMinutesFromStart(event.end?.dateTime);
+                  if (startMinutes === null || endMinutes === null) return null;
+
+                  const top = ((startMinutes - 300) / 60) * 64;
+                  const height = Math.max(((endMinutes - startMinutes) / 60) * 64, 28);
+
+                  if (top < 0 || top > hourRows.length * 64) return null;
+
+                  return (
+                    <button
+                      key={event.id}
+                      type="button"
+                      onClick={() => onSelectDate(key)}
+                      className="absolute left-1.5 right-1.5 overflow-hidden rounded-lg px-2 py-1 text-left shadow-sm"
+                      style={{
+                        top: `${top}px`,
+                        height: `${height}px`,
+                        backgroundColor: `${event.calendarColor || '#818cf8'}22`,
+                        borderLeft: `3px solid ${event.calendarColor || '#818cf8'}`,
+                      }}
+                    >
+                      <div className="truncate text-[10px] font-semibold text-[var(--text-primary)]">
+                        {event.summary || 'Untitled event'}
+                      </div>
+                      <div className="truncate text-[10px] text-[var(--text-muted)]">
+                        {getEventTimeLabel(event.start)}
+                        {event.end?.dateTime ? ` - ${getEventTimeLabel(event.end)}` : ''}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
   const calendar = useGoogleCalendar(userId);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
@@ -290,8 +526,9 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const todayStr = formatDateKey(now);
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const weekStart = useMemo(() => startOfWeek(new Date(`${selectedDate}T00:00:00`)), [selectedDate]);
 
   const handlePrevMonth = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1); }
@@ -357,6 +594,18 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
                 )}
               >
                 <LayoutGrid size={14} /> Month
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('week')}
+                className={cn(
+                  'flex items-center gap-1.5 border-l border-[var(--border-soft)] px-3 py-2.5 text-xs font-medium transition-colors',
+                  viewMode === 'week'
+                    ? 'bg-[var(--surface)] text-[var(--text-primary)]'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+                )}
+              >
+                <CalendarDays size={14} /> Week
               </button>
               <button
                 type="button"
@@ -480,6 +729,69 @@ export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
               deletingId={deletingId}
               onCreateEvent={() => handleCreateFromDate(selectedDate)}
             />
+          </div>
+        </div>
+      ) : viewMode === 'week' ? (
+        <div className="space-y-5">
+          <div className="flex flex-col gap-3 rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div className="text-lg font-semibold text-[var(--text-primary)]">
+              {formatWeekRangeLabel(weekStart)}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedDate(formatDateKey(addDays(weekStart, -7)))}
+                className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+              >
+                ←
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedDate(todayStr)}
+                className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+              >
+                This week
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedDate(formatDateKey(addDays(weekStart, 7)))}
+                className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+              >
+                →
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <WeekCalendarGrid
+              weekStart={weekStart}
+              events={calendar.events}
+              deadlines={deadlines}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+            />
+
+            <div className="space-y-4">
+              <CalendarChecklist
+                calendars={calendar.calendars}
+                visibleCalendarIds={calendar.visibleCalendarIds}
+                selectedCalendarId={calendar.selectedCalendarId}
+                isLoading={calendar.isLoading}
+                open={showCalendarList}
+                onToggleOpen={() => setShowCalendarList(open => !open)}
+                onToggleVisibility={id => void calendar.toggleCalendarVisibility(id)}
+                onChooseCalendar={id => void calendar.chooseCalendar(id)}
+              />
+
+              <DayPanel
+                dateStr={selectedDate}
+                events={selectedDayEvents}
+                deadlines={deadlines}
+                onDelete={id => void handleDelete(id)}
+                deletingId={deletingId}
+                onCreateEvent={() => handleCreateFromDate(selectedDate)}
+              />
+            </div>
           </div>
         </div>
       ) : (

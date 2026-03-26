@@ -283,6 +283,17 @@ function PlanTab(props: GymPageProps) {
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
+  // Wizard modal state
+  const [wizardStep, setWizardStep] = useState<'days' | 'exercises' | null>(null);
+  const [wizardDayIndex, setWizardDayIndex] = useState(0);
+  // Exercise form state for wizard
+  const [wizExName, setWizExName] = useState('');
+  const [wizExMuscle, setWizExMuscle] = useState('');
+  const [wizExId, setWizExId] = useState('');
+  const [wizSets, setWizSets] = useState(3);
+  const [wizReps, setWizReps] = useState('10');
+  const [wizRest, setWizRest] = useState(45);
+
   useEffect(() => {
     if (plans.length === 0) {
       setSelectedPlanId(null);
@@ -332,6 +343,9 @@ function PlanTab(props: GymPageProps) {
     const planId = await props.onAddPlan(newPlanName.trim(), '', newPlanDays);
     if (planId) {
       setSelectedPlanId(planId);
+      // Auto-open wizard to add days
+      setWizardStep('days');
+      setNewDayName('');
     }
     setNewPlanName('');
     setShowNewPlan(false);
@@ -341,7 +355,10 @@ function PlanTab(props: GymPageProps) {
     if (!selectedPlan || !newDayName.trim()) return;
     await props.onAddDayTemplate(selectedPlan.id, newDayName.trim());
     setNewDayName('');
-    setShowAddDay(false);
+    // If in wizard, stay in the modal (don't close)
+    if (!wizardStep) {
+      setShowAddDay(false);
+    }
   };
 
   const handleImportPlan = async () => {
@@ -393,6 +410,35 @@ function PlanTab(props: GymPageProps) {
       setIsImporting(false);
     }
   };
+
+  // Wizard: add exercise (create new or pick from library)
+  const handleWizardAddExercise = async () => {
+    const currentDay = selectedPlanDays[wizardDayIndex];
+    if (!currentDay) return;
+
+    if (wizExId) {
+      // Pick from library
+      await props.onAddDayExercise(currentDay.id, wizExId, wizSets, wizReps, wizRest);
+    } else if (wizExName.trim()) {
+      // Create new exercise + add
+      const exId = await props.onAddExercise(wizExName.trim(), wizExMuscle.trim(), '', undefined);
+      if (exId) {
+        await props.onAddDayExercise(currentDay.id, exId, wizSets, wizReps, wizRest);
+      }
+    }
+    // Reset form but keep modal open for adding more
+    setWizExName('');
+    setWizExMuscle('');
+    setWizExId('');
+    setWizSets(3);
+    setWizReps('10');
+    setWizRest(45);
+  };
+
+  const wizardCurrentDay = wizardStep === 'exercises' ? selectedPlanDays[wizardDayIndex] : null;
+  const wizardCurrentDayExercises = wizardCurrentDay
+    ? dayExercises.filter(de => de.workoutDayTemplateId === wizardCurrentDay.id).sort((a, b) => a.position - b.position)
+    : [];
 
   const handleDayDragEnd = async (result: DropResult) => {
     if (!result.destination || result.source.index === result.destination.index) return;
@@ -773,6 +819,196 @@ function PlanTab(props: GymPageProps) {
               >
                 Delete Plan
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== WIZARD: Add Days Modal ===== */}
+      {wizardStep === 'days' && selectedPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setWizardStep(null)}>
+          <div className="w-full max-w-md rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-[var(--text-primary)]">Add Workout Days</h3>
+              <button onClick={() => setWizardStep(null)} className="rounded-xl p-1.5 text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]">
+                <X size={16} />
+              </button>
+            </div>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Add each day of your <span className="font-medium text-[var(--text-primary)]">{selectedPlan.name}</span> routine.
+            </p>
+
+            {/* Already added days */}
+            {selectedPlanDays.length > 0 && (
+              <div className="mt-4 space-y-1.5">
+                {selectedPlanDays.map((day, i) => (
+                  <div key={day.id} className="flex items-center gap-2 rounded-xl bg-[var(--surface-muted)] px-3 py-2">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[10px] font-bold text-[var(--accent)]">{i + 1}</span>
+                    <span className="text-sm font-medium text-[var(--text-primary)]">{day.name}</span>
+                    <Check size={14} className="ml-auto text-emerald-400" />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add new day input */}
+            <div className="mt-4 flex gap-2">
+              <input
+                value={newDayName}
+                onChange={e => setNewDayName(e.target.value)}
+                placeholder={selectedPlanDays.length === 0 ? 'e.g. Push, Upper Body, Chest + Triceps' : 'Next day name...'}
+                className="flex-1 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                onKeyDown={e => { if (e.key === 'Enter' && newDayName.trim()) handleAddDay(); }}
+                autoFocus
+              />
+              <button
+                onClick={handleAddDay}
+                disabled={!newDayName.trim()}
+                className="rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40"
+                style={{ backgroundColor: 'var(--accent-strong)' }}
+              >
+                Add
+              </button>
+            </div>
+
+            {/* Footer actions */}
+            <div className="mt-5 flex gap-2">
+              {selectedPlanDays.length > 0 && (
+                <button
+                  onClick={() => { setWizardStep('exercises'); setWizardDayIndex(0); }}
+                  className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)]"
+                  style={{ backgroundColor: 'var(--accent-strong)' }}
+                >
+                  Next: Add Exercises →
+                </button>
+              )}
+              <button
+                onClick={() => setWizardStep(null)}
+                className="rounded-xl border border-[var(--border-soft)] px-4 py-2.5 text-sm text-[var(--text-muted)] transition hover:border-[var(--border-strong)]"
+              >
+                {selectedPlanDays.length > 0 ? 'Done' : 'Skip'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== WIZARD: Add Exercises Modal ===== */}
+      {wizardStep === 'exercises' && wizardCurrentDay && selectedPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setWizardStep(null)}>
+          <div className="w-full max-w-lg rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Day {wizardDayIndex + 1} of {selectedPlanDays.length}</div>
+                <h3 className="mt-0.5 text-lg font-semibold text-[var(--text-primary)]">{wizardCurrentDay.name}</h3>
+              </div>
+              <button onClick={() => setWizardStep(null)} className="rounded-xl p-1.5 text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]">
+                <X size={16} />
+              </button>
+            </div>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">Add exercises for this day. You can always edit later.</p>
+
+            {/* Already added exercises for this day */}
+            {wizardCurrentDayExercises.length > 0 && (
+              <div className="mt-4 space-y-1.5">
+                {wizardCurrentDayExercises.map((de, i) => {
+                  const ex = exercises.find(e => e.id === de.exerciseId);
+                  return (
+                    <div key={de.id} className="flex items-center gap-2 rounded-xl bg-[var(--surface-muted)] px-3 py-2">
+                      <span className="text-xs font-medium text-[var(--text-faint)]">{i + 1}.</span>
+                      <span className="text-sm font-medium text-[var(--text-primary)]">{ex?.name ?? 'Unknown'}</span>
+                      <span className="ml-auto text-xs text-[var(--text-faint)]">{de.targetSets} × {de.targetReps} · {de.restSeconds}s</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Exercise form */}
+            <div className="mt-4 space-y-3 rounded-xl border border-[var(--accent)]/20 bg-[var(--accent-soft)]/30 p-3">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  value={wizExName}
+                  onChange={e => { setWizExName(e.target.value); setWizExId(''); }}
+                  placeholder="Exercise name (e.g. Bench Press)"
+                  className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                  onKeyDown={e => { if (e.key === 'Enter' && (wizExName.trim() || wizExId)) void handleWizardAddExercise(); }}
+                  autoFocus
+                />
+                <input
+                  value={wizExMuscle}
+                  onChange={e => setWizExMuscle(e.target.value)}
+                  placeholder="Muscle group (optional)"
+                  className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none sm:w-48"
+                />
+              </div>
+
+              {exercises.length > 0 && (
+                <select
+                  value={wizExId}
+                  onChange={e => { setWizExId(e.target.value); if (e.target.value) { setWizExName(''); setWizExMuscle(''); } }}
+                  className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                >
+                  <option value="">Choose from exercise library...</option>
+                  {exercises.map(ex => (
+                    <option key={ex.id} value={ex.id}>{ex.name}{ex.muscleGroup ? ` (${ex.muscleGroup})` : ''}</option>
+                  ))}
+                </select>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
+                <label className="flex items-center gap-1.5">Sets: <input type="number" value={wizSets} onChange={e => setWizSets(Number(e.target.value))} min={1} max={20} className="w-12 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-1.5 py-1.5 text-center text-sm text-[var(--text-primary)] focus:outline-none" /></label>
+                <label className="flex items-center gap-1.5">Reps: <input value={wizReps} onChange={e => setWizReps(e.target.value)} className="w-20 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-1.5 py-1.5 text-sm text-[var(--text-primary)] focus:outline-none" placeholder="e.g. 12,10,8" /></label>
+                <label className="flex items-center gap-1.5">Rest: <input type="number" value={wizRest} onChange={e => setWizRest(Number(e.target.value))} min={0} step={15} className="w-14 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-1.5 py-1.5 text-center text-sm text-[var(--text-primary)] focus:outline-none" /><span>s</span></label>
+              </div>
+
+              <button
+                onClick={() => void handleWizardAddExercise()}
+                disabled={!wizExName.trim() && !wizExId}
+                className="w-full rounded-lg px-3 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40"
+                style={{ backgroundColor: 'var(--accent-strong)' }}
+              >
+                {wizExId ? 'Add to Day' : 'Create & Add'}
+              </button>
+            </div>
+
+            {/* Footer navigation */}
+            <div className="mt-5 flex items-center justify-between">
+              <button
+                onClick={() => {
+                  if (wizardDayIndex > 0) setWizardDayIndex(wizardDayIndex - 1);
+                  else { setWizardStep('days'); }
+                }}
+                className="rounded-xl border border-[var(--border-soft)] px-4 py-2 text-sm text-[var(--text-muted)] transition hover:border-[var(--border-strong)]"
+              >
+                ← {wizardDayIndex > 0 ? 'Previous Day' : 'Back to Days'}
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setWizardStep(null)}
+                  className="rounded-xl border border-[var(--border-soft)] px-4 py-2 text-sm text-[var(--text-muted)] transition hover:border-[var(--border-strong)]"
+                >
+                  Done
+                </button>
+                {wizardDayIndex < selectedPlanDays.length - 1 && (
+                  <button
+                    onClick={() => setWizardDayIndex(wizardDayIndex + 1)}
+                    className="rounded-xl px-4 py-2 text-sm font-medium text-[var(--accent-contrast)]"
+                    style={{ backgroundColor: 'var(--accent-strong)' }}
+                  >
+                    Next Day →
+                  </button>
+                )}
+                {wizardDayIndex === selectedPlanDays.length - 1 && (
+                  <button
+                    onClick={() => setWizardStep(null)}
+                    className="rounded-xl px-4 py-2 text-sm font-medium text-[var(--accent-contrast)]"
+                    style={{ backgroundColor: 'var(--accent-strong)' }}
+                  >
+                    Finish ✓
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import {
   Dumbbell, Plus, Play, Square, ChevronRight, ChevronDown,
   Trash2, Edit3, Check, X, Timer, RotateCcw, History,
@@ -11,7 +11,7 @@ import type {
 } from '../types';
 import { cn } from '../utils/cn';
 
-type GymTab = 'plan' | 'workout' | 'history';
+type GymTab = 'plan' | 'workout' | 'history' | 'library';
 
 interface ParsedWorkoutPlan {
   name: string;
@@ -219,10 +219,11 @@ export function GymPage(props: GymPageProps) {
     if (activeSession) setTab('workout');
   }, [activeSession?.id]);
 
-  const tabs: { key: GymTab; label: string; icon: React.ReactNode }[] = [
+  const tabs: { key: GymTab; label: string; icon: ReactNode }[] = [
     { key: 'plan', label: 'Plan', icon: <Dumbbell size={16} /> },
     { key: 'workout', label: 'Workout', icon: <Play size={16} /> },
     { key: 'history', label: 'History', icon: <History size={16} /> },
+    { key: 'library', label: 'Exercise Library', icon: <Camera size={16} /> },
   ];
 
   return (
@@ -258,6 +259,7 @@ export function GymPage(props: GymPageProps) {
       {tab === 'plan' && <PlanTab {...props} />}
       {tab === 'workout' && <WorkoutTab {...props} />}
       {tab === 'history' && <HistoryTab {...props} />}
+      {tab === 'library' && <ExerciseLibraryTab {...props} />}
     </div>
   );
 }
@@ -277,7 +279,6 @@ function PlanTab(props: GymPageProps) {
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [showAddDay, setShowAddDay] = useState(false);
   const [newDayName, setNewDayName] = useState('');
-  const [showExerciseLib, setShowExerciseLib] = useState(false);
   const [importText, setImportText] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -408,114 +409,7 @@ function PlanTab(props: GymPageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="space-y-4">
-          <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Workout plans</div>
-                <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{plans.length} total</div>
-              </div>
-              <button
-                onClick={() => setShowNewPlan(true)}
-                className="rounded-xl border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
-              >
-                Add
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {planCards.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-[var(--border-soft)] px-4 py-8 text-center text-sm text-[var(--text-muted)]">
-                  No plans yet. Create one or import a routine.
-                </div>
-              ) : (
-                planCards.map(({ plan, dayCount, exerciseCount }) => {
-                  const isSelected = selectedPlan?.id === plan.id;
-                  const isActive = plan.isActive;
-                  return (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      onClick={() => setSelectedPlanId(plan.id)}
-                      className={cn(
-                        'w-full rounded-2xl border px-4 py-3 text-left transition',
-                        isSelected
-                          ? 'border-[var(--accent)] bg-[var(--accent-soft)]/40 shadow-md'
-                          : 'border-[var(--border-soft)] bg-[var(--surface-elevated)] hover:border-[var(--border-strong)]'
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{plan.name}</div>
-                          <div className="mt-1 text-[11px] text-[var(--text-faint)]">
-                            {plan.daysPerWeek} days/week · {dayCount} days · {exerciseCount} exercises
-                          </div>
-                        </div>
-                        {isActive && (
-                          <span className="shrink-0 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-                            Active
-                          </span>
-                        )}
-                      </div>
-                      {plan.description && (
-                        <p className="mt-2 line-clamp-2 text-xs text-[var(--text-muted)]">{plan.description}</p>
-                      )}
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          {showNewPlan && (
-            <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">Create Plan</h3>
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">Make a new plan without replacing the active one.</p>
-                </div>
-                <button onClick={() => setShowNewPlan(false)} className="text-[var(--text-faint)] transition hover:text-[var(--text-primary)]">
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="mt-4 space-y-3">
-                <input
-                  value={newPlanName}
-                  onChange={e => setNewPlanName(e.target.value)}
-                  placeholder="Plan name"
-                  className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-                  onKeyDown={e => { if (e.key === 'Enter') handleCreatePlan(); }}
-                  autoFocus
-                />
-                <div>
-                  <div className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-[var(--text-faint)]">Days per week</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[3, 4, 5, 6, 7].map(n => (
-                      <button
-                        key={n}
-                        onClick={() => setNewPlanDays(n)}
-                        className={cn(
-                          'h-8 w-8 rounded-lg text-sm font-medium transition',
-                          newPlanDays === n
-                            ? 'bg-[var(--accent)] text-[var(--accent-contrast)]'
-                            : 'border border-[var(--border-soft)] text-[var(--text-muted)] hover:bg-[var(--surface-muted)]'
-                        )}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={handleCreatePlan} disabled={!newPlanName.trim()} className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create</button>
-                  <button onClick={() => setShowNewPlan(false)} className="rounded-lg border border-[var(--border-soft)] px-4 py-2 text-sm text-[var(--text-muted)]">Cancel</button>
-                </div>
-              </div>
-            </div>
-          )}
-        </aside>
-
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
         <section className="space-y-4">
           {!selectedPlan ? (
             <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-8 text-center shadow-sm">
@@ -656,19 +550,116 @@ function PlanTab(props: GymPageProps) {
                 </div>
               </div>
 
-              <div>
-                <button
-                  onClick={() => setShowExerciseLib(!showExerciseLib)}
-                  className="mb-3 flex items-center gap-2 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] transition"
-                >
-                  {showExerciseLib ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                  Exercise Library ({exercises.length})
-                </button>
-                {showExerciseLib && <ExerciseLibrary exercises={exercises} onAdd={props.onAddExercise} onDelete={props.onDeleteExercise} />}
-              </div>
             </>
           )}
         </section>
+
+        <aside className="space-y-4">
+          <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Workout plans</div>
+                <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">{plans.length} total</div>
+              </div>
+              <button
+                onClick={() => setShowNewPlan(true)}
+                className="rounded-xl border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+              >
+                Add
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {planCards.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-[var(--border-soft)] px-4 py-8 text-center text-sm text-[var(--text-muted)]">
+                  No plans yet. Create one or import a routine.
+                </div>
+              ) : (
+                planCards.map(({ plan, dayCount, exerciseCount }) => {
+                  const isSelected = selectedPlan?.id === plan.id;
+                  const isActive = plan.isActive;
+                  return (
+                    <button
+                      key={plan.id}
+                      type="button"
+                      onClick={() => setSelectedPlanId(plan.id)}
+                      className={cn(
+                        'w-full rounded-2xl border px-4 py-3 text-left transition',
+                        isSelected
+                          ? 'border-[var(--accent)] bg-[var(--accent-soft)]/40 shadow-md'
+                          : 'border-[var(--border-soft)] bg-[var(--surface-elevated)] hover:border-[var(--border-strong)]'
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-[var(--text-primary)]">{plan.name}</div>
+                          <div className="mt-1 text-[11px] text-[var(--text-faint)]">
+                            {plan.daysPerWeek} days/week · {dayCount} days · {exerciseCount} exercises
+                          </div>
+                        </div>
+                        {isActive && (
+                          <span className="shrink-0 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      {plan.description && (
+                        <p className="mt-2 line-clamp-2 text-xs text-[var(--text-muted)]">{plan.description}</p>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {showNewPlan && (
+            <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">Create Plan</h3>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">Make a new plan without replacing the active one.</p>
+                </div>
+                <button onClick={() => setShowNewPlan(false)} className="text-[var(--text-faint)] transition hover:text-[var(--text-primary)]">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="mt-4 space-y-3">
+                <input
+                  value={newPlanName}
+                  onChange={e => setNewPlanName(e.target.value)}
+                  placeholder="Plan name"
+                  className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                  onKeyDown={e => { if (e.key === 'Enter') handleCreatePlan(); }}
+                  autoFocus
+                />
+                <div>
+                  <div className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-[var(--text-faint)]">Days per week</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[3, 4, 5, 6, 7].map(n => (
+                      <button
+                        key={n}
+                        onClick={() => setNewPlanDays(n)}
+                        className={cn(
+                          'h-8 w-8 rounded-lg text-sm font-medium transition',
+                          newPlanDays === n
+                            ? 'bg-[var(--accent)] text-[var(--accent-contrast)]'
+                            : 'border border-[var(--border-soft)] text-[var(--text-muted)] hover:bg-[var(--surface-muted)]'
+                        )}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleCreatePlan} disabled={!newPlanName.trim()} className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create</button>
+                  <button onClick={() => setShowNewPlan(false)} className="rounded-lg border border-[var(--border-soft)] px-4 py-2 text-sm text-[var(--text-muted)]">Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </aside>
       </div>
 
       {showImportPlan && (
@@ -770,6 +761,64 @@ function PlanTab(props: GymPageProps) {
   );
 }
 
+function StatPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 text-center shadow-sm">
+      <div className="text-[9px] uppercase tracking-[0.16em] text-[var(--text-faint)]">{label}</div>
+      <div className="mt-1 text-base font-bold text-[var(--text-primary)]">{value}</div>
+    </div>
+  );
+}
+
+function ExerciseLibraryTab(props: GymPageProps) {
+  const { exercises } = props;
+
+  const muscleGroups = new Set(exercises.map(ex => ex.muscleGroup).filter(Boolean));
+  const exercisesWithImages = exercises.filter(ex => ex.referenceImageUrl).length;
+
+  return (
+    <div className="space-y-4">
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Exercise Library</div>
+            <h2 className="mt-1 text-2xl font-bold tracking-tight text-[var(--text-primary)]">Store every movement in one place</h2>
+            <p className="mt-2 max-w-2xl text-sm text-[var(--text-muted)]">
+              Save exercises with optional images so they stay easy to recognize when you build plans or start a workout.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:min-w-[260px] sm:grid-cols-3">
+            <StatPill label="Exercises" value={exercises.length.toString()} />
+            <StatPill label="With images" value={exercisesWithImages.toString()} />
+            <StatPill label="Groups" value={muscleGroups.size.toString()} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+          <ExerciseLibrary exercises={exercises} onAdd={props.onAddExercise} onDelete={props.onDeleteExercise} />
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">How images work</div>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Add a photo or image URL when you create an exercise. That image shows up in your workout flow and in history, so you can identify the movement fast.
+            </p>
+          </div>
+          <div className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Workout reminder</div>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Exercises with images will display them inside the active workout card too, so the reference stays visible when you are actually training.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Workout Day Card ---
 function WorkoutDayCard({
   day, dayNumber, isExpanded, onToggle, exercises, dayExercises,
@@ -801,6 +850,7 @@ function WorkoutDayCard({
   const [showNewExercise, setShowNewExercise] = useState(false);
   const [newExName, setNewExName] = useState('');
   const [newExMuscle, setNewExMuscle] = useState('');
+  const [newExImage, setNewExImage] = useState('');
 
   const handleRename = async () => {
     if (editName.trim() && editName.trim() !== day.name) {
@@ -821,12 +871,13 @@ function WorkoutDayCard({
 
   const handleCreateAndAdd = async () => {
     if (!newExName.trim()) return;
-    const exId = await onAddExercise(newExName.trim(), newExMuscle.trim(), '');
+    const exId = await onAddExercise(newExName.trim(), newExMuscle.trim(), '', newExImage.trim() || undefined);
     if (exId) {
       setAddExerciseId(exId);
       setShowNewExercise(false);
       setNewExName('');
       setNewExMuscle('');
+      setNewExImage('');
     }
   };
 
@@ -919,6 +970,14 @@ function WorkoutDayCard({
                   <input value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} placeholder="Muscle group" className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none sm:w-28" />
                   <button onClick={handleCreateAndAdd} disabled={!newExName.trim()} className="rounded-lg px-2 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create</button>
                 </div>
+              )}
+              {showNewExercise && (
+                <input
+                  value={newExImage}
+                  onChange={e => setNewExImage(e.target.value)}
+                  placeholder="Image URL (optional)"
+                  className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none"
+                />
               )}
 
               <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">

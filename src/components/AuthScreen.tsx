@@ -119,11 +119,13 @@ export function AuthScreen() {
             This app now uses Supabase Authentication so each person can keep a separate workspace and stay signed in across devices.
           </p>
           <div className="mt-8 grid gap-3 text-sm text-[var(--text-secondary)]">
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
-              Email and password authentication is handled by Supabase.
+            <div className="flex items-start gap-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
+              <span className="mt-0.5 text-[var(--accent)]">✦</span>
+              <span>Track deadlines, tasks, and courses — all in one place, synced across every device you use.</span>
             </div>
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
-              Existing task UI remains intact while data still lives locally per signed-in user.
+            <div className="flex items-start gap-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
+              <span className="mt-0.5 text-[var(--accent)]">✦</span>
+              <span>Log gym sessions, plan workouts, and review your history with photos and set-by-set data.</span>
             </div>
           </div>
         </section>

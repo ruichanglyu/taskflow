@@ -108,7 +108,7 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail,
         <div className="px-3 pb-3">
           <button
             onClick={onCanvasClick}
-            className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-3 text-sm font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+            className="flex w-full items-center justify-between rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-3 text-sm font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
           >
             <span className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)]">

@@ -970,29 +970,24 @@ function WorkoutDayCard({
           {/* Add exercise */}
           {showAddExercise ? (
             <div className="space-y-3 rounded-xl border border-[var(--accent)]/20 bg-[var(--accent-soft)]/40 p-3">
-              {/* New exercise form is always primary; pick from library is secondary */}
-              {showNewExercise ? (
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input value={newExName} onChange={e => setNewExName(e.target.value)} placeholder="Exercise name (e.g. Bench Press)" className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none" autoFocus />
-                  <input value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} placeholder="Muscle (optional)" className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none sm:w-32" />
-                  {exercises.length > 0 && (
-                    <button onClick={() => setShowNewExercise(false)} className="shrink-0 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]">Library</button>
-                  )}
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <select
-                    value={addExerciseId}
-                    onChange={e => setAddExerciseId(e.target.value)}
-                    className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
-                  >
-                    <option value="">Pick from your exercises...</option>
-                    {exercises.map(ex => (
-                      <option key={ex.id} value={ex.id}>{ex.name}{ex.muscleGroup ? ` (${ex.muscleGroup})` : ''}</option>
-                    ))}
-                  </select>
-                  <button onClick={() => setShowNewExercise(true)} className="shrink-0 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]">+ New</button>
-                </div>
+              {/* Create new exercise */}
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input value={newExName} onChange={e => { setNewExName(e.target.value); setAddExerciseId(''); }} placeholder="Exercise name (e.g. Bench Press)" className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none" autoFocus />
+                <input value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} placeholder="Muscle group (optional)" className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none sm:w-48" />
+              </div>
+
+              {/* Or pick from library */}
+              {exercises.length > 0 && (
+                <select
+                  value={addExerciseId}
+                  onChange={e => { setAddExerciseId(e.target.value); if (e.target.value) { setNewExName(''); setNewExMuscle(''); } }}
+                  className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                >
+                  <option value="">Choose from exercise library...</option>
+                  {exercises.map(ex => (
+                    <option key={ex.id} value={ex.id}>{ex.name}{ex.muscleGroup ? ` (${ex.muscleGroup})` : ''}</option>
+                  ))}
+                </select>
               )}
 
               <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-muted)]">
@@ -1002,11 +997,11 @@ function WorkoutDayCard({
               </div>
 
               <div className="flex gap-2">
-                {showNewExercise
-                  ? <button onClick={handleCreateAndAdd} disabled={!newExName.trim()} className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create & Add</button>
-                  : <button onClick={handleAddExerciseToPlan} disabled={!addExerciseId} className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add to Day</button>
+                {addExerciseId
+                  ? <button onClick={handleAddExerciseToPlan} className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)]" style={{ backgroundColor: 'var(--accent-strong)' }}>Add to Day</button>
+                  : <button onClick={handleCreateAndAdd} disabled={!newExName.trim()} className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create & Add</button>
                 }
-                <button onClick={() => { setShowAddExercise(false); setShowNewExercise(true); }} className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-[var(--text-muted)]">Cancel</button>
+                <button onClick={() => { setShowAddExercise(false); }} className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-[var(--text-muted)]">Cancel</button>
               </div>
             </div>
           ) : (

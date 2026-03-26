@@ -1,4 +1,7 @@
-export const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+export const GOOGLE_CALENDAR_SCOPE = [
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/calendar.events',
+].join(' ');
 export const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 export const isGoogleCalendarConfigured = Boolean(googleClientId);
 

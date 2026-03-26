@@ -32,7 +32,7 @@ export interface ParsedImportRow {
 
 const KEY_STORAGE = 'taskflow_ai_key';
 
-const GEMINI_MODEL = 'gemini-3.1-flash-lite';
+const GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 export function getAPIKey(): string | null {

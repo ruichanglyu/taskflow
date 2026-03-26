@@ -34,9 +34,12 @@ function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function parseDateKey(dateKey: string) {
-  const [year, month, day] = dateKey.split('-').map(Number);
-  return new Date(year, month - 1, day);
+function parseTaskDueDate(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+  return new Date(value);
 }
 
 export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate }: TimelineViewProps) {
@@ -62,7 +65,7 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
     return tasks
       .filter(t => t.dueDate)
       .map(t => {
-        const due = startOfDay(parseDateKey(t.dueDate!));
+        const due = startOfDay(parseTaskDueDate(t.dueDate!));
         const created = startOfDay(new Date(t.createdAt));
         const start = created < rangeStart ? rangeStart : created;
         const end = due;

@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Dumbbell, Plus, Play, Square, ChevronRight, ChevronDown,
   Trash2, Edit3, Check, X, Timer, RotateCcw, History,
-  Trophy, TrendingUp,
+  Trophy, TrendingUp, GripVertical,
 } from 'lucide-react';
+import { DragDropContext, Droppable, Draggable, type DropResult, type DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 import type {
   WorkoutPlan, WorkoutDayTemplate, Exercise,
   WorkoutDayExercise, WorkoutSession, WorkoutExerciseLog, WorkoutSetLog,
@@ -343,6 +344,19 @@ function PlanTab(props: GymPageProps) {
     }
   };
 
+  const handleDayDragEnd = async (result: DropResult) => {
+    if (!result.destination || result.source.index === result.destination.index) return;
+    const reordered = [...planDays];
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+    // Update positions for all affected days
+    for (let i = 0; i < reordered.length; i++) {
+      if (reordered[i].position !== i) {
+        await props.onUpdateDayTemplate(reordered[i].id, { position: i });
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Active plan or create */}
@@ -422,60 +436,78 @@ function PlanTab(props: GymPageProps) {
                 <Trash2 size={16} />
               </button>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
               <button
                 onClick={() => setShowImportPlan(true)}
-                className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--accent)]"
+                className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
               >
-                Import workout plan
+                Import plan
               </button>
             </div>
           </div>
 
           {/* Workout days */}
-          <div className="space-y-3">
-            {planDays.map((day, idx) => (
-              <WorkoutDayCard
-                key={day.id}
-                day={day}
-                dayNumber={idx + 1}
-                isExpanded={expandedDay === day.id}
-                onToggle={() => setExpandedDay(expandedDay === day.id ? null : day.id)}
-                exercises={exercises}
-                dayExercises={dayExercises.filter(de => de.workoutDayTemplateId === day.id).sort((a, b) => a.position - b.position)}
-                onUpdateDay={props.onUpdateDayTemplate}
-                onDeleteDay={props.onDeleteDayTemplate}
-                onAddDayExercise={props.onAddDayExercise}
-                onUpdateDayExercise={props.onUpdateDayExercise}
-                onDeleteDayExercise={props.onDeleteDayExercise}
-                onAddExercise={props.onAddExercise}
-              />
-            ))}
+          <DragDropContext onDragEnd={handleDayDragEnd}>
+            <Droppable droppableId="workout-days">
+              {(provided) => (
+                <div className="space-y-2" ref={provided.innerRef} {...provided.droppableProps}>
+                  {planDays.map((day, idx) => (
+                    <Draggable key={day.id} draggableId={day.id} index={idx}>
+                      {(dragProvided, dragSnapshot) => (
+                        <div
+                          ref={dragProvided.innerRef}
+                          {...dragProvided.draggableProps}
+                          style={dragProvided.draggableProps.style}
+                        >
+                          <WorkoutDayCard
+                            day={day}
+                            dayNumber={idx + 1}
+                            isExpanded={expandedDay === day.id}
+                            onToggle={() => setExpandedDay(expandedDay === day.id ? null : day.id)}
+                            exercises={exercises}
+                            dayExercises={dayExercises.filter(de => de.workoutDayTemplateId === day.id).sort((a, b) => a.position - b.position)}
+                            onUpdateDay={props.onUpdateDayTemplate}
+                            onDeleteDay={props.onDeleteDayTemplate}
+                            onAddDayExercise={props.onAddDayExercise}
+                            onUpdateDayExercise={props.onUpdateDayExercise}
+                            onDeleteDayExercise={props.onDeleteDayExercise}
+                            onAddExercise={props.onAddExercise}
+                            dragHandleProps={dragProvided.dragHandleProps}
+                            isDragging={dragSnapshot.isDragging}
+                          />
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </DragDropContext>
 
-            {/* Add day button */}
-            {showAddDay ? (
-              <div className="flex gap-2 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-3">
-                <input
-                  value={newDayName}
-                  onChange={e => setNewDayName(e.target.value)}
-                  placeholder="Day name (e.g. Push, Pull, Legs)"
-                  className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-                  onKeyDown={e => { if (e.key === 'Enter') handleAddDay(); if (e.key === 'Escape') setShowAddDay(false); }}
-                  autoFocus
-                />
-                <button onClick={handleAddDay} disabled={!newDayName.trim()} className="rounded-lg px-3 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add</button>
-                <button onClick={() => setShowAddDay(false)} className="rounded-lg border border-[var(--border-soft)] px-3 py-2 text-sm text-[var(--text-muted)]"><X size={16} /></button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowAddDay(true)}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-soft)] py-3 text-sm font-medium text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-              >
-                <Plus size={16} />
-                Add Workout Day
-              </button>
-            )}
-          </div>
+          {/* Add day button */}
+          {showAddDay ? (
+            <div className="flex gap-2 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-3">
+              <input
+                value={newDayName}
+                onChange={e => setNewDayName(e.target.value)}
+                placeholder="Day name (e.g. Push, Pull, Legs)"
+                className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                onKeyDown={e => { if (e.key === 'Enter') handleAddDay(); if (e.key === 'Escape') setShowAddDay(false); }}
+                autoFocus
+              />
+              <button onClick={handleAddDay} disabled={!newDayName.trim()} className="rounded-lg px-3 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add</button>
+              <button onClick={() => setShowAddDay(false)} className="rounded-lg border border-[var(--border-soft)] px-3 py-2 text-sm text-[var(--text-muted)]"><X size={16} /></button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddDay(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-soft)] py-3 text-sm font-medium text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            >
+              <Plus size={16} />
+              Add Workout Day
+            </button>
+          )}
 
           {/* Exercise Library */}
           <div>
@@ -553,6 +585,7 @@ function PlanTab(props: GymPageProps) {
 function WorkoutDayCard({
   day, dayNumber, isExpanded, onToggle, exercises, dayExercises,
   onUpdateDay, onDeleteDay, onAddDayExercise, onUpdateDayExercise, onDeleteDayExercise, onAddExercise,
+  dragHandleProps, isDragging,
 }: {
   day: WorkoutDayTemplate;
   dayNumber: number;
@@ -566,6 +599,8 @@ function WorkoutDayCard({
   onUpdateDayExercise: GymPageProps['onUpdateDayExercise'];
   onDeleteDayExercise: GymPageProps['onDeleteDayExercise'];
   onAddExercise: GymPageProps['onAddExercise'];
+  dragHandleProps?: DraggableProvidedDragHandleProps | null;
+  isDragging?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(day.name);
@@ -607,33 +642,50 @@ function WorkoutDayCard({
   };
 
   return (
-    <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] overflow-hidden">
-      <button onClick={onToggle} className="flex w-full items-center gap-3 px-4 py-3 text-left">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-xs font-bold text-[var(--accent)]">
-          {dayNumber}
+    <div className={cn(
+      'rounded-xl border bg-[var(--surface-elevated)] overflow-hidden transition-shadow',
+      isDragging ? 'border-[var(--accent)] shadow-lg shadow-[var(--accent)]/10' : 'border-[var(--border-soft)]'
+    )}>
+      <div className="flex items-center">
+        {/* Drag handle */}
+        <div
+          {...dragHandleProps}
+          className="flex items-center justify-center pl-2 pr-1 py-3 cursor-grab active:cursor-grabbing text-[var(--text-faint)] hover:text-[var(--text-muted)] transition"
+        >
+          <GripVertical size={16} />
         </div>
-        <div className="flex-1 min-w-0">
-          {isEditing ? (
-            <input
-              value={editName}
-              onChange={e => setEditName(e.target.value)}
-              onBlur={handleRename}
-              onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setIsEditing(false); }}
-              className="w-full bg-transparent text-sm font-semibold text-[var(--text-primary)] focus:outline-none"
-              onClick={e => e.stopPropagation()}
-              autoFocus
-            />
-          ) : (
-            <span className="text-sm font-semibold text-[var(--text-primary)]">{day.name}</span>
-          )}
-          <span className="ml-2 text-xs text-[var(--text-faint)]">{dayExercises.length} exercises</span>
-        </div>
-        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-          <button onClick={() => { setEditName(day.name); setIsEditing(true); }} className="p-1.5 text-[var(--text-faint)] hover:text-[var(--text-primary)] transition"><Edit3 size={14} /></button>
-          <button onClick={() => { if (confirm('Delete this day?')) onDeleteDay(day.id); }} className="p-1.5 text-[var(--text-faint)] hover:text-red-400 transition"><Trash2 size={14} /></button>
-        </div>
-        {isExpanded ? <ChevronDown size={16} className="text-[var(--text-faint)]" /> : <ChevronRight size={16} className="text-[var(--text-faint)]" />}
-      </button>
+        <button onClick={onToggle} className="flex flex-1 items-center gap-3 pr-4 py-3 text-left">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-xs font-bold text-[var(--accent)]">
+            {dayNumber}
+          </div>
+          <div className="flex-1 min-w-0">
+            {isEditing ? (
+              <input
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                onBlur={handleRename}
+                onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setIsEditing(false); }}
+                className="w-full bg-transparent text-sm font-semibold text-[var(--text-primary)] focus:outline-none"
+                onClick={e => e.stopPropagation()}
+                autoFocus
+              />
+            ) : (
+              <span className="text-sm font-semibold text-[var(--text-primary)]">{day.name}</span>
+            )}
+            <p className="text-xs text-[var(--text-faint)]">{dayExercises.length} exercises</p>
+            {!isExpanded && dayExercises.length > 0 && (
+              <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">
+                {dayExercises.map(de => exercises.find(e => e.id === de.exerciseId)?.name).filter(Boolean).join(' · ')}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+            <button onClick={() => { setEditName(day.name); setIsEditing(true); }} className="p-1.5 text-[var(--text-faint)] hover:text-[var(--text-primary)] transition"><Edit3 size={14} /></button>
+            <button onClick={() => { if (confirm('Delete this day?')) onDeleteDay(day.id); }} className="p-1.5 text-[var(--text-faint)] hover:text-red-400 transition"><Trash2 size={14} /></button>
+          </div>
+          {isExpanded ? <ChevronDown size={16} className="text-[var(--text-faint)]" /> : <ChevronRight size={16} className="text-[var(--text-faint)]" />}
+        </button>
+      </div>
 
       {isExpanded && (
         <div className="border-t border-[var(--border-soft)] px-4 py-3 space-y-2">

@@ -21,6 +21,7 @@ function getStorageKey(userId: string, suffix: string) {
 
 export function useGoogleCalendar(userId: string) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [hasHydratedStoredToken, setHasHydratedStoredToken] = useState(false);
   const [calendars, setCalendars] = useState<GoogleCalendarListItem[]>([]);
   const [selectedCalendarId, setSelectedCalendarId] = useState<string>('');
   const [visibleCalendarIds, setVisibleCalendarIds] = useState<string[]>([]);
@@ -60,6 +61,7 @@ export function useGoogleCalendar(userId: string) {
     const storedToken = localStorage.getItem(tokenStorageKey);
     const storedExpiry = localStorage.getItem(tokenExpiryStorageKey);
     if (!storedToken || !storedExpiry) {
+      setHasHydratedStoredToken(true);
       return;
     }
 
@@ -67,10 +69,12 @@ export function useGoogleCalendar(userId: string) {
     if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
       localStorage.removeItem(tokenStorageKey);
       localStorage.removeItem(tokenExpiryStorageKey);
+      setHasHydratedStoredToken(true);
       return;
     }
 
     setAccessToken(storedToken);
+    setHasHydratedStoredToken(true);
   }, [tokenExpiryStorageKey, tokenStorageKey]);
 
   useEffect(() => {
@@ -222,7 +226,7 @@ export function useGoogleCalendar(userId: string) {
 
   useEffect(() => {
     const shouldReconnect = localStorage.getItem(connectedStorageKey) === 'true';
-    if (!shouldReconnect || accessToken || !isGoogleCalendarConfigured) return;
+    if (!hasHydratedStoredToken || !shouldReconnect || accessToken || !isGoogleCalendarConfigured) return;
 
     let cancelled = false;
 
@@ -240,7 +244,7 @@ export function useGoogleCalendar(userId: string) {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, connectedStorageKey, isGoogleCalendarConfigured, loadCalendarData, requestAccessToken, tokenExpiryStorageKey, tokenStorageKey]);
+  }, [accessToken, connectedStorageKey, hasHydratedStoredToken, isGoogleCalendarConfigured, loadCalendarData, requestAccessToken, tokenExpiryStorageKey, tokenStorageKey]);
 
   const connect = useCallback(async () => {
     if (!isGoogleCalendarConfigured || !googleClientId) {

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock } from '../hooks/useAI';
+import { useAI, getAPIKey, setAPIKey, removeAPIKey, testAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock } from '../hooks/useAI';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus } from '../types';
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
@@ -34,6 +34,8 @@ export function AIPanel({
   const [hasKey, setHasKey] = useState(!!getAPIKey());
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [importedBlocks, setImportedBlocks] = useState<Set<string>>(new Set());
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -76,6 +78,17 @@ export function AIPanel({
     setApiKey('');
     setHasKey(false);
     setShowKeyInput(false);
+    setTestResult(null);
+  };
+
+  const handleTestKey = async () => {
+    const key = getAPIKey() || apiKey.trim();
+    if (!key) return;
+    setTesting(true);
+    setTestResult(null);
+    const res = await testAPIKey(key);
+    setTestResult(`Status: ${res.status} | OK: ${res.ok}\n\n${res.body}`);
+    setTesting(false);
   };
 
   const handleImport = async (block: ImportBlock, blockKey: string) => {
@@ -221,9 +234,23 @@ export function AIPanel({
                 </button>
               )}
             </div>
-            <p className="mt-1.5 text-[10px] text-[var(--text-faint)]">
-              Key is stored locally in your browser. Free tier: 15 req/min, 1M tokens/day.
-            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                onClick={handleTestKey}
+                disabled={testing || (!hasKey && !apiKey.trim())}
+                className="rounded-lg border border-[var(--border-soft)] px-3 py-1 text-[11px] font-medium text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
+              >
+                {testing ? 'Testing...' : 'Test Key'}
+              </button>
+              <p className="text-[10px] text-[var(--text-faint)]">
+                Key is stored locally. Free tier: 15 req/min, 1M tokens/day.
+              </p>
+            </div>
+            {testResult && (
+              <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-[var(--surface)] p-2 text-[10px] text-[var(--text-muted)] whitespace-pre-wrap break-all">
+                {testResult}
+              </pre>
+            )}
           </div>
         )}
 

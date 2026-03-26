@@ -51,24 +51,6 @@ export function removeAPIKey() {
   localStorage.removeItem(KEY_STORAGE);
 }
 
-/** Quick non-streaming test to diagnose key issues — returns the raw response */
-export async function testAPIKey(key: string): Promise<{ ok: boolean; status: number; body: string }> {
-  const url = `${GEMINI_API_URL}/${GEMINI_MODEL}:generateContent?key=${key}`;
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: 'Say hi' }] }],
-        generationConfig: { maxOutputTokens: 10 },
-      }),
-    });
-    const body = await res.text();
-    return { ok: res.ok, status: res.status, body };
-  } catch (err) {
-    return { ok: false, status: 0, body: err instanceof Error ? err.message : String(err) };
-  }
-}
 
 function buildSystemPrompt(data: {
   tasks: Task[];

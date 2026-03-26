@@ -9,7 +9,7 @@ interface DeadlinesPageProps {
   tasks: Task[];
   initialCourseFilter?: string | null;
   initialDetailId?: string | null;
-  onAdd: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string) => Promise<boolean>;
+  onAdd: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus) => Promise<boolean>;
   onAddProject: (name: string, description: string) => Promise<string | null> | void;
   onUpdate: (id: string, updates: Partial<Pick<Deadline, 'title' | 'projectId' | 'status' | 'type' | 'dueDate' | 'dueTime' | 'notes'>>) => Promise<boolean>;
   onDelete: (id: string) => void;
@@ -417,7 +417,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
         continue;
       }
 
-      const ok = await onAdd(row.title, projectId, row.type, row.dueDate, row.dueTime, row.notes);
+      const ok = await onAdd(row.title, projectId, row.type, row.dueDate, row.dueTime, row.notes, row.status);
       if (ok) {
         importedCount++;
         existingSignatures.add(signature);

@@ -100,6 +100,7 @@ export function useDeadlines(userId: string) {
     dueDate: string,
     dueTime: string | null,
     notes: string,
+    status: DeadlineStatus = 'not-started',
     source?: { sourceType: DeadlineSource; sourceId: string; sourceUrl?: string },
   ): Promise<boolean> => {
     if (!supabase) return false;
@@ -109,6 +110,7 @@ export function useDeadlines(userId: string) {
         user_id: userId,
         project_id: projectId,
         title,
+        status,
         type,
         due_date: dueDate,
         due_time: dueTime,

@@ -209,29 +209,24 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
   return (
     <div className="space-y-6">
       <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(56,189,248,0.14),rgba(99,102,241,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-2xl">
-            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Tasks</h1>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:w-[420px]">
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">To do</div>
-              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{todoCount}</div>
-            </div>
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">In progress</div>
-              <div className="mt-1 text-2xl font-semibold text-blue-400">{inProgressCount}</div>
-            </div>
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Done</div>
-              <div className="mt-1 text-2xl font-semibold text-emerald-400">{doneCount}</div>
-            </div>
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Linked</div>
-              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{linkedCount}</div>
-            </div>
-          </div>
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Tasks</h1>
         </div>
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          { label: 'To Do', value: todoCount, color: 'text-[var(--text-primary)]' },
+          { label: 'In Progress', value: inProgressCount, color: 'text-blue-400' },
+          { label: 'Done', value: doneCount, color: 'text-emerald-400' },
+          { label: 'Linked', value: linkedCount, color: 'text-[var(--text-primary)]' },
+        ].map(stat => (
+          <div key={stat.label} className="flex flex-col items-center justify-center rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)] text-center">{stat.label}</div>
+            <div className={cn('mt-1 text-2xl font-semibold', stat.color)}>{stat.value}</div>
+          </div>
+        ))}
       </div>
 
       {/* Filters */}

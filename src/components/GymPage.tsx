@@ -231,25 +231,23 @@ export function GymPage(props: GymPageProps) {
   return (
     <div className="space-y-6">
       <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(34,197,94,0.16),rgba(56,189,248,0.08)_44%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Gym</h1>
-          </div>
-          <div className="grid grid-cols-3 gap-3 lg:w-[360px]">
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Plans</div>
-              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{totalPlans}</div>
-            </div>
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Sessions</div>
-              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{totalSessions}</div>
-            </div>
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Exercises</div>
-              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{totalExercises}</div>
-            </div>
-          </div>
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Gym</h1>
         </div>
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'Plans', value: totalPlans },
+          { label: 'Sessions', value: totalSessions },
+          { label: 'Exercises', value: totalExercises },
+        ].map(stat => (
+          <div key={stat.label} className="flex flex-col items-center justify-center rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)] text-center">{stat.label}</div>
+            <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{stat.value}</div>
+          </div>
+        ))}
       </div>
 
       {/* Tab bar */}

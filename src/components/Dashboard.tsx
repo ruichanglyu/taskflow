@@ -102,31 +102,26 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
   return (
     <div className="space-y-6">
       <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[linear-gradient(135deg,rgba(14,165,233,0.16),rgba(34,197,94,0.08)_42%,rgba(15,23,42,0.02)_100%)] p-5 shadow-[0_24px_80px_var(--shadow-color)]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">
-              Dashboard
-            </h1>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-[420px]">
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Tasks open</div>
-              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{todo.length + inProgress.length}</div>
-            </div>
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Courses</div>
-              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{projects.length}</div>
-            </div>
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Deadlines</div>
-              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{deadlines.length}</div>
-            </div>
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Done rate</div>
-              <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{completionRate}%</div>
-            </div>
-          </div>
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">
+            Dashboard
+          </h1>
         </div>
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          { label: 'Tasks Open', value: todo.length + inProgress.length },
+          { label: 'Courses', value: projects.length },
+          { label: 'Deadlines', value: deadlines.length },
+          { label: 'Done Rate', value: `${completionRate}%` },
+        ].map(stat => (
+          <div key={stat.label} className="flex flex-col items-center justify-center rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)] text-center">{stat.label}</div>
+            <div className="mt-1 text-2xl font-semibold text-[var(--text-primary)]">{stat.value}</div>
+          </div>
+        ))}
       </div>
 
       {/* Stats Grid */}

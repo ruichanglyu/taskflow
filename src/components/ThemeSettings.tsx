@@ -23,8 +23,8 @@ export function ThemeSettings({ open, onClose }: ThemeSettingsProps) {
 
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-[91] flex w-full max-w-md flex-col border-l border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl">
+      <div className="fixed inset-0 z-[9998] bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-y-0 right-0 z-[9999] flex w-full max-w-md flex-col border-l border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-6 py-5">
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">Appearance</h2>

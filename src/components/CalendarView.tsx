@@ -326,6 +326,7 @@ function WeekCalendarGrid({
 }) {
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const hourRows = Array.from({ length: 19 }, (_, index) => 5 + index);
+  const rowHeight = 44;
   const todayKey = formatDateKey(new Date());
 
   const timedEvents = events.filter(event => event.start?.dateTime && event.end?.dateTime);
@@ -448,7 +449,7 @@ function WeekCalendarGrid({
         <div className="grid grid-cols-[72px_repeat(7,minmax(0,1fr))]">
           <div className="border-r border-[var(--border-soft)]">
             {hourRows.map(hour => (
-              <div key={hour} className="relative h-16 border-b border-[var(--border-soft)] px-2 text-[11px] text-[var(--text-faint)]">
+              <div key={hour} className="relative border-b border-[var(--border-soft)] px-2 text-[11px] text-[var(--text-faint)]" style={{ height: `${rowHeight}px` }}>
                 <span className="absolute -top-2 right-2 bg-[var(--surface)] px-1">
                   {new Date(2026, 0, 1, hour).toLocaleTimeString('en-US', { hour: 'numeric' })}
                 </span>
@@ -470,7 +471,7 @@ function WeekCalendarGrid({
                 )}
               >
                 {hourRows.map(hour => (
-                  <div key={hour} className="h-16 border-b border-[var(--border-soft)]" />
+                  <div key={hour} className="border-b border-[var(--border-soft)]" style={{ height: `${rowHeight}px` }} />
                 ))}
 
                 {dayEvents.map(event => {
@@ -478,10 +479,10 @@ function WeekCalendarGrid({
                   const endMinutes = getMinutesFromStart(event.end?.dateTime);
                   if (startMinutes === null || endMinutes === null) return null;
 
-                  const top = ((startMinutes - 300) / 60) * 64;
-                  const height = Math.max(((endMinutes - startMinutes) / 60) * 64, 28);
+                  const top = ((startMinutes - 300) / 60) * rowHeight;
+                  const height = Math.max(((endMinutes - startMinutes) / 60) * rowHeight, 24);
 
-                  if (top < 0 || top > hourRows.length * 64) return null;
+                  if (top < 0 || top > hourRows.length * rowHeight) return null;
 
                   return (
                     <button

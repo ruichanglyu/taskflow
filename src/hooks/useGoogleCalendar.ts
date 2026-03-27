@@ -143,7 +143,7 @@ export function useGoogleCalendar(userId: string) {
       validIds.map(async calendarId => {
         const calendarMeta = calendarLookup.get(calendarId);
         return fetchGoogleCalendarEvents(token, calendarId, {
-          summary: calendarMeta?.summary,
+          summary: calendarMeta?.summary ?? '',
           backgroundColor: calendarMeta?.backgroundColor,
         }, nextRange ?? eventRange);
       })

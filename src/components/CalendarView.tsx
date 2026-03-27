@@ -63,18 +63,10 @@ function getMinutesFromStart(dateTime?: string) {
   return date.getHours() * 60 + date.getMinutes();
 }
 
-function hourToTime(hour: number) {
-  return `${String(hour).padStart(2, '0')}:00`;
-}
-
 function minutesToTime(totalMinutes: number) {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-}
-
-function snapMinutesToQuarter(minutes: number) {
-  return Math.max(0, Math.min(1425, Math.floor(minutes / 15) * 15));
 }
 
 function getEventStartLabel(date?: { date?: string; dateTime?: string }) {
@@ -146,7 +138,7 @@ function CalendarChecklist({
   onToggleVisibility,
   onChooseCalendar,
 }: {
-  calendars: ReturnType<typeof useGoogleCalendar>['calendars'];
+  calendars: GoogleCalendarController['calendars'];
   visibleCalendarIds: string[];
   selectedCalendarId: string;
   isLoading: boolean;

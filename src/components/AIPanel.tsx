@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Component, type ReactNode } from 'react';
 import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen, Mic, MicOff } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ImageAttachment, type ChatThread } from '../hooks/useAI';
+import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow, type ImageAttachment, type ChatThread } from '../hooks/useAI';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus } from '../types';
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
@@ -1716,6 +1716,16 @@ function parseNaturalDateKey(value: string) {
   return '';
 }
 
+function formatDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
 function resolveCalendarDateInput(value?: string) {
   if (!value) return '';
   const trimmed = value.trim();
@@ -1779,28 +1789,8 @@ function buildCalendarEventPayload(row: ImportBlock['rows'][number], mode: 'crea
   } satisfies NewGoogleCalendarEvent;
 }
 
-function matchCalendarUpdateCandidates(
-  events: GoogleCalendarEvent[],
-  calendars: GoogleCalendarListItem[],
-  row: ParsedImportRow,
-) {
-  const exactMatches = matchCalendarCandidates(events, calendars, row);
-  if (exactMatches.length === 1) return exactMatches;
 
-  const identityOnlyMatches = matchCalendarCandidates(events, calendars, {
-    ...row,
-    dueDate: undefined,
-    startTime: undefined,
-  });
-
-  if (identityOnlyMatches.length === 1) {
-    return identityOnlyMatches;
-  }
-
-  return exactMatches;
-}
-
-function matchTaskCandidates(tasks: Array<{ title: string }>, rawTitle: string) {
+function matchTaskCandidates<T extends { title: string }>(tasks: T[], rawTitle: string): T[] {
   const normalizedTitle = normalizeDeleteCandidate(rawTitle);
   const strippedTitle = normalizeDeleteCandidate(stripTrailingCourseTag(rawTitle));
 
@@ -2539,298 +2529,6 @@ function ActionSection({
   );
 }
 
-// --- Import Card ---
-function ImportCard({
-  block,
-  blockKey,
-  isImported,
-  tasks,
-  deadlines,
-  projects,
-  onImport,
-}: {
-  block: ImportBlock;
-  blockKey: string;
-  isImported: boolean;
-  tasks: Task[];
-  deadlines: Deadline[];
-  projects: Project[];
-  onImport: (block: ImportBlock, key: string) => Promise<number>;
-}) {
-  const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<number | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  if (!block || typeof block !== 'object' || typeof block.type !== 'string' || !Array.isArray(block.rows)) {
-    return null;
-  }
-
-  const handleConfirmImport = async () => {
-    setImporting(true);
-    setDeleteError(null);
-    try {
-      const count = await onImport(block, blockKey);
-      setResult(count);
-      setConfirmingDelete(false);
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Delete failed. Please try again.');
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const handleClick = async () => {
-    if (block.type === 'delete-tasks') {
-      setExpanded(true);
-      setDeleteError(null);
-      setConfirmingDelete(true);
-      return;
-    }
-
-    await handleConfirmImport();
-  };
-
-  const label = block.type === 'delete-tasks'
-    ? 'tasks to delete'
-    : block.type === 'subtasks'
-      ? 'subtasks'
-      : block.type === 'tasks'
-        ? 'tasks'
-        : block.type === 'deadline-links'
-          ? 'deadline links'
-          : 'deadlines';
-  const isDelete = block.type === 'delete-tasks';
-  const isLink = block.type === 'deadline-links';
-  const done = isImported || result !== null;
-  const deleteGroups = useMemo(() => {
-    if (!isDelete) return null;
-
-    return block.rows.reduce(
-      (acc, row) => {
-        const matches = matchTaskCandidates(tasks, row.title);
-        if (matches.length === 1) {
-          acc.willDelete.push(matches[0].title);
-        } else {
-          acc.skipped.push(row.title);
-        }
-        return acc;
-      },
-      { willDelete: [] as string[], skipped: [] as string[] },
-    );
-  }, [block.rows, isDelete, tasks]);
-
-  const linkGroups = useMemo(() => {
-    if (!isLink) return null;
-
-    return block.rows.reduce(
-      (acc, row) => {
-        const taskMatches = matchTaskCandidates(tasks, row.taskTitle ?? '');
-        const deadlineMatches = matchDeadlineCandidates(deadlines, projects, row.title, row.course);
-
-        if (taskMatches.length === 1 && deadlineMatches.length === 1) {
-          acc.willLink.push({
-            task: taskMatches[0].title,
-            deadline: deadlineMatches[0].title,
-          });
-        } else {
-          const reasons: string[] = [];
-          if (deadlineMatches.length !== 1) {
-            reasons.push(deadlineMatches.length === 0 ? 'deadline not found' : 'deadline ambiguous');
-          }
-          if (taskMatches.length !== 1) {
-            reasons.push(taskMatches.length === 0 ? 'task not found' : 'task ambiguous');
-          }
-          acc.skipped.push({
-            label: `${row.taskTitle ?? 'Unknown task'} → ${row.title}`,
-            reason: reasons.join(', '),
-          });
-        }
-
-        return acc;
-      },
-      {
-        willLink: [] as Array<{ task: string; deadline: string }>,
-        skipped: [] as Array<{ label: string; reason: string }>,
-      },
-    );
-  }, [block.rows, deadlines, isLink, projects, tasks]);
-
-  return (
-    <div className="rounded-2xl border border-[var(--accent)]/30 bg-[var(--accent-soft)]/30 p-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {done ? (
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20">
-              <Check size={14} className="text-emerald-400" />
-            </div>
-          ) : (
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--accent-soft)]">
-              <Sparkles size={14} className="text-[var(--accent)]" />
-            </div>
-          )}
-          <div>
-            <p className="text-sm font-medium text-[var(--text-primary)]">
-              {done
-                ? (isDelete
-                    ? `Deleted ${result ?? block.rows.length} tasks`
-                    : isLink
-                      ? `Linked ${result ?? block.rows.length} task${(result ?? block.rows.length) === 1 ? '' : 's'}`
-                      : `Imported ${result ?? block.rows.length} ${label}`)
-                : `${block.rows.length} ${label} ready`}
-            </p>
-            {isDelete && deleteGroups ? (
-              <div className="mt-1 space-y-1 text-[10px]">
-                <p className="text-[var(--text-faint)]">
-                  Will delete: {deleteGroups.willDelete.slice(0, 3).join(', ') || 'No exact matches'}
-                  {deleteGroups.willDelete.length > 3 ? ` +${deleteGroups.willDelete.length - 3} more` : ''}
-                </p>
-                <p className="text-amber-300/90">
-                  Skipped: {deleteGroups.skipped.slice(0, 3).join(', ') || 'None'}
-                  {deleteGroups.skipped.length > 3 ? ` +${deleteGroups.skipped.length - 3} more` : ''}
-                </p>
-              </div>
-            ) : isLink && linkGroups ? (
-              <div className="mt-1 space-y-1 text-[10px]">
-                <p className="text-[var(--text-faint)]">
-                  Will link: {linkGroups.willLink.slice(0, 2).map(item => `${item.task} → ${item.deadline}`).join(', ') || 'No exact matches yet'}
-                  {linkGroups.willLink.length > 2 ? ` +${linkGroups.willLink.length - 2} more` : ''}
-                </p>
-                <p className="text-amber-300/90">
-                  Needs attention: {linkGroups.skipped.slice(0, 2).map(item => item.label).join(', ') || 'None'}
-                  {linkGroups.skipped.length > 2 ? ` +${linkGroups.skipped.length - 2} more` : ''}
-                </p>
-              </div>
-            ) : (
-              <p className="text-[10px] text-[var(--text-faint)]">
-                {block.rows.slice(0, 3).map(r => r.title).join(', ')}
-                {block.rows.length > 3 ? ` +${block.rows.length - 3} more` : ''}
-              </p>
-            )}
-          </div>
-        </div>
-        {!done && (
-          <button
-            onClick={handleClick}
-            disabled={importing}
-            className={cn(
-              'rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-60',
-              isDelete
-                ? 'bg-rose-500 text-white'
-                : 'text-[var(--accent-contrast)]'
-            )}
-            style={isDelete ? undefined : { backgroundColor: 'var(--accent-strong)' }}
-          >
-            {importing ? (isDelete ? 'Deleting...' : isLink ? 'Linking...' : 'Importing...') : (isDelete ? 'Review delete' : isLink ? 'Link tasks' : 'Import')}
-          </button>
-        )}
-      </div>
-
-      {!done && isDelete && confirmingDelete && (
-        <div className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-3">
-          <p className="text-xs font-medium text-rose-300">Confirm delete</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-rose-200/85">
-            This will permanently delete only exact matches. Ambiguous or missing titles will be skipped.
-          </p>
-          {deleteGroups && (
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
-                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-rose-200/80">Will delete</p>
-                <p className="mt-1 text-[11px] leading-relaxed text-rose-100">
-                  {deleteGroups.willDelete.length > 0 ? deleteGroups.willDelete.slice(0, 5).join(', ') : 'No exact matches'}
-                  {deleteGroups.willDelete.length > 5 ? ` +${deleteGroups.willDelete.length - 5} more` : ''}
-                </p>
-              </div>
-              <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2">
-                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-amber-200/80">Skipped</p>
-                <p className="mt-1 text-[11px] leading-relaxed text-amber-100/90">
-                  {deleteGroups.skipped.length > 0 ? deleteGroups.skipped.slice(0, 5).join(', ') : 'None'}
-                  {deleteGroups.skipped.length > 5 ? ` +${deleteGroups.skipped.length - 5} more` : ''}
-                </p>
-              </div>
-            </div>
-          )}
-          {deleteError && (
-            <p className="mt-2 text-[11px] font-medium text-rose-300">{deleteError}</p>
-          )}
-          <div className="mt-3 flex items-center gap-2">
-            <button
-              onClick={() => setConfirmingDelete(false)}
-              className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface)]"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleConfirmImport}
-              disabled={importing}
-              className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
-            >
-              {importing ? 'Deleting...' : 'Confirm Delete'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {!done && isLink && linkGroups && (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/8 px-3 py-3">
-            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-emerald-300/85">Will link</p>
-            <div className="mt-2 space-y-1.5 text-[11px] text-emerald-100">
-              {linkGroups.willLink.length > 0 ? (
-                linkGroups.willLink.slice(0, 5).map(item => (
-                  <p key={`${item.task}:${item.deadline}`}>{item.task} → {item.deadline}</p>
-                ))
-              ) : (
-                <p>No exact matches yet.</p>
-              )}
-              {linkGroups.willLink.length > 5 && (
-                <p className="text-[var(--text-faint)]">+{linkGroups.willLink.length - 5} more</p>
-              )}
-            </div>
-          </div>
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-3">
-            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-amber-200/80">Needs attention</p>
-            <div className="mt-2 space-y-1.5 text-[11px] text-amber-100/90">
-              {linkGroups.skipped.length > 0 ? (
-                linkGroups.skipped.slice(0, 5).map(item => (
-                  <p key={`${item.label}:${item.reason}`}>{item.label} · {item.reason}</p>
-                ))
-              ) : (
-                <p>None</p>
-              )}
-              {linkGroups.skipped.length > 5 && (
-                <p className="text-[var(--text-faint)]">+{linkGroups.skipped.length - 5} more</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Expandable preview */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="mt-2 flex items-center gap-1 text-[10px] text-[var(--text-faint)] hover:text-[var(--text-muted)]"
-      >
-        <ChevronDown size={12} className={cn('transition', expanded && 'rotate-180')} />
-        {expanded ? 'Hide' : 'Preview'}
-      </button>
-      {expanded && (
-        <div className="mt-2 max-h-40 space-y-1 overflow-y-auto">
-          {block.rows.map((row, i) => (
-            <div key={i} className="flex items-center gap-2 rounded-lg bg-[var(--surface)] px-2 py-1 text-[11px]">
-              <span className="font-medium text-[var(--text-primary)]">
-                {isLink ? `${row.taskTitle ?? 'Unknown task'} → ${row.title}` : row.title}
-              </span>
-              {row.course && <span className="text-[var(--text-faint)]">[{row.course}]</span>}
-              {row.dueDate && <span className="ml-auto text-[var(--text-faint)]">{row.dueDate}</span>}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // --- CSV Download Card ---
 function CSVDownloadCard({ content }: { content: string }) {

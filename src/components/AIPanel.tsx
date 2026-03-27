@@ -1254,23 +1254,28 @@ function MessageBubble({
   }
 
   // Assistant message: parse import blocks safely
-  const content = message.content;
+  const content = message.content ?? '';
   let importBlocks: ImportBlock[] = [];
   let segments: Segment[] = [];
   try {
-    importBlocks = parseImportBlocks(content);
-    segments = renderContentWithBlocks(content, importBlocks);
-  } catch {
-    // If parsing crashes, just show raw text
-    segments = [{ type: 'text', content: content.trim() }];
+    if (content) {
+      importBlocks = parseImportBlocks(content);
+      segments = renderContentWithBlocks(content, importBlocks);
+    }
+  } catch (err) {
+    console.error('[AIPanel] Render error:', err);
+    segments = [{ type: 'text' as const, content: content.trim() }];
     importBlocks = [];
   }
+  // Ensure no undefined/null segments
+  segments = segments.filter((s): s is Segment => s != null && typeof s === 'object' && 'type' in s);
 
   return (
     <div className="flex justify-start">
       <div className="max-w-[92%]">
         <div className="space-y-2">
           {segments.map((segment, i) => {
+            if (!segment?.type) return null;
             if (segment.type === 'text') {
               return segment.content ? (
                 <div key={i} className="rounded-2xl rounded-bl-md bg-[var(--surface-muted)] px-3.5 py-2 text-sm text-[var(--text-primary)]">

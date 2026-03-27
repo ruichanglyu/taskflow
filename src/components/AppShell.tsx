@@ -242,12 +242,13 @@ export function AppShell({ user }: AppShellProps) {
   }, [store, pushToast]);
 
   const handleDeleteTask = useCallback(async (id: string) => {
-    await store.deleteTask(id);
-    if (!store.error) {
+    const ok = await store.deleteTask(id);
+    if (ok) {
       pushToast('success', 'Task deleted');
     } else {
-      pushToast('error', 'Could not delete task', store.error);
+      pushToast('error', 'Could not delete task', store.error ?? 'Please try again.');
     }
+    return ok;
   }, [store, pushToast]);
 
   const handleAddProject = useCallback(async (...args: Parameters<typeof store.addProject>) => {
@@ -503,7 +504,7 @@ export function AppShell({ user }: AppShellProps) {
         onAddDeadline={deadlineStore.addDeadline}
         onAddProject={store.addProject}
         onAddSubtask={store.addSubtask}
-        onDeleteTask={store.deleteTask}
+        onDeleteTask={handleDeleteTask}
       />
 
       <div className="pointer-events-none fixed right-4 top-20 z-[80] flex w-full max-w-sm flex-col gap-2 sm:right-6">

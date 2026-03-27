@@ -22,7 +22,7 @@ interface AIPanelProps {
   onAddDeadline: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus) => Promise<boolean>;
   onAddProject: (name: string, description: string) => Promise<string | null>;
   onAddSubtask: (taskId: string, title: string) => Promise<boolean>;
-  onDeleteTask: (taskId: string) => Promise<void>;
+  onDeleteTask: (taskId: string) => Promise<boolean>;
 }
 
 export function AIPanel({
@@ -137,12 +137,28 @@ export function AIPanel({
     };
 
     if (block.type === 'delete-tasks') {
+      let skipped = 0;
       for (const row of block.rows) {
-        const task = tasks.find(t => t.title.toLowerCase() === row.title.toLowerCase());
-        if (task) {
-          await onDeleteTask(task.id);
-          imported++;
+        const matches = tasks.filter(t => t.title.trim().toLowerCase() === row.title.trim().toLowerCase());
+        if (matches.length !== 1) {
+          skipped++;
+          continue;
         }
+
+        const ok = await onDeleteTask(matches[0].id);
+        if (ok) {
+          imported++;
+        } else {
+          skipped++;
+        }
+      }
+
+      if (skipped > 0) {
+        setError(
+          skipped === 1
+            ? 'Skipped 1 AI delete entry because it was ambiguous, missing, or failed to delete.'
+            : `Skipped ${skipped} AI delete entries because they were ambiguous, missing, or failed to delete.`,
+        );
       }
     } else if (block.type === 'subtasks') {
       // Find the parent task by title (case-insensitive)

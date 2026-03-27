@@ -415,8 +415,8 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, projects, userId]);
 
-  const deleteTask = useCallback(async (id: string) => {
-    if (!supabase) return;
+  const deleteTask = useCallback(async (id: string): Promise<boolean> => {
+    if (!supabase) return false;
 
     setError(null);
 
@@ -434,8 +434,10 @@ export function useStore(userId: string) {
         persistLocalSnapshot(projects, nextTasks);
         return nextTasks;
       });
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete task.');
+      return false;
     }
   }, [persistLocalSnapshot, projects, userId]);
 

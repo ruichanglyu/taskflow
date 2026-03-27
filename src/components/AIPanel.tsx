@@ -1327,6 +1327,7 @@ export function AIPanel({
                         projects={projects}
                         calendarEvents={calendarEvents}
                         calendarCalendars={calendarCalendars}
+                        selectedCalendarId={selectedCalendarId}
                         importedBlocks={importedBlocks}
                         onImport={handleImport}
                         isStreaming={isStreaming && msg === messages[messages.length - 1] && msg.role === 'assistant'}
@@ -1992,6 +1993,7 @@ function MessageBubble({
   projects,
   calendarEvents,
   calendarCalendars,
+  selectedCalendarId,
   importedBlocks,
   onImport,
   isStreaming,
@@ -2002,6 +2004,7 @@ function MessageBubble({
   projects: Project[];
   calendarEvents: GoogleCalendarEvent[];
   calendarCalendars: GoogleCalendarListItem[];
+  selectedCalendarId: string;
   importedBlocks: Set<string>;
   onImport: (block: ImportBlock, key: string) => Promise<number>;
   isStreaming: boolean;
@@ -2088,6 +2091,7 @@ function MessageBubble({
               projects={projects}
               calendarEvents={calendarEvents}
               calendarCalendars={calendarCalendars}
+              selectedCalendarId={selectedCalendarId}
               importedBlocks={importedBlocks}
               onImport={onImport}
             />
@@ -2159,6 +2163,7 @@ function ActionBundleCard({
   projects,
   calendarEvents,
   calendarCalendars,
+  selectedCalendarId,
   importedBlocks,
   onImport,
 }: {
@@ -2169,6 +2174,7 @@ function ActionBundleCard({
   projects: Project[];
   calendarEvents: GoogleCalendarEvent[];
   calendarCalendars: GoogleCalendarListItem[];
+  selectedCalendarId: string;
   importedBlocks: Set<string>;
   onImport: (block: ImportBlock, key: string) => Promise<number>;
 }) {

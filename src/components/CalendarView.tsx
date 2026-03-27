@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { CalendarDays, Check, ChevronDown, ExternalLink, List, LayoutGrid, Plus, RefreshCcw, Trash2, Unplug } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ExternalLink, List, LayoutGrid, Pencil, Plus, RefreshCcw, Trash2, Unplug } from 'lucide-react';
 import { GoogleCalendarEvent } from '../lib/googleCalendar';
 import { CreateEventModal } from './CreateEventModal';
 import { CalendarGrid } from './CalendarGrid';
@@ -346,6 +346,7 @@ function DayPanel({
   events,
   deadlines = [],
   onDelete,
+  onEdit,
   deletingId,
   onCreateEvent,
 }: {
@@ -353,6 +354,7 @@ function DayPanel({
   events: GoogleCalendarEvent[];
   deadlines?: import('../types').Deadline[];
   onDelete: (id: string) => void;
+  onEdit: (event: GoogleCalendarEvent) => void;
   deletingId: string | null;
   onCreateEvent: () => void;
 }) {
@@ -433,6 +435,13 @@ function DayPanel({
               <div className="flex shrink-0 items-center gap-1">
                 <button
                   type="button"
+                  onClick={() => onEdit(event)}
+                  className="rounded-full p-1.5 text-[var(--text-faint)] opacity-100 transition hover:text-[var(--text-primary)] md:opacity-0 md:group-hover:opacity-100"
+                >
+                  <Pencil size={13} />
+                </button>
+                <button
+                  type="button"
                   onClick={() => onDelete(event.id)}
                   disabled={deletingId === event.id}
                   className="rounded-full p-1.5 text-[var(--text-faint)] opacity-100 transition hover:text-red-400 disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
@@ -465,6 +474,7 @@ function WeekCalendarGrid({
   selectedDate,
   draftPreview,
   onSelectDate,
+  onEditEvent,
   onCreateEventAt,
 }: {
   weekStart: Date;
@@ -473,6 +483,7 @@ function WeekCalendarGrid({
   selectedDate: string;
   draftPreview: { dateKey: string; startMinutes: number; endMinutes: number } | null;
   onSelectDate: (date: string) => void;
+  onEditEvent: (event: GoogleCalendarEvent, anchorRect?: { top: number; left: number; width: number; height: number }) => void;
   onCreateEventAt: (
     date: string,
     startTime: string,
@@ -779,7 +790,16 @@ function WeekCalendarGrid({
                     <button
                       key={event.id}
                       type="button"
-                      onClick={() => onSelectDate(key)}
+                      onClick={e => {
+                        onSelectDate(key);
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        onEditEvent(event, {
+                          top: rect.top + window.scrollY,
+                          left: rect.left + window.scrollX,
+                          width: rect.width,
+                          height: rect.height,
+                        });
+                      }}
                       className="absolute left-1.5 right-1.5 overflow-hidden rounded-lg px-2 py-1 text-left shadow-sm"
                       style={{
                         top: `${top}px`,
@@ -810,6 +830,7 @@ function WeekCalendarGrid({
 export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<GoogleCalendarEvent | null>(null);
   const [createDate, setCreateDate] = useState<string | undefined>(undefined);
   const [createStartTime, setCreateStartTime] = useState<string | undefined>(undefined);
   const [createEndTime, setCreateEndTime] = useState<string | undefined>(undefined);
@@ -879,6 +900,7 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
   };
 
   const handleCreateFromDate = (date: string) => {
+    setEditingEvent(null);
     if (!date) return;
     setCreateDate(date);
     setCreateStartTime(undefined);
@@ -894,6 +916,7 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
     endTime: string,
     anchorRect: { top: number; left: number; width: number; height: number }
   ) => {
+    setEditingEvent(null);
     setCreateDate(date);
     setCreateStartTime(startTime);
     setCreateEndTime(endTime);
@@ -911,12 +934,16 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
   const handleCloseCreateModal = () => {
     setShowCreateModal(false);
     setWeekDraftPreview(null);
+    setEditingEvent(null);
   };
 
   const handleSaveEvent = async (event: import('../lib/googleCalendar').NewGoogleCalendarEvent, calendarId?: string) => {
-    const ok = await calendar.createEvent(event, calendarId);
+    const ok = editingEvent
+      ? await calendar.updateEvent(editingEvent.id, event, editingEvent.calendarId)
+      : await calendar.createEvent(event, calendarId);
     if (ok) {
       setWeekDraftPreview(null);
+      setEditingEvent(null);
     }
     return ok;
   };
@@ -925,6 +952,19 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
     setDeletingId(eventId);
     await calendar.deleteEvent(eventId);
     setDeletingId(null);
+  };
+
+  const handleEditEvent = (
+    event: GoogleCalendarEvent,
+    anchorRect?: { top: number; left: number; width: number; height: number },
+  ) => {
+    setEditingEvent(event);
+    setCreateDate(undefined);
+    setCreateStartTime(undefined);
+    setCreateEndTime(undefined);
+    setCreateAnchorRect(anchorRect ?? null);
+    setWeekDraftPreview(null);
+    setShowCreateModal(true);
   };
 
   const selectedDayEvents = useMemo(() => {
@@ -1103,6 +1143,7 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
               dateStr={selectedDate}
               events={selectedDayEvents}
               deadlines={deadlines}
+              onEdit={event => handleEditEvent(event)}
               onDelete={id => void handleDelete(id)}
               deletingId={deletingId}
               onCreateEvent={() => handleCreateFromDate(selectedDate)}
@@ -1148,6 +1189,7 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
               selectedDate={selectedDate}
               draftPreview={weekDraftPreview}
               onSelectDate={selectDate}
+              onEditEvent={handleEditEvent}
               onCreateEventAt={handleCreateFromWeekSlot}
             />
 
@@ -1176,6 +1218,7 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
                 dateStr={selectedDate}
                 events={selectedDayEvents}
                 deadlines={deadlines}
+                onEdit={event => handleEditEvent(event)}
                 onDelete={id => void handleDelete(id)}
                 deletingId={deletingId}
                 onCreateEvent={() => handleCreateFromDate(selectedDate)}
@@ -1257,9 +1300,16 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
                             <div className="flex shrink-0 items-center gap-1.5">
                               <button
                                 type="button"
+                                onClick={() => handleEditEvent(event)}
+                                className="rounded-full border border-[var(--border-soft)] p-2 text-[var(--text-faint)] opacity-100 transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] md:opacity-0 md:group-hover:opacity-100"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => void handleDelete(event.id)}
                                 disabled={deletingId === event.id}
-                className="rounded-full border border-[var(--border-soft)] p-2 text-[var(--text-faint)] opacity-100 transition hover:border-red-500/30 hover:text-red-400 disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
+                                className="rounded-full border border-[var(--border-soft)] p-2 text-[var(--text-faint)] opacity-100 transition hover:border-red-500/30 hover:text-red-400 disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
                               >
                                 <Trash2 size={14} />
                               </button>
@@ -1288,13 +1338,19 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
 
       {showCreateModal && (
         <CreateEventModal
-          initialDate={createDate}
-          initialStartTime={createStartTime}
-          initialEndTime={createEndTime}
+          initialDate={editingEvent?.start?.date || (editingEvent?.start?.dateTime ? editingEvent.start.dateTime.slice(0, 10) : createDate)}
+          initialEndDate={editingEvent?.end?.date ? formatDateKey(addDays(new Date(`${editingEvent.end.date}T00:00:00`), -1)) : undefined}
+          initialStartTime={editingEvent?.start?.dateTime ? new Date(editingEvent.start.dateTime).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: false }) : createStartTime}
+          initialEndTime={editingEvent?.end?.dateTime ? new Date(editingEvent.end.dateTime).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: false }) : createEndTime}
+          initialSummary={editingEvent?.summary || ''}
+          initialDescription={editingEvent?.description || ''}
+          initialLocation={editingEvent?.location || ''}
+          initialAllDay={Boolean(editingEvent?.start?.date && !editingEvent?.start?.dateTime)}
           calendars={calendar.calendars}
-          initialCalendarId={calendar.selectedCalendarId}
+          initialCalendarId={editingEvent?.calendarId || calendar.selectedCalendarId}
           compact={viewMode === 'week'}
           anchorRect={createAnchorRect}
+          mode={editingEvent ? 'edit' : 'create'}
           onSave={handleSaveEvent}
           onClose={handleCloseCreateModal}
         />

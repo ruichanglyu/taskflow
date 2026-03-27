@@ -2,36 +2,54 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { GoogleCalendarListItem, NewGoogleCalendarEvent } from '../lib/googleCalendar';
 
+function addOneDay(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  date.setDate(date.getDate() + 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 interface CreateEventModalProps {
   initialDate?: string;
+  initialEndDate?: string;
   initialStartTime?: string;
   initialEndTime?: string;
+  initialSummary?: string;
+  initialDescription?: string;
+  initialLocation?: string;
+  initialAllDay?: boolean;
   calendars?: GoogleCalendarListItem[];
   initialCalendarId?: string;
   compact?: boolean;
   anchorRect?: { top: number; left: number; width: number; height: number } | null;
+  mode?: 'create' | 'edit';
   onSave: (event: NewGoogleCalendarEvent, calendarId?: string) => Promise<boolean>;
   onClose: () => void;
 }
 
 export function CreateEventModal({
   initialDate,
+  initialEndDate,
   initialStartTime,
   initialEndTime,
+  initialSummary,
+  initialDescription,
+  initialLocation,
+  initialAllDay = false,
   calendars = [],
   initialCalendarId,
   compact = false,
   anchorRect,
+  mode = 'create',
   onSave,
   onClose,
 }: CreateEventModalProps) {
-  const [summary, setSummary] = useState('');
-  const [description, setDescription] = useState('');
-  const [location, setLocation] = useState('');
-  const [allDay, setAllDay] = useState(false);
+  const [summary, setSummary] = useState(initialSummary ?? '');
+  const [description, setDescription] = useState(initialDescription ?? '');
+  const [location, setLocation] = useState(initialLocation ?? '');
+  const [allDay, setAllDay] = useState(initialAllDay);
   const [startDate, setStartDate] = useState(initialDate ?? '');
   const [startTime, setStartTime] = useState(initialStartTime ?? '09:00');
-  const [endDate, setEndDate] = useState(initialDate ?? '');
+  const [endDate, setEndDate] = useState(initialEndDate ?? initialDate ?? '');
   const [endTime, setEndTime] = useState(initialEndTime ?? '10:00');
   const [calendarId, setCalendarId] = useState(initialCalendarId ?? '');
   const [isSaving, setIsSaving] = useState(false);
@@ -51,7 +69,7 @@ export function CreateEventModal({
           ? { date: startDate }
           : { dateTime: `${startDate}T${startTime}:00`, timeZone },
         end: allDay
-          ? { date: endDate || startDate }
+          ? { date: addOneDay(endDate || startDate) }
           : { dateTime: `${endDate || startDate}T${endTime}:00`, timeZone },
       };
 
@@ -78,7 +96,9 @@ export function CreateEventModal({
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
-          <h2 className="text-lg font-semibold text-[var(--text-primary)]">{compact ? 'Quick event' : 'New Event'}</h2>
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+            {mode === 'edit' ? 'Edit Event' : compact ? 'Quick event' : 'New Event'}
+          </h2>
           <button onClick={onClose} className="text-[var(--text-faint)] transition-colors hover:text-[var(--text-primary)]">
             <X size={18} />
           </button>
@@ -208,7 +228,7 @@ export function CreateEventModal({
               className="flex-1 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
               style={{ backgroundColor: 'var(--accent-strong)' }}
             >
-              {isSaving ? 'Creating...' : 'Create Event'}
+              {isSaving ? (mode === 'edit' ? 'Saving...' : 'Creating...') : (mode === 'edit' ? 'Save Changes' : 'Create Event')}
             </button>
           </div>
         </form>

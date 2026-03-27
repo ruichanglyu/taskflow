@@ -397,16 +397,33 @@ export function useGoogleCalendar(userId: string) {
     event: Partial<NewGoogleCalendarEvent>,
     calendarIdOverride?: string,
   ): Promise<boolean> => {
+    const existingEvent = events.find(existing => existing.id === eventId);
     const targetCalendarId =
       calendarIdOverride ||
-      events.find(existing => existing.id === eventId)?.calendarId ||
+      existingEvent?.calendarId ||
       selectedCalendarId;
-    if (!accessToken || !targetCalendarId) return false;
+    if (!accessToken || !targetCalendarId || !existingEvent) return false;
 
     setError(null);
 
     try {
-      const updated = await updateGoogleCalendarEvent(accessToken, targetCalendarId, eventId, event);
+      const mergedEvent: NewGoogleCalendarEvent = {
+        summary: event.summary ?? existingEvent.summary ?? 'Untitled event',
+        ...(event.description !== undefined || existingEvent.description ? { description: event.description ?? existingEvent.description ?? undefined } : {}),
+        ...(event.location !== undefined || existingEvent.location ? { location: event.location ?? existingEvent.location ?? undefined } : {}),
+        start: event.start ?? (
+          existingEvent.start?.dateTime
+            ? { dateTime: existingEvent.start.dateTime, ...(existingEvent.start.timeZone ? { timeZone: existingEvent.start.timeZone } : {}) }
+            : { date: existingEvent.start?.date ?? '' }
+        ),
+        end: event.end ?? (
+          existingEvent.end?.dateTime
+            ? { dateTime: existingEvent.end.dateTime, ...(existingEvent.end.timeZone ? { timeZone: existingEvent.end.timeZone } : {}) }
+            : { date: existingEvent.end?.date ?? existingEvent.start?.date ?? '' }
+        ),
+      };
+
+      const updated = await updateGoogleCalendarEvent(accessToken, targetCalendarId, eventId, mergedEvent);
       const calendarMeta = calendars.find(calendar => calendar.id === targetCalendarId);
       setEvents(prev =>
         prev

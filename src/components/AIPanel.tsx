@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Component, type ReactNode } from 'react';
-import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen, Mic, MicOff } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ImageAttachment, type ChatThread } from '../hooks/useAI';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus } from '../types';
@@ -40,6 +40,37 @@ interface PanelFrame {
   y: number;
   width: number;
   height: number;
+}
+
+interface SpeechRecognitionResultLike {
+  isFinal: boolean;
+  0: {
+    transcript: string;
+  };
+}
+
+interface SpeechRecognitionEventLike extends Event {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+
+interface SpeechRecognitionLike extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: ((this: SpeechRecognitionLike, ev: Event) => void) | null;
+  onend: ((this: SpeechRecognitionLike, ev: Event) => void) | null;
+  onerror: ((this: SpeechRecognitionLike, ev: Event & { error?: string }) => void) | null;
+  onresult: ((this: SpeechRecognitionLike, ev: SpeechRecognitionEventLike) => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: new () => SpeechRecognitionLike;
+    webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+  }
 }
 
 type PanelInteraction =
@@ -215,6 +246,10 @@ export function AIPanel({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recentAiTasksRef = useRef<Task[]>([]);
+  const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const dictationBaseInputRef = useRef('');
+  const [isDictating, setIsDictating] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = messagesScrollRef.current;
@@ -228,12 +263,36 @@ export function AIPanel({
     return () => cancelAnimationFrame(frame);
   }, [open, currentChatId, messages.length, scrollToBottom]);
 
+  useEffect(() => {
+    const recognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    setSpeechSupported(Boolean(recognitionCtor));
+  }, []);
+
   // Focus input when panel opens
   useEffect(() => {
     if (open && hasKey) {
       setTimeout(() => inputRef.current?.focus(), 300);
     }
   }, [open, hasKey]);
+
+  useEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 128) + 'px';
+  }, [input]);
+
+  useEffect(() => {
+    if (open) return;
+    speechRecognitionRef.current?.stop();
+    setIsDictating(false);
+  }, [open]);
+
+  useEffect(() => {
+    return () => {
+      speechRecognitionRef.current?.stop();
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -334,6 +393,8 @@ export function AIPanel({
 
   const handleSend = useCallback(async () => {
     if ((!input.trim() && !pendingImages.length) || isStreaming) return;
+    speechRecognitionRef.current?.stop();
+    setIsDictating(false);
     const msg = input.trim() || (pendingImages.length ? 'What do you see in this image?' : '');
     const images = pendingImages.length ? [...pendingImages] : undefined;
     setPanelError(null);
@@ -390,6 +451,71 @@ export function AIPanel({
       handleSend();
     }
   };
+
+  const handleToggleDictation = useCallback(() => {
+    if (!speechSupported || isStreaming) {
+      if (!speechSupported) {
+        setPanelError('Dictation is not supported in this browser.');
+      }
+      return;
+    }
+
+    if (isDictating) {
+      speechRecognitionRef.current?.stop();
+      return;
+    }
+
+    const RecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!RecognitionCtor) {
+      setPanelError('Dictation is not supported in this browser.');
+      return;
+    }
+
+    const recognition = new RecognitionCtor();
+    dictationBaseInputRef.current = input.trim() ? `${input.trim()} ` : '';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      setPanelError(null);
+      setIsDictating(true);
+    };
+
+    recognition.onresult = event => {
+      let finalTranscript = '';
+      let interimTranscript = '';
+
+      for (let i = 0; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        const transcript = result?.[0]?.transcript ?? '';
+        if (!transcript) continue;
+        if (result.isFinal) finalTranscript += transcript;
+        else interimTranscript += transcript;
+      }
+
+      const combinedTranscript = `${finalTranscript}${interimTranscript}`.trim();
+      setInput(combinedTranscript ? `${dictationBaseInputRef.current}${combinedTranscript}` : dictationBaseInputRef.current.trimEnd());
+    };
+
+    recognition.onerror = event => {
+      if (event.error === 'no-speech') {
+        setPanelError('No speech detected. Try again and speak a little closer to the mic.');
+      } else if (event.error === 'not-allowed') {
+        setPanelError('Microphone access was blocked. Enable mic access for this site to use dictation.');
+      } else {
+        setPanelError('Dictation stopped because the browser speech service returned an error.');
+      }
+    };
+
+    recognition.onend = () => {
+      setIsDictating(false);
+      speechRecognitionRef.current = null;
+    };
+
+    speechRecognitionRef.current = recognition;
+    recognition.start();
+  }, [input, isDictating, isStreaming, speechSupported]);
 
   const handleSaveKey = () => {
     if (apiKey.trim()) {
@@ -1150,6 +1276,25 @@ export function AIPanel({
                 >
                   <ImagePlus size={16} />
                 </button>
+                <button
+                  onClick={handleToggleDictation}
+                  disabled={!hasKey || isStreaming || !speechSupported}
+                  className={cn(
+                    'flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl border transition disabled:opacity-40',
+                    isDictating
+                      ? 'border-rose-500/40 bg-rose-500/10 text-rose-400'
+                      : 'border-[var(--border-soft)] text-[var(--text-faint)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
+                  )}
+                  title={
+                    !speechSupported
+                      ? 'Dictation is not supported in this browser'
+                      : isDictating
+                        ? 'Stop dictation'
+                        : 'Start dictation'
+                  }
+                >
+                  {isDictating ? <MicOff size={16} /> : <Mic size={16} />}
+                </button>
                 <textarea
                   ref={inputRef}
                   value={input}
@@ -1160,11 +1305,6 @@ export function AIPanel({
                   rows={1}
                   className="max-h-32 min-h-[38px] flex-1 resize-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-50"
                   style={{ height: 'auto' }}
-                  onInput={e => {
-                    const target = e.target as HTMLTextAreaElement;
-                    target.style.height = 'auto';
-                    target.style.height = Math.min(target.scrollHeight, 128) + 'px';
-                  }}
                 />
                 {isStreaming ? (
                   <button

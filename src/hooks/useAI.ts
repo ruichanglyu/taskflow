@@ -706,8 +706,23 @@ export function useAI() {
       if (err instanceof Error && err.name === 'AbortError') return;
       const errMsg = err instanceof Error ? err.message : 'Something went wrong';
       setError(errMsg);
+      // Keep the assistant message with whatever was streamed; only remove if still empty/thinking
       setThreads(prev => prev.map(item => {
         if (item.id !== threadId) return item;
+        const assistantContent = item.messages.find(m => m.id === assistantMsg.id)?.content ?? '';
+        const hasRealContent = assistantContent && assistantContent !== '*Thinking...*';
+        if (hasRealContent) {
+          // Keep partial response, append error notice
+          return {
+            ...item,
+            messages: item.messages.map(m =>
+              m.id === assistantMsg.id
+                ? { ...m, content: assistantContent + '\n\n*(Response interrupted — try again)*' }
+                : m
+            ),
+          };
+        }
+        // No content was streamed — remove the empty message
         return {
           ...item,
           messages: item.messages.filter(m => m.id !== assistantMsg.id),

@@ -270,6 +270,7 @@ Study Block | calendar: Study Blocks | date: 2026-03-29 | start: 7:00 PM | new d
 \`\`\`
 For updates, the first title/date/start/calendar identify the existing event. The \`new ...\` fields are the replacement values.
 Use absolute YYYY-MM-DD dates in both the identifying fields and the \`new date\` field. Do not use relative words like "tomorrow" in calendar update blocks.
+If you are converting an all-day event into a timed event, include \`new all day: false\` explicitly.
 
 To delete calendar events, output a fenced code block with language "import:calendar-delete":
 \`\`\`import:calendar-delete

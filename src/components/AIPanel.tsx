@@ -1360,7 +1360,11 @@ function buildCalendarEventPayload(row: ImportBlock['rows'][number], mode: 'crea
   const date = resolveCalendarDateInput(mode === 'update' ? (row.newDate || row.dueDate || '') : (row.dueDate || ''));
   const startTime = mode === 'update' ? (row.newStartTime || row.startTime || '') : (row.startTime || '');
   const endTime = mode === 'update' ? (row.newEndTime || row.endTime || '') : (row.endTime || '');
-  const isAllDay = parseFlag(mode === 'update' ? row.newAllDay || row.allDay : row.allDay);
+  const isAllDay = mode === 'update'
+    ? row.newAllDay !== undefined
+      ? parseFlag(row.newAllDay)
+      : parseFlag(row.allDay)
+    : parseFlag(row.allDay);
   const summary = mode === 'update' ? (row.newTitle || row.title) : row.title;
   const description = mode === 'update' ? (row.newDescription ?? row.description) : row.description;
   const location = mode === 'update' ? (row.newLocation ?? row.location) : row.location;

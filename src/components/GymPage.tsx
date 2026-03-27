@@ -1130,6 +1130,7 @@ function StatPill({ label, value }: { label: string; value: string }) {
 
 function ExerciseLibraryTab(props: GymPageProps) {
   const { exercises } = props;
+  const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
 
   const muscleGroups = new Set(exercises.map(ex => ex.muscleGroup).filter(Boolean));
   const exercisesWithImages = exercises.filter(ex => ex.referenceImageUrl).length;
@@ -1179,6 +1180,15 @@ function ExerciseLibraryTab(props: GymPageProps) {
           </div>
         </div>
       </div>
+
+      {editingExercise && (
+        <ExerciseEditorModal
+          exercise={editingExercise}
+          onClose={() => setEditingExercise(null)}
+          onSave={props.onUpdateExercise}
+          onUploadImage={props.onUploadExerciseImage}
+        />
+      )}
     </div>
   );
 }

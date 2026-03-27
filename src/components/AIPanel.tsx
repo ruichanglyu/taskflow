@@ -611,18 +611,26 @@ function ImportCard({
   const [result, setResult] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleConfirmImport = async () => {
     setImporting(true);
-    const count = await onImport(block, blockKey);
-    setResult(count);
-    setImporting(false);
-    setConfirmingDelete(false);
+    setDeleteError(null);
+    try {
+      const count = await onImport(block, blockKey);
+      setResult(count);
+      setConfirmingDelete(false);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Delete failed. Please try again.');
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleClick = async () => {
     if (block.type === 'delete-tasks') {
       setExpanded(true);
+      setDeleteError(null);
       setConfirmingDelete(true);
       return;
     }
@@ -684,6 +692,9 @@ function ImportCard({
             This will permanently delete the uniquely matched tasks in this list. Ambiguous or missing titles will be skipped.
             {deletePreview ? ` Review: ${deletePreview}${block.rows.length > 3 ? ` +${block.rows.length - 3} more` : ''}.` : ''}
           </p>
+          {deleteError && (
+            <p className="mt-2 text-[11px] font-medium text-rose-300">{deleteError}</p>
+          )}
           <div className="mt-3 flex items-center gap-2">
             <button
               onClick={() => setConfirmingDelete(false)}

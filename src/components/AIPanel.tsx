@@ -1311,7 +1311,16 @@ function toTwentyFourHourKey(value?: string) {
 }
 
 function buildLocalDateTimeString(dateKey: string, timeKey: string) {
-  return `${dateKey}T${timeKey}:00`;
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const [hours, minutes] = timeKey.split(':').map(Number);
+  const date = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absoluteOffset = Math.abs(offsetMinutes);
+  const offsetHours = String(Math.floor(absoluteOffset / 60)).padStart(2, '0');
+  const offsetMins = String(absoluteOffset % 60).padStart(2, '0');
+
+  return `${dateKey}T${timeKey}:00${sign}${offsetHours}:${offsetMins}`;
 }
 
 function getEventDateKey(event: GoogleCalendarEvent) {

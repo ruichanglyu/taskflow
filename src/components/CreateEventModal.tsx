@@ -8,6 +8,19 @@ function addOneDay(dateKey: string) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function buildLocalDateTimeString(dateKey: string, timeKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const [hours, minutes] = timeKey.split(':').map(Number);
+  const date = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absoluteOffset = Math.abs(offsetMinutes);
+  const offsetHours = String(Math.floor(absoluteOffset / 60)).padStart(2, '0');
+  const offsetMins = String(absoluteOffset % 60).padStart(2, '0');
+
+  return `${dateKey}T${timeKey}:00${sign}${offsetHours}:${offsetMins}`;
+}
+
 interface CreateEventModalProps {
   initialDate?: string;
   initialEndDate?: string;
@@ -67,10 +80,10 @@ export function CreateEventModal({
         location: location.trim() || undefined,
         start: allDay
           ? { date: startDate }
-          : { dateTime: `${startDate}T${startTime}:00`, timeZone },
+          : { dateTime: buildLocalDateTimeString(startDate, startTime), timeZone },
         end: allDay
           ? { date: addOneDay(endDate || startDate) }
-          : { dateTime: `${endDate || startDate}T${endTime}:00`, timeZone },
+          : { dateTime: buildLocalDateTimeString(endDate || startDate, endTime), timeZone },
       };
 
       const ok = await onSave(event, calendarId || undefined);

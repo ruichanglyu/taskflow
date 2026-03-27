@@ -867,10 +867,19 @@ export function AIPanel({
             </div>
           </div>
         )}
-        <div
-          className="absolute bottom-0 right-0 h-6 w-6 cursor-nwse-resize"
+        <button
+          type="button"
+          aria-label="Resize AI panel"
+          title="Resize"
+          className="absolute bottom-1 right-1 z-[75] flex h-8 w-8 cursor-nwse-resize items-end justify-end rounded-full text-[var(--text-faint)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
           onMouseDown={beginResize}
-        />
+        >
+          <span className="pointer-events-none relative mb-1 mr-1 block h-3 w-3">
+            <span className="absolute bottom-0 right-0 h-px w-3 rotate-45 bg-current opacity-80" />
+            <span className="absolute bottom-1 right-0 h-px w-2 rotate-45 bg-current opacity-60" />
+            <span className="absolute bottom-0 right-1 h-px w-2 rotate-45 bg-current opacity-45" />
+          </span>
+        </button>
       </div>
     </div>,
     document.body

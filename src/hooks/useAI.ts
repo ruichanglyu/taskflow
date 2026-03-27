@@ -362,10 +362,16 @@ async function streamGemini(
       if (!json || json === '[DONE]') continue;
       try {
         const parsed = JSON.parse(json);
-        const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          accumulated += text;
-          onUpdate(accumulated);
+        const parts = parsed?.candidates?.[0]?.content?.parts;
+        if (Array.isArray(parts)) {
+          for (const part of parts) {
+            // Skip thinking/reasoning parts from thinking models
+            if (part.thought) continue;
+            if (part.text) {
+              accumulated += part.text;
+              onUpdate(accumulated);
+            }
+          }
         }
       } catch { /* skip malformed lines */ }
     }

@@ -227,7 +227,7 @@ export function AIPanel({
   return createPortal(
     <div className="fixed inset-0 z-[60] flex justify-end" onClick={onClose}>
       <div
-        className="flex h-full w-full max-w-md flex-col border-l border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl animate-in slide-in-from-right duration-200"
+        className="flex h-full min-h-0 w-full max-w-md flex-col overflow-hidden border-l border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl animate-in slide-in-from-right duration-200"
         onClick={e => e.stopPropagation()}
         style={{ animationDuration: '200ms' }}
       >
@@ -313,7 +313,7 @@ export function AIPanel({
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           {messages.length === 0 ? (
             <WelcomeScreen hasKey={hasKey} />
           ) : (

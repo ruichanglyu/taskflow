@@ -610,17 +610,30 @@ function ImportCard({
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  const handleClick = async () => {
+  const handleConfirmImport = async () => {
     setImporting(true);
     const count = await onImport(block, blockKey);
     setResult(count);
     setImporting(false);
+    setConfirmingDelete(false);
+  };
+
+  const handleClick = async () => {
+    if (block.type === 'delete-tasks') {
+      setExpanded(true);
+      setConfirmingDelete(true);
+      return;
+    }
+
+    await handleConfirmImport();
   };
 
   const label = block.type === 'delete-tasks' ? 'tasks to delete' : block.type === 'subtasks' ? 'subtasks' : block.type === 'tasks' ? 'tasks' : 'deadlines';
   const isDelete = block.type === 'delete-tasks';
   const done = isImported || result !== null;
+  const deletePreview = block.rows.slice(0, 3).map(r => r.title).join(', ');
 
   return (
     <div className="rounded-2xl border border-[var(--accent)]/30 bg-[var(--accent-soft)]/30 p-3">
@@ -659,10 +672,35 @@ function ImportCard({
             )}
             style={isDelete ? undefined : { backgroundColor: 'var(--accent-strong)' }}
           >
-            {importing ? (isDelete ? 'Deleting...' : 'Importing...') : (isDelete ? 'Delete' : 'Import')}
+            {importing ? (isDelete ? 'Deleting...' : 'Importing...') : (isDelete ? 'Review delete' : 'Import')}
           </button>
         )}
       </div>
+
+      {!done && isDelete && confirmingDelete && (
+        <div className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-3">
+          <p className="text-xs font-medium text-rose-300">Confirm delete</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-rose-200/85">
+            This will permanently delete the uniquely matched tasks in this list. Ambiguous or missing titles will be skipped.
+            {deletePreview ? ` Review: ${deletePreview}${block.rows.length > 3 ? ` +${block.rows.length - 3} more` : ''}.` : ''}
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              onClick={() => setConfirmingDelete(false)}
+              className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface)]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmImport}
+              disabled={importing}
+              className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+            >
+              {importing ? 'Deleting...' : 'Confirm Delete'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Expandable preview */}
       <button

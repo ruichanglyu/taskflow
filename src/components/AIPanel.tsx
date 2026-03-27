@@ -771,7 +771,7 @@ export function AIPanel({
       let skipped = 0;
 
       for (const row of block.rows) {
-        const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, row);
+        const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, selectedCalendarId, row);
         if (matches.length === 0) {
           skipped++;
           continue;
@@ -1590,6 +1590,11 @@ function normalizeCalendarCandidate(value: string) {
   return value.trim().toLowerCase().replace(/\s*\(primary\)\s*$/, '').trim();
 }
 
+function getCalendarSummaryById(calendars: GoogleCalendarListItem[], calendarId?: string) {
+  if (!calendarId) return '';
+  return calendars.find(calendar => calendar.id === calendarId)?.summary ?? '';
+}
+
 function parseClockTime(value?: string) {
   if (!value) return null;
   const trimmed = value.trim();
@@ -1902,6 +1907,7 @@ function resolvePreferredCalendarCandidates(
 function resolveCalendarDeleteCandidates(
   events: GoogleCalendarEvent[],
   calendars: GoogleCalendarListItem[],
+  selectedCalendarId: string,
   row: ParsedImportRow,
 ) {
   const strictMatches = matchCalendarCandidates(events, calendars, row);
@@ -1916,9 +1922,23 @@ function resolveCalendarDeleteCandidates(
 
   const normalizedTitle = normalizeDeleteCandidate(stripTrailingCourseTag(row.title));
   const normalizedCalendar = row.calendar ? normalizeCalendarCandidate(row.calendar) : '';
-  const dateKeys = new Set(resolvedMatches.map(getEventDateKey));
+  const selectedCalendarSummary = getCalendarSummaryById(calendars, selectedCalendarId);
+  const normalizedSelectedCalendar = normalizeCalendarCandidate(selectedCalendarSummary);
+  const canUseSelectedCalendarFallback =
+    Boolean(selectedCalendarId) && (!normalizedCalendar || normalizedCalendar === normalizedSelectedCalendar);
+  const preferredMatches = canUseSelectedCalendarFallback
+    ? resolvedMatches.filter(event => {
+      const eventCalendarSummary = event.calendarSummary || getCalendarSummaryById(calendars, event.calendarId);
+      return (
+        event.calendarId === selectedCalendarId ||
+        normalizeCalendarCandidate(eventCalendarSummary) === normalizedSelectedCalendar
+      );
+    })
+    : resolvedMatches;
 
-  const canDeleteDuplicatesTogether = resolvedMatches.every(event => {
+  const preferredDateKeys = new Set(preferredMatches.map(getEventDateKey));
+
+  const canDeleteDuplicatesTogether = preferredMatches.length > 0 && preferredMatches.every(event => {
     const eventTitle = normalizeDeleteCandidate(stripTrailingCourseTag(event.summary || ''));
     const eventCalendar = normalizeCalendarCandidate(
       event.calendarId ? calendars.find(calendar => calendar.id === event.calendarId)?.summary ?? '' : ''
@@ -1928,9 +1948,13 @@ function resolveCalendarDeleteCandidates(
       eventTitle === normalizedTitle &&
       (!normalizedCalendar || eventCalendar === normalizedCalendar)
     );
-  }) && dateKeys.size === 1;
+  }) && preferredDateKeys.size === 1;
 
-  return canDeleteDuplicatesTogether ? resolvedMatches : [];
+  if (canDeleteDuplicatesTogether) {
+    return preferredMatches;
+  }
+
+  return resolvedMatches.length === 1 ? resolvedMatches : [];
 }
 
 function matchDeadlineCandidates(deadlines: Deadline[], projects: Project[], rawTitle: string, course?: string) {
@@ -2284,7 +2308,7 @@ function ActionBundleCard({
     const deletes = safeBlocks
       .filter(block => block.type === 'calendar-delete')
       .flatMap(block => block.rows.map(row => {
-        const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, row);
+        const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, selectedCalendarId, row);
         return {
           label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${matches.length > 1 ? ` · ${matches.length} matches` : ''}`,
           valid: matches.length > 0,
@@ -2293,7 +2317,7 @@ function ActionBundleCard({
       }));
 
     return { creates, updates, deletes };
-  }, [calendarCalendars, calendarEvents, safeBlocks]);
+  }, [calendarCalendars, calendarEvents, safeBlocks, selectedCalendarId]);
 
   const resultSummary = useMemo(() => {
     const total = Object.values(results).reduce((sum, count) => sum + count, 0);

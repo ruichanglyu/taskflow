@@ -1388,8 +1388,18 @@ function ActionBundleCard({
   const [actionError, setActionError] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, number>>({});
 
+  const safeBlocks = useMemo(
+    () => blocks.filter((block): block is ImportBlock =>
+      !!block &&
+      typeof block === 'object' &&
+      typeof block.type === 'string' &&
+      Array.isArray(block.rows),
+    ),
+    [blocks],
+  );
+
   const entries = useMemo(() => (
-    blocks.map((block, index) => ({
+    safeBlocks.map((block, index) => ({
       block,
       key: `${messageId}:block:${index}`,
       imported: importedBlocks.has(`${messageId}:block:${index}`),
@@ -1399,7 +1409,7 @@ function ActionBundleCard({
         block.type === 'subtasks' ? 2 :
         block.type === 'deadline-links' ? 3 : 4,
     }))
-  ), [blocks, importedBlocks, messageId]);
+  ), [safeBlocks, importedBlocks, messageId]);
 
   const pendingEntries = entries.filter(entry => !entry.imported);
   const hasDeletes = entries.some(entry => entry.block.type === 'delete-tasks');
@@ -1414,7 +1424,7 @@ function ActionBundleCard({
       deletes: 0,
     };
 
-    for (const { block } of blocks) {
+    for (const block of safeBlocks) {
       if (block.type === 'tasks') counts.tasks += block.rows.length;
       if (block.type === 'deadlines') counts.deadlines += block.rows.length;
       if (block.type === 'subtasks') counts.subtasks += block.rows.length;
@@ -1423,10 +1433,10 @@ function ActionBundleCard({
     }
 
     return counts;
-  }, [blocks]);
+  }, [safeBlocks]);
 
   const linkGroups = useMemo(() => {
-    return blocks
+    return safeBlocks
       .filter(block => block.type === 'deadline-links')
       .flatMap(block =>
         block.rows.map(row => {
@@ -1445,10 +1455,10 @@ function ActionBundleCard({
           };
         }),
       );
-  }, [blocks, deadlines, projects, tasks]);
+  }, [safeBlocks, deadlines, projects, tasks]);
 
   const deleteGroups = useMemo(() => {
-    return blocks
+    return safeBlocks
       .filter(block => block.type === 'delete-tasks')
       .flatMap(block =>
         block.rows.map(row => {
@@ -1460,7 +1470,7 @@ function ActionBundleCard({
           };
         }),
       );
-  }, [blocks, tasks]);
+  }, [safeBlocks, tasks]);
 
   const resultSummary = useMemo(() => {
     const total = Object.values(results).reduce((sum, count) => sum + count, 0);
@@ -1584,21 +1594,21 @@ function ActionBundleCard({
             <ActionSection
               label="Tasks"
               tone="default"
-              items={blocks.filter(block => block.type === 'tasks').flatMap(block => block.rows.map(row => row.title))}
+              items={safeBlocks.filter(block => block.type === 'tasks').flatMap(block => block.rows.map(row => row.title))}
             />
           )}
           {summary.subtasks > 0 && (
             <ActionSection
               label="Subtasks"
               tone="default"
-              items={blocks.filter(block => block.type === 'subtasks').flatMap(block => block.rows.map(row => row.title))}
+              items={safeBlocks.filter(block => block.type === 'subtasks').flatMap(block => block.rows.map(row => row.title))}
             />
           )}
           {summary.deadlines > 0 && (
             <ActionSection
               label="Deadlines"
               tone="default"
-              items={blocks.filter(block => block.type === 'deadlines').flatMap(block => block.rows.map(row => row.title))}
+              items={safeBlocks.filter(block => block.type === 'deadlines').flatMap(block => block.rows.map(row => row.title))}
             />
           )}
           {summary.links > 0 && (

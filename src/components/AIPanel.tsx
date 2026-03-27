@@ -31,6 +31,7 @@ export function AIPanel({
   onAddTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask,
 }: AIPanelProps) {
   const { messages, isStreaming, error, sendMessage, stopStreaming, clearChat } = useAI();
+  const [panelError, setPanelError] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [apiKey, setApiKey] = useState(getAPIKey() ?? '');
   const [hasKey, setHasKey] = useState(!!getAPIKey());
@@ -57,6 +58,7 @@ export function AIPanel({
     if ((!input.trim() && !pendingImages.length) || isStreaming) return;
     const msg = input.trim() || (pendingImages.length ? 'What do you see in this image?' : '');
     const images = pendingImages.length ? [...pendingImages] : undefined;
+    setPanelError(null);
     setInput('');
     setPendingImages([]);
     await sendMessage(msg, { tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises }, images);
@@ -70,7 +72,7 @@ export function AIPanel({
       if (!file.type.startsWith('image/')) return;
       // Limit to 4MB per image (base64 will be ~33% larger)
       if (file.size > 4 * 1024 * 1024) {
-        setError('Image too large (max 4MB). Try a smaller image or screenshot.');
+        setPanelError('Image too large (max 4MB). Try a smaller image or screenshot.');
         return;
       }
 
@@ -116,6 +118,7 @@ export function AIPanel({
   };
 
   const handleImport = async (block: ImportBlock, blockKey: string) => {
+    setPanelError(null);
     let imported = 0;
     const projectCache = new Map<string, string | null>();
 
@@ -154,7 +157,7 @@ export function AIPanel({
       }
 
       if (skipped > 0) {
-        setError(
+        setPanelError(
           skipped === 1
             ? 'Skipped 1 AI delete entry because it was ambiguous, missing, or failed to delete.'
             : `Skipped ${skipped} AI delete entries because they were ambiguous, missing, or failed to delete.`,
@@ -326,10 +329,10 @@ export function AIPanel({
         </div>
 
         {/* Error */}
-        {error && (
+        {(panelError || error) && (
           <div className="mx-4 mb-2 flex items-start gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
             <AlertCircle size={14} className="mt-0.5 shrink-0" />
-            <span>{error}</span>
+            <span>{panelError ?? error}</span>
           </div>
         )}
 

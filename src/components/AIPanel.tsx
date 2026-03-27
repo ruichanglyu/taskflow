@@ -143,6 +143,7 @@ function loadSavedChatSidebarState() {
 interface AIPanelProps {
   open: boolean;
   onClose: () => void;
+  userId: string;
   // App data for context
   tasks: Task[];
   deadlines: Deadline[];
@@ -161,7 +162,7 @@ interface AIPanelProps {
 }
 
 export function AIPanel({
-  open, onClose,
+  open, onClose, userId,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
   onAddTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
 }: AIPanelProps) {
@@ -178,11 +179,11 @@ export function AIPanel({
     selectChat,
     renameChat,
     deleteChat,
-  } = useAI();
+  } = useAI(userId);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [input, setInput] = useState('');
-  const [apiKey, setApiKey] = useState(getAPIKey() ?? '');
-  const [hasKey, setHasKey] = useState(!!getAPIKey());
+  const [apiKey, setApiKey] = useState(getAPIKey(userId) ?? '');
+  const [hasKey, setHasKey] = useState(!!getAPIKey(userId));
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [importedBlocks, setImportedBlocks] = useState<Set<string>>(new Set());
   const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([]);
@@ -372,14 +373,14 @@ export function AIPanel({
 
   const handleSaveKey = () => {
     if (apiKey.trim()) {
-      setAPIKey(apiKey.trim());
+      setAPIKey(userId, apiKey.trim());
       setHasKey(true);
       setShowKeyInput(false);
     }
   };
 
   const handleRemoveKey = () => {
-    removeAPIKey();
+    removeAPIKey(userId);
     setApiKey('');
     setHasKey(false);
     setShowKeyInput(false);

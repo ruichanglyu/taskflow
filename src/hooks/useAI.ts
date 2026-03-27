@@ -48,29 +48,34 @@ export interface ParsedImportRow {
   taskTitle?: string;
 }
 
-const KEY_STORAGE = 'taskflow_ai_key';
-
 const GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
-const GEMINI_MODEL_VISION = 'gemini-2.5-flash';  // lite model doesn't support images, use 2.5 flash for multimodal
+const GEMINI_MODEL_VISION = 'gemini-2.5-flash';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const CHAT_STORAGE = 'taskflow_ai_chats';
-const ACTIVE_CHAT_STORAGE = 'taskflow_ai_active_chat';
 const LEGACY_CHAT_STORAGE = 'taskflow_ai_chat';
 
-export function getAPIKey(): string | null {
+// Storage keys scoped per user
+function keyStorage(userId: string) { return `taskflow_ai_key_${userId}`; }
+function chatStorage(userId: string) { return `taskflow_ai_chats_${userId}`; }
+function activeChatStorage(userId: string) { return `taskflow_ai_active_chat_${userId}`; }
+
+export function getAPIKey(userId: string): string | null {
   try {
-    return localStorage.getItem(KEY_STORAGE);
+    // Try user-scoped key first, fall back to legacy global key
+    return localStorage.getItem(keyStorage(userId)) ?? localStorage.getItem('taskflow_ai_key');
   } catch {
     return null;
   }
 }
 
-export function setAPIKey(key: string) {
-  localStorage.setItem(KEY_STORAGE, key);
+export function setAPIKey(userId: string, key: string) {
+  localStorage.setItem(keyStorage(userId), key);
+  // Clean up legacy global key if it exists
+  localStorage.removeItem('taskflow_ai_key');
 }
 
-export function removeAPIKey() {
-  localStorage.removeItem(KEY_STORAGE);
+export function removeAPIKey(userId: string) {
+  localStorage.removeItem(keyStorage(userId));
+  localStorage.removeItem('taskflow_ai_key');
 }
 
 
@@ -431,9 +436,10 @@ function makeNewThread(title = 'New chat'): ChatThread {
   };
 }
 
-function loadSavedThreads(): ChatThread[] {
+function loadSavedThreads(userId: string): ChatThread[] {
   try {
-    const saved = localStorage.getItem(CHAT_STORAGE);
+    // Try user-scoped storage first, fall back to legacy global storage
+    const saved = localStorage.getItem(chatStorage(userId)) ?? localStorage.getItem('taskflow_ai_chats');
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
@@ -490,20 +496,22 @@ function loadSavedThreads(): ChatThread[] {
   return [makeNewThread()];
 }
 
-function saveThreads(threads: ChatThread[]) {
+function saveThreads(userId: string, threads: ChatThread[]) {
   try {
     const toSave = threads.map(sanitizeThread);
-    localStorage.setItem(CHAT_STORAGE, JSON.stringify(toSave));
+    localStorage.setItem(chatStorage(userId), JSON.stringify(toSave));
+    // Clean up legacy global storage
+    localStorage.removeItem('taskflow_ai_chats');
   } catch { /* storage full — ignore */ }
 }
 
-export function useAI() {
+export function useAI(userId: string) {
   const initialStateRef = useRef<{ threads: ChatThread[]; activeChatId: string } | null>(null);
   if (!initialStateRef.current) {
-    const initialThreads = loadSavedThreads();
+    const initialThreads = loadSavedThreads(userId);
     let initialChatId = initialThreads[0]?.id ?? makeNewThread().id;
     try {
-      const saved = localStorage.getItem(ACTIVE_CHAT_STORAGE);
+      const saved = localStorage.getItem(activeChatStorage(userId)) ?? localStorage.getItem('taskflow_ai_active_chat');
       if (saved && initialThreads.some(thread => thread.id === saved)) {
         initialChatId = saved;
       }
@@ -551,11 +559,12 @@ export function useAI() {
   // Persist threads to localStorage whenever they change
   useEffect(() => {
     if (!isStreaming) {
-      saveThreads(threads);
-      localStorage.setItem(ACTIVE_CHAT_STORAGE, activeChatId);
+      saveThreads(userId, threads);
+      localStorage.setItem(activeChatStorage(userId), activeChatId);
       localStorage.removeItem(LEGACY_CHAT_STORAGE);
+      localStorage.removeItem('taskflow_ai_active_chat');
     }
-  }, [threads, activeChatId, isStreaming]);
+  }, [threads, activeChatId, isStreaming, userId]);
 
   const updateThread = useCallback((threadId: string, updater: (thread: ChatThread) => ChatThread) => {
     setThreads(prev => prev.map(thread => thread.id === threadId ? updater(thread) : thread));
@@ -626,7 +635,7 @@ export function useAI() {
     appData: Parameters<typeof buildSystemPrompt>[0],
     images?: ImageAttachment[],
   ) => {
-    const key = getAPIKey();
+    const key = getAPIKey(userId);
     if (!key) {
       setError('Please add your Gemini API key first.');
       return;

@@ -493,6 +493,7 @@ export function AppShell({ user }: AppShellProps) {
       <AIPanel
         open={aiOpen}
         onClose={() => setAiOpen(false)}
+        userId={user.id}
         tasks={store.tasks}
         deadlines={deadlineStore.deadlines}
         projects={store.projects}

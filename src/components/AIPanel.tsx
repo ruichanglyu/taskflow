@@ -841,10 +841,7 @@ export function AIPanel({
                             className="flex w-full items-start justify-between gap-3 px-3 py-3 text-left"
                           >
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-[var(--text-primary)]">{chat.title}</p>
-                              <p className="mt-0.5 text-[10px] text-[var(--text-faint)]">
-                                {chat.messages.length} message{chat.messages.length === 1 ? '' : 's'} · {new Date(chat.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                              </p>
+                              <p className="line-clamp-2 text-sm font-medium leading-snug text-[var(--text-primary)]">{chat.title}</p>
                             </div>
                             <div className="flex items-center gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
                               <button

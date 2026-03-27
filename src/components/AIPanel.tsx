@@ -23,12 +23,16 @@ type PanelInteraction =
   | null;
 
 const PANEL_FRAME_STORAGE = 'taskflow_ai_panel_frame';
+const CHAT_SIDEBAR_WIDTH_STORAGE = 'taskflow_ai_sidebar_width';
+const CHAT_SIDEBAR_COLLAPSED_STORAGE = 'taskflow_ai_sidebar_collapsed';
 const DEFAULT_PANEL_FRAME: PanelFrame = {
   x: 0,
   y: 88,
   width: 920,
   height: 760,
 };
+const DEFAULT_CHAT_SIDEBAR_WIDTH = 184;
+const DEFAULT_CHAT_SIDEBAR_COLLAPSED = false;
 
 function clampPanelFrame(frame: PanelFrame): PanelFrame {
   if (typeof window === 'undefined') return frame;
@@ -72,6 +76,39 @@ function loadSavedPanelFrame(): PanelFrame {
     });
   } catch {
     return clampPanelFrame(DEFAULT_PANEL_FRAME);
+  }
+}
+
+function clampChatSidebarWidth(width: number) {
+  if (typeof window === 'undefined') return width;
+  const minWidth = 160;
+  const maxWidth = Math.min(320, Math.max(160, Math.floor(window.innerWidth * 0.34)));
+  return Math.max(minWidth, Math.min(width, maxWidth));
+}
+
+function loadSavedChatSidebarState() {
+  if (typeof window === 'undefined') {
+    return {
+      width: DEFAULT_CHAT_SIDEBAR_WIDTH,
+      collapsed: DEFAULT_CHAT_SIDEBAR_COLLAPSED,
+    };
+  }
+
+  try {
+    const savedWidth = localStorage.getItem(CHAT_SIDEBAR_WIDTH_STORAGE);
+    const savedCollapsed = localStorage.getItem(CHAT_SIDEBAR_COLLAPSED_STORAGE);
+    const width = clampChatSidebarWidth(
+      savedWidth ? Number(savedWidth) || DEFAULT_CHAT_SIDEBAR_WIDTH : DEFAULT_CHAT_SIDEBAR_WIDTH
+    );
+    return {
+      width,
+      collapsed: savedCollapsed === null ? DEFAULT_CHAT_SIDEBAR_COLLAPSED : savedCollapsed === 'true',
+    };
+  } catch {
+    return {
+      width: DEFAULT_CHAT_SIDEBAR_WIDTH,
+      collapsed: DEFAULT_CHAT_SIDEBAR_COLLAPSED,
+    };
   }
 }
 
@@ -124,8 +161,15 @@ export function AIPanel({
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingChatTitle, setEditingChatTitle] = useState('');
   const [pendingDeleteChat, setPendingDeleteChat] = useState<ChatThread | null>(null);
+  const initialSidebarState = useMemo(() => loadSavedChatSidebarState(), []);
+  const [chatSidebarWidth, setChatSidebarWidth] = useState(initialSidebarState.width);
+  const [chatSidebarCollapsed, setChatSidebarCollapsed] = useState(initialSidebarState.collapsed);
   const [panelFrame, setPanelFrame] = useState<PanelFrame>(() => loadSavedPanelFrame());
   const [interaction, setInteraction] = useState<PanelInteraction>(null);
+  const [sidebarInteraction, setSidebarInteraction] = useState<{
+    startX: number;
+    initialWidth: number;
+  } | null>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -164,6 +208,15 @@ export function AIPanel({
   }, [panelFrame]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_SIDEBAR_WIDTH_STORAGE, String(chatSidebarWidth));
+      localStorage.setItem(CHAT_SIDEBAR_COLLAPSED_STORAGE, String(chatSidebarCollapsed));
+    } catch {
+      // ignore storage errors
+    }
+  }, [chatSidebarWidth, chatSidebarCollapsed]);
+
+  useEffect(() => {
     if (!interaction) return;
 
     const handleMove = (event: MouseEvent) => {
@@ -200,6 +253,32 @@ export function AIPanel({
       document.body.style.cursor = '';
     };
   }, [interaction]);
+
+  useEffect(() => {
+    if (!sidebarInteraction) return;
+
+    const handleMove = (event: MouseEvent) => {
+      const deltaX = event.clientX - sidebarInteraction.startX;
+      setChatSidebarWidth(clampChatSidebarWidth(sidebarInteraction.initialWidth + deltaX));
+      if (chatSidebarCollapsed) {
+        setChatSidebarCollapsed(false);
+      }
+    };
+
+    const handleUp = () => setSidebarInteraction(null);
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+  }, [sidebarInteraction, chatSidebarCollapsed]);
 
   useEffect(() => {
     if (!open) return;
@@ -493,6 +572,19 @@ export function AIPanel({
     });
   };
 
+  const beginSidebarResize = (event: React.MouseEvent) => {
+    if (chatSidebarCollapsed || event.button !== 0) return;
+    event.preventDefault();
+    setSidebarInteraction({
+      startX: event.clientX,
+      initialWidth: chatSidebarWidth,
+    });
+  };
+
+  const toggleChatSidebar = () => {
+    setChatSidebarCollapsed(prev => !prev);
+  };
+
   return createPortal(
     <div className="pointer-events-none fixed inset-0 z-[60]">
       <div
@@ -595,67 +687,69 @@ export function AIPanel({
           </div>
         )}
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)]">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* Chat list */}
-          <aside className="flex min-h-0 flex-col border-b border-[var(--border-soft)] bg-[var(--surface-muted)]/40 md:border-b-0 md:border-r">
-            <div className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] px-4 py-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--text-faint)]">Chats</p>
-                <p className="text-xs text-[var(--text-muted)]">{threads.length} conversation{threads.length === 1 ? '' : 's'}</p>
-              </div>
-              <button
-                onClick={handleCreateChat}
-                className="flex items-center gap-1.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-              >
-                <Plus size={12} />
-                New
-              </button>
+          <aside
+            className={cn(
+              'relative flex min-h-0 shrink-0 flex-col border-b border-[var(--border-soft)] bg-[var(--surface-muted)]/40 md:border-b-0 md:border-r',
+              chatSidebarCollapsed ? 'overflow-hidden' : 'overflow-visible',
+            )}
+            style={{
+              width: chatSidebarCollapsed ? 56 : chatSidebarWidth,
+              minWidth: chatSidebarCollapsed ? 56 : chatSidebarWidth,
+              maxWidth: chatSidebarCollapsed ? 56 : chatSidebarWidth,
+            }}
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] px-3 py-3">
+              {chatSidebarCollapsed ? (
+                <button
+                  onClick={toggleChatSidebar}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-soft)] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                  title="Expand chats"
+                >
+                  <ChevronDown size={14} className="-rotate-90" />
+                </button>
+              ) : (
+                <>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--text-faint)]">Chats</p>
+                    <p className="text-xs text-[var(--text-muted)]">{threads.length} conversation{threads.length === 1 ? '' : 's'}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={handleCreateChat}
+                      className="flex items-center gap-1.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                    >
+                      <Plus size={12} />
+                      New
+                    </button>
+                    <button
+                      onClick={toggleChatSidebar}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-soft)] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                      title="Collapse chats"
+                    >
+                      <ChevronDown size={14} className="rotate-90" />
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-              <div className="space-y-2">
-                {threads.map(chat => {
-                  const active = chat.id === currentChatId;
-                  const isEditing = editingChatId === chat.id;
-                  return (
-                    <div
-                      key={chat.id}
-                      className={cn(
-                        'group rounded-2xl border transition',
-                        active
-                          ? 'border-[var(--accent)]/35 bg-[var(--accent-soft)]/30'
-                          : 'border-transparent hover:border-[var(--border-soft)] hover:bg-[var(--surface)]',
-                      )}
-                    >
-                      {isEditing ? (
-                        <div className="space-y-2 p-3">
-                          <input
-                            value={editingChatTitle}
-                            onChange={e => setEditingChatTitle(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') commitRenameChat();
-                              if (e.key === 'Escape') cancelRenameChat();
-                            }}
-                            autoFocus
-                            className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
-                          />
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={cancelRenameChat}
-                              className="rounded-lg border border-[var(--border-soft)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)]"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={commitRenameChat}
-                              className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--accent-contrast)]"
-                              style={{ backgroundColor: 'var(--accent-strong)' }}
-                            >
-                              Save
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div
+              {chatSidebarCollapsed ? (
+                <div className="space-y-2">
+                  <button
+                    onClick={handleCreateChat}
+                    className="flex h-10 w-full items-center justify-center rounded-2xl border border-dashed border-[var(--border-soft)] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                    title="New chat"
+                  >
+                    <Plus size={14} />
+                  </button>
+                  <div className="space-y-1">
+                    {threads.map(chat => {
+                      const active = chat.id === currentChatId;
+                      return (
+                        <button
+                          key={chat.id}
                           onClick={() => {
                             stopStreaming();
                             selectChat(chat.id);
@@ -664,60 +758,136 @@ export function AIPanel({
                             setPendingDeleteChat(null);
                             requestAnimationFrame(() => inputRef.current?.focus());
                           }}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
+                          className={cn(
+                            'flex h-10 w-full items-center justify-center rounded-2xl border text-xs font-semibold transition',
+                            active
+                              ? 'border-[var(--accent)]/35 bg-[var(--accent-soft)]/30 text-[var(--accent)]'
+                              : 'border-transparent bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--border-soft)]',
+                          )}
+                          title={chat.title}
+                        >
+                          {chat.title.slice(0, 1).toUpperCase() || '•'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {threads.map(chat => {
+                    const active = chat.id === currentChatId;
+                    const isEditing = editingChatId === chat.id;
+                    return (
+                      <div
+                        key={chat.id}
+                        className={cn(
+                          'group rounded-2xl border transition',
+                          active
+                            ? 'border-[var(--accent)]/35 bg-[var(--accent-soft)]/30'
+                            : 'border-transparent hover:border-[var(--border-soft)] hover:bg-[var(--surface)]',
+                        )}
+                      >
+                        {isEditing ? (
+                          <div className="space-y-2 p-3">
+                            <input
+                              value={editingChatTitle}
+                              onChange={e => setEditingChatTitle(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') commitRenameChat();
+                                if (e.key === 'Escape') cancelRenameChat();
+                              }}
+                              autoFocus
+                              className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                            />
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={cancelRenameChat}
+                                className="rounded-lg border border-[var(--border-soft)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)]"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={commitRenameChat}
+                                className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--accent-contrast)]"
+                                style={{ backgroundColor: 'var(--accent-strong)' }}
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            onClick={() => {
                               stopStreaming();
                               selectChat(chat.id);
                               setPanelError(null);
                               cancelRenameChat();
                               setPendingDeleteChat(null);
                               requestAnimationFrame(() => inputRef.current?.focus());
-                            }
-                          }}
-                          className="flex w-full items-start justify-between gap-3 px-3 py-3 text-left"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-[var(--text-primary)]">{chat.title}</p>
-                            <p className="mt-0.5 text-[10px] text-[var(--text-faint)]">
-                              {chat.messages.length} message{chat.messages.length === 1 ? '' : 's'} · {new Date(chat.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                            </p>
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                stopStreaming();
+                                selectChat(chat.id);
+                                setPanelError(null);
+                                cancelRenameChat();
+                                setPendingDeleteChat(null);
+                                requestAnimationFrame(() => inputRef.current?.focus());
+                              }
+                            }}
+                            className="flex w-full items-start justify-between gap-3 px-3 py-3 text-left"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-[var(--text-primary)]">{chat.title}</p>
+                              <p className="mt-0.5 text-[10px] text-[var(--text-faint)]">
+                                {chat.messages.length} message{chat.messages.length === 1 ? '' : 's'} · {new Date(chat.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  startRenameChat(chat);
+                                }}
+                                className="rounded-lg p-1 text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
+                                title="Rename chat"
+                              >
+                                <Pencil size={12} />
+                              </button>
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setPendingDeleteChat(chat);
+                                }}
+                                className="rounded-lg p-1 text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
+                                title="Delete chat"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
-                            <button
-                              onClick={e => {
-                                e.stopPropagation();
-                                startRenameChat(chat);
-                              }}
-                              className="rounded-lg p-1 text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
-                              title="Rename chat"
-                            >
-                              <Pencil size={12} />
-                            </button>
-                            <button
-                              onClick={e => {
-                                e.stopPropagation();
-                                setPendingDeleteChat(chat);
-                              }}
-                              className="rounded-lg p-1 text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
-                              title="Delete chat"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+            {!chatSidebarCollapsed && (
+              <button
+                onMouseDown={beginSidebarResize}
+                className="absolute inset-y-0 right-0 w-1 cursor-col-resize bg-transparent hover:bg-[var(--accent)]/20"
+                aria-label="Resize chat sidebar"
+                title="Drag to resize"
+              />
+            )}
           </aside>
 
           {/* Chat area */}
-          <section className="flex min-h-0 flex-col">
+          <section className="min-w-0 flex-1 flex min-h-0 flex-col">
             <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-4 py-3">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--text-faint)]">Current chat</p>

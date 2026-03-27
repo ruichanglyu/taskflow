@@ -154,7 +154,7 @@ export async function updateGoogleCalendarEvent(
   return googleFetch<GoogleCalendarEvent>(
     `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
     accessToken,
-    { method: 'PATCH', body: JSON.stringify(event) }
+    { method: 'PUT', body: JSON.stringify(event) }
   );
 }
 

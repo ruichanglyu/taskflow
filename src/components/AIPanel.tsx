@@ -1349,6 +1349,60 @@ function addOneDay(dateKey: string) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function normalizeDateParts(year: number, month: number, day: number) {
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return '';
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return '';
+  }
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function parseNaturalDateKey(value: string) {
+  const cleaned = value
+    .trim()
+    .replace(/,/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/(\d+)(st|nd|rd|th)\b/gi, '$1');
+
+  const monthLookup: Record<string, number> = {
+    january: 1,
+    february: 2,
+    march: 3,
+    april: 4,
+    may: 5,
+    june: 6,
+    july: 7,
+    august: 8,
+    september: 9,
+    october: 10,
+    november: 11,
+    december: 12,
+  };
+
+  const monthFirst = cleaned.match(/^([a-z]+)\s+(\d{1,2})(?:\s+(\d{4}))?$/i);
+  if (monthFirst) {
+    const month = monthLookup[monthFirst[1].toLowerCase()];
+    const day = Number(monthFirst[2]);
+    const year = monthFirst[3] ? Number(monthFirst[3]) : new Date().getFullYear();
+    if (month) return normalizeDateParts(year, month, day);
+  }
+
+  const dayFirst = cleaned.match(/^(\d{1,2})\s+([a-z]+)(?:\s+(\d{4}))?$/i);
+  if (dayFirst) {
+    const day = Number(dayFirst[1]);
+    const month = monthLookup[dayFirst[2].toLowerCase()];
+    const year = dayFirst[3] ? Number(dayFirst[3]) : new Date().getFullYear();
+    if (month) return normalizeDateParts(year, month, day);
+  }
+
+  return '';
+}
+
 function resolveCalendarDateInput(value?: string) {
   if (!value) return '';
   const trimmed = value.trim();
@@ -1366,7 +1420,10 @@ function resolveCalendarDateInput(value?: string) {
     return formatDateKey(addDays(today, 1));
   }
 
-  return trimmed;
+  const naturalDate = parseNaturalDateKey(trimmed);
+  if (naturalDate) return naturalDate;
+
+  return '';
 }
 
 function buildCalendarEventPayload(row: ImportBlock['rows'][number], mode: 'create' | 'update') {

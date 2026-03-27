@@ -729,7 +729,7 @@ export function AIPanel({
             </div>
 
             {/* Messages */}
-            <div ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <div key={currentChatId} ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               {messages.length === 0 ? (
                 <WelcomeScreen hasKey={hasKey} />
               ) : (

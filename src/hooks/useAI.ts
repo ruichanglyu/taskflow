@@ -504,7 +504,7 @@ export function useAI() {
   const currentChat = useMemo(() => {
     const found = threads.find(thread => thread.id === activeChatId);
     if (found) return found;
-    return threads[0] ?? makeNewThread();
+    return [...threads].sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? threads[0];
   }, [threads, activeChatId]);
 
   const messages = currentChat.messages;

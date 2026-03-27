@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise } from '../types';
 
 export interface ChatMessage {
@@ -276,11 +276,31 @@ async function streamGemini(
   }
 }
 
+const CHAT_STORAGE = 'taskflow_ai_chat';
+
+function loadSavedMessages(): ChatMessage[] {
+  try {
+    const saved = localStorage.getItem(CHAT_STORAGE);
+    return saved ? JSON.parse(saved) : [];
+  } catch { return []; }
+}
+
+function saveMessages(messages: ChatMessage[]) {
+  try {
+    localStorage.setItem(CHAT_STORAGE, JSON.stringify(messages));
+  } catch { /* storage full — ignore */ }
+}
+
 export function useAI() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(loadSavedMessages);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Persist messages to localStorage whenever they change
+  useEffect(() => {
+    if (!isStreaming) saveMessages(messages);
+  }, [messages, isStreaming]);
 
   const sendMessage = useCallback(async (
     userMessage: string,
@@ -340,6 +360,7 @@ export function useAI() {
   const clearChat = useCallback(() => {
     setMessages([]);
     setError(null);
+    localStorage.removeItem(CHAT_STORAGE);
   }, []);
 
   return { messages, isStreaming, error, sendMessage, stopStreaming, clearChat };

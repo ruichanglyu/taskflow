@@ -16,7 +16,7 @@ export interface ChatMessage {
 }
 
 export interface ImportBlock {
-  type: 'tasks' | 'deadlines' | 'subtasks';
+  type: 'tasks' | 'deadlines' | 'subtasks' | 'delete-tasks';
   raw: string;
   rows: ParsedImportRow[];
   imported?: boolean;
@@ -41,6 +41,7 @@ export interface ParsedImportRow {
 const KEY_STORAGE = 'taskflow_ai_key';
 
 const GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
+const GEMINI_MODEL_VISION = 'gemini-2.5-flash';  // lite model doesn't support images, use 2.5 flash for multimodal
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 export function getAPIKey(): string | null {
@@ -148,6 +149,13 @@ Code Trace DaleDB
 \`\`\`
 The parent task title after "subtasks:" MUST exactly match an existing task title. Each line is just a subtask title (no pipes/fields needed). PREFER subtasks over separate tasks when the user wants to break down an existing task into smaller pieces.
 
+To delete tasks, output a fenced code block with language "import:delete-tasks":
+\`\`\`import:delete-tasks
+Exact Task Title 1
+Exact Task Title 2
+\`\`\`
+Each line must be the EXACT title of an existing task. Only include tasks the user explicitly asked to delete.
+
 FIELD RULES:
 - Tasks: title (required), course, due (YYYY-MM-DD), priority (low/medium/high), description, status (todo/in-progress/done), recurrence (none/daily/weekly/monthly)
 - Deadlines: title (required), course, date (YYYY-MM-DD required), time (HH:MM AM/PM), type (assignment/exam/quiz/lab/project/other), notes, status (not-started/in-progress/done/missed)
@@ -167,13 +175,13 @@ Be concise, helpful, and friendly. Use the user's actual data to answer question
 /** Parse import blocks from AI response */
 export function parseImportBlocks(content: string): ImportBlock[] {
   const blocks: ImportBlock[] = [];
-  const regex = /```import:(tasks|deadlines|subtasks:([^\n]*))\n([\s\S]*?)```/g;
+  const regex = /```import:(tasks|deadlines|delete-tasks|subtasks:([^\n]*))\n([\s\S]*?)```/g;
   let match;
 
   while ((match = regex.exec(content)) !== null) {
     const rawType = match[1];
     const isSubtasks = rawType.startsWith('subtasks:');
-    const type: ImportBlock['type'] = isSubtasks ? 'subtasks' : rawType as 'tasks' | 'deadlines';
+    const type: ImportBlock['type'] = isSubtasks ? 'subtasks' : rawType as 'tasks' | 'deadlines' | 'delete-tasks';
     const parentTaskTitle = isSubtasks ? (match[2]?.trim() || '') : undefined;
     const raw = match[3].trim();
     const lines = raw.split('\n').filter(l => l.trim());
@@ -225,12 +233,18 @@ async function streamGemini(
   onUpdate: (text: string) => void,
   signal: AbortSignal,
 ) {
+  // Check if any message has images — if so, use the vision-capable model
+  const hasImages = history.some(m => m.images?.some(img => img.base64));
+  const model = hasImages ? GEMINI_MODEL_VISION : GEMINI_MODEL;
+
   const contents = history.map(m => {
     const parts: Record<string, unknown>[] = [];
     // Add image parts first (if any)
     if (m.images?.length) {
       for (const img of m.images) {
-        parts.push({ inline_data: { mime_type: img.mimeType, data: img.base64 } });
+        if (img.base64) {
+          parts.push({ inline_data: { mime_type: img.mimeType, data: img.base64 } });
+        }
       }
     }
     // Add text part
@@ -238,7 +252,7 @@ async function streamGemini(
     return { role: m.role === 'assistant' ? 'model' : 'user', parts };
   });
 
-  const url = `${GEMINI_API_URL}/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${key}`;
+  const url = `${GEMINI_API_URL}/${model}:streamGenerateContent?alt=sse&key=${key}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

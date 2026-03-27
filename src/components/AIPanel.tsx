@@ -22,12 +22,13 @@ interface AIPanelProps {
   onAddDeadline: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus) => Promise<boolean>;
   onAddProject: (name: string, description: string) => Promise<string | null>;
   onAddSubtask: (taskId: string, title: string) => Promise<boolean>;
+  onDeleteTask: (taskId: string) => Promise<void>;
 }
 
 export function AIPanel({
   open, onClose,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
-  onAddTask, onAddDeadline, onAddProject, onAddSubtask,
+  onAddTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask,
 }: AIPanelProps) {
   const { messages, isStreaming, error, sendMessage, stopStreaming, clearChat } = useAI();
   const [input, setInput] = useState('');
@@ -135,7 +136,15 @@ export function AIPanel({
       return newId;
     };
 
-    if (block.type === 'subtasks') {
+    if (block.type === 'delete-tasks') {
+      for (const row of block.rows) {
+        const task = tasks.find(t => t.title.toLowerCase() === row.title.toLowerCase());
+        if (task) {
+          await onDeleteTask(task.id);
+          imported++;
+        }
+      }
+    } else if (block.type === 'subtasks') {
       // Find the parent task by title (case-insensitive)
       const parentTitle = block.parentTaskTitle?.toLowerCase() ?? '';
       const parentTask = tasks.find(t => t.title.toLowerCase() === parentTitle);
@@ -529,7 +538,7 @@ function renderContentWithBlocks(content: string, importBlocks: ImportBlock[]): 
   const segments: Segment[] = [];
 
   // Find all fenced code blocks
-  const blockRegex = /```(import:(?:tasks|deadlines|subtasks:[^\n]*)|csv)\n([\s\S]*?)```/g;
+  const blockRegex = /```(import:(?:tasks|deadlines|delete-tasks|subtasks:[^\n]*)|csv)\n([\s\S]*?)```/g;
   let match;
   let lastIndex = 0;
 
@@ -593,7 +602,8 @@ function ImportCard({
     setImporting(false);
   };
 
-  const label = block.type === 'subtasks' ? 'subtasks' : block.type === 'tasks' ? 'tasks' : 'deadlines';
+  const label = block.type === 'delete-tasks' ? 'tasks to delete' : block.type === 'subtasks' ? 'subtasks' : block.type === 'tasks' ? 'tasks' : 'deadlines';
+  const isDelete = block.type === 'delete-tasks';
   const done = isImported || result !== null;
 
   return (
@@ -612,7 +622,7 @@ function ImportCard({
           <div>
             <p className="text-sm font-medium text-[var(--text-primary)]">
               {done
-                ? `Imported ${result ?? block.rows.length} ${label}`
+                ? (isDelete ? `Deleted ${result ?? block.rows.length} tasks` : `Imported ${result ?? block.rows.length} ${label}`)
                 : `${block.rows.length} ${label} ready`}
             </p>
             <p className="text-[10px] text-[var(--text-faint)]">
@@ -625,10 +635,15 @@ function ImportCard({
           <button
             onClick={handleClick}
             disabled={importing}
-            className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-60"
-            style={{ backgroundColor: 'var(--accent-strong)' }}
+            className={cn(
+              'rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-60',
+              isDelete
+                ? 'bg-rose-500 text-white'
+                : 'text-[var(--accent-contrast)]'
+            )}
+            style={isDelete ? undefined : { backgroundColor: 'var(--accent-strong)' }}
           >
-            {importing ? 'Importing...' : 'Import'}
+            {importing ? (isDelete ? 'Deleting...' : 'Importing...') : (isDelete ? 'Delete' : 'Import')}
           </button>
         )}
       </div>

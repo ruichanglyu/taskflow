@@ -2243,7 +2243,7 @@ function ActionBundleCard({
   importedBlocks: Set<string>;
   onImport: (block: ImportBlock, key: string) => Promise<number>;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [applying, setApplying] = useState(false);
   const [optimisticDone, setOptimisticDone] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -2321,11 +2321,29 @@ function ActionBundleCard({
       .filter(block => block.type === 'deadline-links')
       .flatMap(block =>
         block.rows.map(row => {
-          const taskMatches = matchTaskCandidates(previewTasks, row.taskTitle ?? '');
+          const taskTitle = row.taskTitle ?? '';
+          // Use course-aware matching in preview, same as actual import:
+          // 1. Extract course from bracket tag if not explicitly provided
+          // 2. Try exact title match first before stripped matching
+          const linkCourse = row.course ?? extractCourseFromTitle(taskTitle);
+          const normalizedTitle = normalizeDeleteCandidate(taskTitle);
+          // Exact match check (no stripping) — avoids false ambiguity between
+          // "Exam 3 [INTA 1200]" and "Exam 3 [MATH 2550]"
+          const exactMatches = previewTasks.filter(
+            t => normalizeDeleteCandidate(t.title) === normalizedTitle
+          );
+          const taskMatches = exactMatches.length === 1
+            ? exactMatches
+            : linkCourse
+              ? matchTaskCandidates(
+                  filterTasksByCourse(tasks, projects, linkCourse),
+                  taskTitle,
+                )
+              : matchTaskCandidates(previewTasks, taskTitle);
           const deadlineMatches = matchDeadlineCandidates(deadlines, projects, row.title, row.course);
           const valid = taskMatches.length === 1 && deadlineMatches.length === 1;
           return {
-            label: `${row.taskTitle ?? 'Unknown task'} → ${row.title}`,
+            label: `${taskTitle || 'Unknown task'} → ${row.title}`,
             valid,
             reason: valid
               ? ''
@@ -2336,7 +2354,7 @@ function ActionBundleCard({
           };
         }),
       );
-  }, [safeBlocks, deadlines, previewTasks, projects]);
+  }, [safeBlocks, deadlines, previewTasks, tasks, projects]);
 
   const deleteGroups = useMemo(() => {
     return safeBlocks
@@ -2612,6 +2630,8 @@ function ActionSection({
   items: string[];
   tone: 'default' | 'success' | 'warning';
 }) {
+  const [open, setOpen] = useState(true);
+
   const toneClasses =
     tone === 'success'
       ? 'border-emerald-500/15 bg-emerald-500/8'
@@ -2621,15 +2641,22 @@ function ActionSection({
 
   return (
     <div className={cn('rounded-lg border px-2.5 py-2', toneClasses)}>
-      <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[var(--text-faint)]">{label}</p>
-      <div className="mt-1.5 space-y-1 text-[11px] text-[var(--text-primary)]">
-        {items.slice(0, 6).map(item => (
-          <p key={item}>{item}</p>
-        ))}
-        {items.length > 6 && (
-          <p className="text-[var(--text-faint)]">+{items.length - 6} more</p>
-        )}
-      </div>
+      <button
+        onClick={() => setOpen(prev => !prev)}
+        className="flex w-full items-center justify-between gap-2"
+      >
+        <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[var(--text-faint)]">
+          {label} <span className="normal-case tracking-normal opacity-60">({items.length})</span>
+        </p>
+        <ChevronDown size={11} className={cn('text-[var(--text-faint)] transition', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="mt-1.5 space-y-1 text-[11px] text-[var(--text-primary)]">
+          {items.map((item, i) => (
+            <p key={i}>{item}</p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

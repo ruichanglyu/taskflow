@@ -687,7 +687,10 @@ export function AIPanel({
     if (block.type === 'delete-tasks') {
       let skipped = 0;
       for (const row of block.rows) {
-        const matches = matchTaskCandidates(workingTasks, row.title);
+        const deletePool = row.course
+          ? filterTasksByCourse(workingTasks, projects, row.course)
+          : workingTasks;
+        const matches = matchTaskCandidates(deletePool, row.title);
         if (matches.length !== 1) {
           skipped++;
           continue;
@@ -812,7 +815,12 @@ export function AIPanel({
           continue;
         }
 
-        const taskMatches = resolvePreferredTaskCandidates(workingTasks, row.taskTitle ?? '', recentAiTasksRef.current);
+        // Narrow candidates by course first so "Study for Exam 3 [MATH 2550]" doesn't
+        // ambiguously match "Study for Exam 3 [MATH 3012]" after tag-stripping
+        const taskPool = row.course
+          ? filterTasksByCourse(workingTasks, projects, row.course)
+          : workingTasks;
+        const taskMatches = resolvePreferredTaskCandidates(taskPool, row.taskTitle ?? '', recentAiTasksRef.current);
         const deadlineMatches = matchDeadlineCandidates(deadlines, projects, row.title, row.course);
 
         if (taskMatches.length !== 1 || deadlineMatches.length !== 1) {
@@ -1946,6 +1954,18 @@ function resolveCalendarDeleteCandidates(
   }
 
   return resolvedMatches.length === 1 ? resolvedMatches : [];
+}
+
+/** Narrows a task list to only those belonging to a project whose name matches the given course */
+function filterTasksByCourse(tasks: Task[], projects: Project[], course: string): Task[] {
+  const normalizedCourse = normalizeDeleteCandidate(course);
+  const matchingProjectIds = new Set(
+    projects
+      .filter(p => normalizeDeleteCandidate(p.name) === normalizedCourse)
+      .map(p => p.id)
+  );
+  if (matchingProjectIds.size === 0) return tasks; // course not found, don't filter
+  return tasks.filter(t => t.projectId && matchingProjectIds.has(t.projectId));
 }
 
 function matchDeadlineCandidates(deadlines: Deadline[], projects: Project[], rawTitle: string, course?: string) {

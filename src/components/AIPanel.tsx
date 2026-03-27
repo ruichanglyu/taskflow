@@ -1,10 +1,38 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, Component, type ReactNode } from 'react';
 import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ImageAttachment, type ChatThread } from '../hooks/useAI';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus } from '../types';
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
+
+/* Error boundary — prevents the entire app from crashing if AI panel rendering fails */
+class AIPanelErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
+  state = { hasError: false, error: '' };
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex h-full items-center justify-center p-8 text-center">
+          <div>
+            <p className="text-sm font-medium text-[var(--text-primary)]">Something went wrong</p>
+            <p className="mt-1 text-xs text-[var(--text-faint)]">{this.state.error}</p>
+            <button
+              onClick={() => this.setState({ hasError: false, error: '' })}
+              className="mt-3 rounded-lg px-3 py-1.5 text-xs font-medium text-white"
+              style={{ backgroundColor: 'var(--accent-strong)' }}
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface PanelFrame {
   x: number;
@@ -933,24 +961,26 @@ export function AIPanel({
           <section className="min-w-0 flex-1 flex min-h-0 flex-col">
             {/* Messages */}
             <div key={currentChatId} ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-              {messages.length === 0 ? (
-                <WelcomeScreen hasKey={hasKey} />
-              ) : (
-                <div className="space-y-4">
-                  {messages.map(msg => (
-                    <MessageBubble
-                      key={msg.id}
-                      message={msg}
-                      tasks={tasks}
-                      deadlines={deadlines}
-                      projects={projects}
-                      importedBlocks={importedBlocks}
-                      onImport={handleImport}
-                      isStreaming={isStreaming && msg === messages[messages.length - 1] && msg.role === 'assistant'}
-                    />
-                  ))}
-                </div>
-              )}
+              <AIPanelErrorBoundary>
+                {messages.length === 0 ? (
+                  <WelcomeScreen hasKey={hasKey} />
+                ) : (
+                  <div className="space-y-4">
+                    {messages.map(msg => (
+                      <MessageBubble
+                        key={msg.id}
+                        message={msg}
+                        tasks={tasks}
+                        deadlines={deadlines}
+                        projects={projects}
+                        importedBlocks={importedBlocks}
+                        onImport={handleImport}
+                        isStreaming={isStreaming && msg === messages[messages.length - 1] && msg.role === 'assistant'}
+                      />
+                    ))}
+                  </div>
+                )}
+              </AIPanelErrorBoundary>
             </div>
 
             {/* Error */}
@@ -1223,12 +1253,18 @@ function MessageBubble({
     );
   }
 
-  // Assistant message: parse import blocks
+  // Assistant message: parse import blocks safely
   const content = message.content;
-  const importBlocks = parseImportBlocks(content);
-
-  // Split content around import blocks for rendering
-  const segments = renderContentWithBlocks(content, importBlocks);
+  let importBlocks: ImportBlock[] = [];
+  let segments: Segment[] = [];
+  try {
+    importBlocks = parseImportBlocks(content);
+    segments = renderContentWithBlocks(content, importBlocks);
+  } catch {
+    // If parsing crashes, just show raw text
+    segments = [{ type: 'text', content: content.trim() }];
+    importBlocks = [];
+  }
 
   return (
     <div className="flex justify-start">
@@ -1253,7 +1289,7 @@ function MessageBubble({
 
             return null;
           })}
-          {importBlocks.length > 0 && (
+          {!isStreaming && importBlocks.length > 0 && (
             <ActionBundleCard
               messageId={message.id}
               blocks={importBlocks}

@@ -700,95 +700,65 @@ export function AIPanel({
               maxWidth: chatSidebarCollapsed ? 56 : chatSidebarWidth,
             }}
           >
-            <div className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] px-3 py-3">
+            {/* New session button */}
+            <div className="border-b border-[var(--border-soft)] px-2 py-2">
               {chatSidebarCollapsed ? (
                 <button
                   onClick={toggleChatSidebar}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-soft)] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                  className="flex h-8 w-full items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
                   title="Expand chats"
                 >
                   <ChevronDown size={14} className="-rotate-90" />
                 </button>
               ) : (
-                <>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--text-faint)]">Chats</p>
-                    <p className="text-xs text-[var(--text-muted)]">{threads.length} conversation{threads.length === 1 ? '' : 's'}</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={handleCreateChat}
-                      className="flex items-center gap-1.5 rounded-lg border border-[var(--border-soft)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                    >
-                      <Plus size={12} />
-                      New
-                    </button>
-                    <button
-                      onClick={toggleChatSidebar}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border-soft)] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                      title="Collapse chats"
-                    >
-                      <ChevronDown size={14} className="rotate-90" />
-                    </button>
-                  </div>
-                </>
+                <button
+                  onClick={handleCreateChat}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
+                >
+                  <Plus size={14} />
+                  <span>New session</span>
+                </button>
               )}
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            {/* Chat list */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
               {chatSidebarCollapsed ? (
-                <div className="space-y-2">
-                  <button
-                    onClick={handleCreateChat}
-                    className="flex h-10 w-full items-center justify-center rounded-2xl border border-dashed border-[var(--border-soft)] text-[var(--text-secondary)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                    title="New chat"
-                  >
-                    <Plus size={14} />
-                  </button>
-                  <div className="space-y-1">
-                    {threads.map(chat => {
-                      const active = chat.id === currentChatId;
-                      return (
-                        <button
-                          key={chat.id}
-                          onClick={() => {
-                            stopStreaming();
-                            selectChat(chat.id);
-                            setPanelError(null);
-                            cancelRenameChat();
-                            setPendingDeleteChat(null);
-                            requestAnimationFrame(() => inputRef.current?.focus());
-                          }}
-                          className={cn(
-                            'flex h-10 w-full items-center justify-center rounded-2xl border text-xs font-semibold transition',
-                            active
-                              ? 'border-[var(--accent)]/35 bg-[var(--accent-soft)]/30 text-[var(--accent)]'
-                              : 'border-transparent bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--border-soft)]',
-                          )}
-                          title={chat.title}
-                        >
-                          {chat.title.slice(0, 1).toUpperCase() || '•'}
-                        </button>
-                      );
-                    })}
-                  </div>
+                <div className="space-y-0.5">
+                  {threads.map(chat => {
+                    const active = chat.id === currentChatId;
+                    return (
+                      <button
+                        key={chat.id}
+                        onClick={() => {
+                          stopStreaming();
+                          selectChat(chat.id);
+                          setPanelError(null);
+                          cancelRenameChat();
+                          setPendingDeleteChat(null);
+                          requestAnimationFrame(() => inputRef.current?.focus());
+                        }}
+                        className={cn(
+                          'flex h-8 w-full items-center justify-center rounded-lg text-xs font-medium transition',
+                          active
+                            ? 'bg-[var(--accent-soft)]/30 text-[var(--accent)]'
+                            : 'text-[var(--text-secondary)] hover:bg-[var(--surface-muted)]',
+                        )}
+                        title={chat.title}
+                      >
+                        {chat.title.slice(0, 1).toUpperCase() || '•'}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-0.5">
                   {threads.map(chat => {
                     const active = chat.id === currentChatId;
                     const isEditing = editingChatId === chat.id;
                     return (
-                      <div
-                        key={chat.id}
-                        className={cn(
-                          'group rounded-2xl border transition',
-                          active
-                            ? 'border-[var(--accent)]/35 bg-[var(--accent-soft)]/30'
-                            : 'border-transparent hover:border-[var(--border-soft)] hover:bg-[var(--surface)]',
-                        )}
-                      >
+                      <div key={chat.id}>
                         {isEditing ? (
-                          <div className="space-y-2 p-3">
+                          <div className="flex items-center gap-1 px-1 py-1">
                             <input
                               value={editingChatTitle}
                               onChange={e => setEditingChatTitle(e.target.value)}
@@ -797,23 +767,9 @@ export function AIPanel({
                                 if (e.key === 'Escape') cancelRenameChat();
                               }}
                               autoFocus
-                              className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                              className="min-w-0 flex-1 rounded-md border border-[var(--border-soft)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
                             />
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={cancelRenameChat}
-                                className="rounded-lg border border-[var(--border-soft)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)]"
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                onClick={commitRenameChat}
-                                className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--accent-contrast)]"
-                                style={{ backgroundColor: 'var(--accent-strong)' }}
-                              >
-                                Save
-                              </button>
-                            </div>
+                            <button onClick={commitRenameChat} className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--accent)]">OK</button>
                           </div>
                         ) : (
                           <div
@@ -838,31 +794,28 @@ export function AIPanel({
                                 requestAnimationFrame(() => inputRef.current?.focus());
                               }
                             }}
-                            className="flex w-full items-start justify-between gap-3 px-3 py-3 text-left"
+                            className={cn(
+                              'group flex w-full cursor-pointer items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left transition',
+                              active
+                                ? 'bg-[var(--accent-soft)]/30 text-[var(--accent)]'
+                                : 'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]',
+                            )}
                           >
-                            <div className="min-w-0">
-                              <p className="line-clamp-2 text-sm font-medium leading-snug text-[var(--text-primary)]">{chat.title}</p>
-                            </div>
-                            <div className="flex items-center gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
+                            <p className="truncate text-xs">{chat.title}</p>
+                            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
                               <button
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  startRenameChat(chat);
-                                }}
-                                className="rounded-lg p-1 text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
-                                title="Rename chat"
+                                onClick={e => { e.stopPropagation(); startRenameChat(chat); }}
+                                className="rounded p-0.5 text-[var(--text-faint)] hover:text-[var(--text-primary)]"
+                                title="Rename"
                               >
-                                <Pencil size={12} />
+                                <Pencil size={10} />
                               </button>
                               <button
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  setPendingDeleteChat(chat);
-                                }}
-                                className="rounded-lg p-1 text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
-                                title="Delete chat"
+                                onClick={e => { e.stopPropagation(); setPendingDeleteChat(chat); }}
+                                className="rounded p-0.5 text-[var(--text-faint)] hover:text-rose-400"
+                                title="Delete"
                               >
-                                <Trash2 size={12} />
+                                <Trash2 size={10} />
                               </button>
                             </div>
                           </div>
@@ -885,16 +838,6 @@ export function AIPanel({
 
           {/* Chat area */}
           <section className="min-w-0 flex-1 flex min-h-0 flex-col">
-            <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-4 py-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--text-faint)]">Current chat</p>
-                <p className="text-sm font-medium text-[var(--text-primary)]">{currentChat.title}</p>
-              </div>
-              <div className="flex items-center gap-2 text-[10px] text-[var(--text-faint)]">
-                <span>{messages.length} message{messages.length === 1 ? '' : 's'}</span>
-              </div>
-            </div>
-
             {/* Messages */}
             <div key={currentChatId} ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               {messages.length === 0 ? (

@@ -227,6 +227,7 @@ export function AIPanel({
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [importedBlocks, setImportedBlocks] = useState<Set<string>>(new Set());
   const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([]);
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingChatTitle, setEditingChatTitle] = useState('');
   const [pendingDeleteChat, setPendingDeleteChat] = useState<ChatThread | null>(null);
@@ -245,11 +246,14 @@ export function AIPanel({
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentMenuRef = useRef<HTMLDivElement>(null);
   const recentAiTasksRef = useRef<Task[]>([]);
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const dictationBaseInputRef = useRef('');
+  const composerDragDepthRef = useRef(0);
   const [isDictating, setIsDictating] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
+  const [isComposerDragActive, setIsComposerDragActive] = useState(false);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = messagesScrollRef.current;
@@ -274,6 +278,24 @@ export function AIPanel({
       setTimeout(() => inputRef.current?.focus(), 300);
     }
   }, [open, hasKey]);
+
+  useEffect(() => {
+    if (open) return;
+    composerDragDepthRef.current = 0;
+    setIsComposerDragActive(false);
+  }, [open]);
+
+  useEffect(() => {
+    if (!showAttachmentMenu) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (attachmentMenuRef.current?.contains(event.target as Node)) return;
+      setShowAttachmentMenu(false);
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    return () => window.removeEventListener('mousedown', handlePointerDown);
+  }, [showAttachmentMenu]);
 
   useEffect(() => {
     const textarea = inputRef.current;
@@ -395,6 +417,7 @@ export function AIPanel({
     if ((!input.trim() && !pendingImages.length) || isStreaming) return;
     speechRecognitionRef.current?.stop();
     setIsDictating(false);
+    setShowAttachmentMenu(false);
     const msg = input.trim() || (pendingImages.length ? 'What do you see in this image?' : '');
     const images = pendingImages.length ? [...pendingImages] : undefined;
     setPanelError(null);
@@ -414,31 +437,80 @@ export function AIPanel({
     }, images);
   }, [input, pendingImages, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises, calendarEvents, calendarCalendars, selectedCalendarId]);
 
+  const appendImageFile = useCallback((file: File) => {
+    if (!file.type.startsWith('image/')) return false;
+
+    // Limit to 4MB per image (base64 will be ~33% larger)
+    if (file.size > 4 * 1024 * 1024) {
+      setPanelError('Image too large (max 4MB). Try a smaller image or screenshot.');
+      return true;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const [header, base64] = dataUrl.split(',');
+      const mimeType = header.match(/data:(.*?);/)?.[1] ?? 'image/png';
+      setPendingImages(prev => [...prev, { base64, mimeType, preview: dataUrl }]);
+    };
+    reader.readAsDataURL(file);
+    return true;
+  }, []);
+
+  const isFileDragEvent = (event: React.DragEvent) =>
+    Array.from(event.dataTransfer.types).includes('Files') ||
+    Array.from(event.dataTransfer.items ?? []).some(item => item.kind === 'file');
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
-    Array.from(files).forEach(file => {
-      if (!file.type.startsWith('image/')) return;
-      // Limit to 4MB per image (base64 will be ~33% larger)
-      if (file.size > 4 * 1024 * 1024) {
-        setPanelError('Image too large (max 4MB). Try a smaller image or screenshot.');
-        return;
-      }
+    setShowAttachmentMenu(false);
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        // Extract base64 data and mime type
-        const [header, base64] = dataUrl.split(',');
-        const mimeType = header.match(/data:(.*?);/)?.[1] ?? 'image/png';
-        setPendingImages(prev => [...prev, { base64, mimeType, preview: dataUrl }]);
-      };
-      reader.readAsDataURL(file);
-    });
+    Array.from(files).forEach(appendImageFile);
 
     // Reset file input so same file can be selected again
     e.target.value = '';
+  };
+
+  const handleComposerDragEnter = (e: React.DragEvent) => {
+    if (!isFileDragEvent(e)) return;
+    e.preventDefault();
+    composerDragDepthRef.current += 1;
+    setIsComposerDragActive(true);
+  };
+
+  const handleComposerDragOver = (e: React.DragEvent) => {
+    if (!isFileDragEvent(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (!isComposerDragActive) setIsComposerDragActive(true);
+  };
+
+  const handleComposerDragLeave = (e: React.DragEvent) => {
+    if (!isFileDragEvent(e)) return;
+    e.preventDefault();
+    composerDragDepthRef.current = Math.max(0, composerDragDepthRef.current - 1);
+    if (composerDragDepthRef.current === 0) {
+      setIsComposerDragActive(false);
+    }
+  };
+
+  const handleComposerDrop = (e: React.DragEvent) => {
+    if (!isFileDragEvent(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    composerDragDepthRef.current = 0;
+    setIsComposerDragActive(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    if (imageFiles.length === 0) {
+      setPanelError('Only image files can be attached to the AI composer.');
+      return;
+    }
+
+    imageFiles.forEach(appendImageFile);
   };
 
   const removePendingImage = (index: number) => {
@@ -516,6 +588,11 @@ export function AIPanel({
     speechRecognitionRef.current = recognition;
     recognition.start();
   }, [input, isDictating, isStreaming, speechSupported]);
+
+  const handleOpenAttachmentPicker = useCallback(() => {
+    setShowAttachmentMenu(false);
+    fileInputRef.current?.click();
+  }, []);
 
   const handleSaveKey = () => {
     if (apiKey.trim()) {
@@ -1257,7 +1334,24 @@ export function AIPanel({
                   ))}
                 </div>
               )}
-              <div className="flex items-end gap-2">
+              <div
+                className={`relative flex items-end gap-2 rounded-2xl border px-3 py-3 transition-colors ${
+                  isComposerDragActive
+                    ? 'border-[var(--accent)]/55 bg-[var(--accent)]/8 pt-8 shadow-[0_0_0_1px_rgba(99,102,241,0.12)]'
+                    : 'border-[var(--border-soft)] bg-[var(--surface)]'
+                }`}
+                onDragEnter={handleComposerDragEnter}
+                onDragOver={handleComposerDragOver}
+                onDragLeave={handleComposerDragLeave}
+                onDrop={handleComposerDrop}
+              >
+                {isComposerDragActive && (
+                  <div className="pointer-events-none absolute inset-x-3 top-2 flex justify-center">
+                    <div className="rounded-full border border-[var(--accent)]/25 bg-[var(--accent)]/12 px-3 py-1 text-[10px] font-medium text-[var(--accent)]">
+                      Drop images to attach
+                    </div>
+                  </div>
+                )}
                 {/* Hidden file input */}
                 <input
                   ref={fileInputRef}
@@ -1267,34 +1361,29 @@ export function AIPanel({
                   onChange={handleImageSelect}
                   className="hidden"
                 />
-                {/* Image upload button */}
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={!hasKey || isStreaming}
-                  className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl border border-[var(--border-soft)] text-[var(--text-faint)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
-                  title="Attach image"
-                >
-                  <ImagePlus size={16} />
-                </button>
-                <button
-                  onClick={handleToggleDictation}
-                  disabled={!hasKey || isStreaming || !speechSupported}
-                  className={cn(
-                    'flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl border transition disabled:opacity-40',
-                    isDictating
-                      ? 'border-rose-500/40 bg-rose-500/10 text-rose-400'
-                      : 'border-[var(--border-soft)] text-[var(--text-faint)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
+                <div ref={attachmentMenuRef} className="relative shrink-0">
+                  <button
+                    onClick={() => setShowAttachmentMenu(prev => !prev)}
+                    disabled={!hasKey || isStreaming}
+                    className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-faint)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
+                    title="Add attachment"
+                    aria-haspopup="menu"
+                    aria-expanded={showAttachmentMenu}
+                  >
+                    <Plus size={16} />
+                  </button>
+                  {showAttachmentMenu && (
+                    <div className="absolute bottom-full left-0 z-20 mb-2 min-w-[170px] rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-1.5 shadow-2xl">
+                      <button
+                        onClick={handleOpenAttachmentPicker}
+                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
+                      >
+                        <ImagePlus size={15} className="text-[var(--text-muted)]" />
+                        <span>Upload image</span>
+                      </button>
+                    </div>
                   )}
-                  title={
-                    !speechSupported
-                      ? 'Dictation is not supported in this browser'
-                      : isDictating
-                        ? 'Stop dictation'
-                        : 'Start dictation'
-                  }
-                >
-                  {isDictating ? <MicOff size={16} /> : <Mic size={16} />}
-                </button>
+                </div>
                 <textarea
                   ref={inputRef}
                   value={input}
@@ -1306,23 +1395,54 @@ export function AIPanel({
                   className="max-h-32 min-h-[38px] flex-1 resize-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-50"
                   style={{ height: 'auto' }}
                 />
-                {isStreaming ? (
-                  <button
-                    onClick={stopStreaming}
-                    className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl bg-rose-500 text-white transition hover:bg-rose-600"
-                  >
-                    <Square size={14} />
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSend}
-                    disabled={(!input.trim() && !pendingImages.length) || !hasKey}
-                    className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl text-[var(--accent-contrast)] transition disabled:opacity-40"
-                    style={{ backgroundColor: 'var(--accent-strong)' }}
-                  >
-                    <Send size={14} />
-                  </button>
-                )}
+                <div className="flex shrink-0 items-center gap-2">
+                  {isDictating ? (
+                    <button
+                      onClick={handleToggleDictation}
+                      disabled={!hasKey || isStreaming}
+                      className="flex h-[38px] items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 text-sm font-medium text-rose-400 transition hover:bg-rose-500/15 disabled:opacity-40"
+                      title="Stop dictation"
+                    >
+                      <span className="h-2.5 w-2.5 rounded-full bg-current animate-pulse" />
+                      <MicOff size={14} />
+                      <span>Stop</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleToggleDictation}
+                      disabled={!hasKey || isStreaming || !speechSupported}
+                      className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-faint)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
+                      title={
+                        !speechSupported
+                          ? 'Dictation is not supported in this browser'
+                          : isStreaming
+                            ? 'Wait for the current response to finish'
+                            : 'Start dictation'
+                      }
+                    >
+                      <Mic size={16} />
+                    </button>
+                  )}
+                  {isStreaming ? (
+                    <button
+                      onClick={stopStreaming}
+                      className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-rose-500 text-white transition hover:bg-rose-600"
+                      title="Stop response"
+                    >
+                      <Square size={14} />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSend}
+                      disabled={(!input.trim() && !pendingImages.length) || !hasKey}
+                      className="flex h-[38px] w-[38px] items-center justify-center rounded-full text-[var(--accent-contrast)] transition disabled:opacity-40"
+                      style={{ backgroundColor: 'var(--accent-strong)' }}
+                      title="Send message"
+                    >
+                      <Send size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </section>

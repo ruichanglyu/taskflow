@@ -1388,14 +1388,13 @@ function ActionBundleCard({
   const [actionError, setActionError] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, number>>({});
 
+  const isValidImportBlock = useCallback((block: unknown): block is ImportBlock => {
+    return !!block && typeof block === 'object' && typeof (block as ImportBlock).type === 'string' && Array.isArray((block as ImportBlock).rows);
+  }, []);
+
   const safeBlocks = useMemo(
-    () => blocks.filter((block): block is ImportBlock =>
-      !!block &&
-      typeof block === 'object' &&
-      typeof block.type === 'string' &&
-      Array.isArray(block.rows),
-    ),
-    [blocks],
+    () => (Array.isArray(blocks) ? blocks : []).filter(isValidImportBlock),
+    [blocks, isValidImportBlock],
   );
 
   const entries = useMemo(() => (
@@ -1412,7 +1411,7 @@ function ActionBundleCard({
   ), [safeBlocks, importedBlocks, messageId]);
 
   const pendingEntries = entries.filter(entry => !entry.imported);
-  const hasDeletes = entries.some(entry => entry.block.type === 'delete-tasks');
+  const hasDeletes = entries.some(entry => entry.block?.type === 'delete-tasks');
   const allDone = entries.every(entry => entry.imported);
 
   const summary = useMemo(() => {
@@ -1685,6 +1684,10 @@ function ImportCard({
   const [expanded, setExpanded] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  if (!block || typeof block !== 'object' || typeof block.type !== 'string' || !Array.isArray(block.rows)) {
+    return null;
+  }
 
   const handleConfirmImport = async () => {
     setImporting(true);

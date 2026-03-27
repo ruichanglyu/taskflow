@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, Component, type Reac
 import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen, Mic, MicOff } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow, type ImageAttachment, type ChatThread } from '../hooks/useAI';
-import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus } from '../types';
+import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus, TaskStatus } from '../types';
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
 import type { GoogleCalendarEvent, GoogleCalendarListItem, NewGoogleCalendarEvent } from '../lib/googleCalendar';
@@ -194,7 +194,8 @@ interface AIPanelProps {
   calendarCalendars: GoogleCalendarListItem[];
   selectedCalendarId: string;
   // Callbacks for imports
-  onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence) => Promise<string | null>;
+  onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence, status?: TaskStatus) => Promise<string | null>;
+  onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence; status?: TaskStatus }) => Promise<boolean>;
   onAddDeadline: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus) => Promise<boolean>;
   onAddProject: (name: string, description: string) => Promise<string | null>;
   onAddSubtask: (taskId: string, title: string) => Promise<boolean>;
@@ -209,7 +210,7 @@ export function AIPanel({
   open, onClose, userId,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
   calendarEvents, calendarCalendars, selectedCalendarId,
-  onAddTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
+  onAddTask, onUpdateTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
   onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
 }: AIPanelProps) {
   const {
@@ -712,6 +713,39 @@ export function AIPanel({
             : `Skipped ${skipped} AI delete entries because they were ambiguous, missing, or failed to delete.`,
         );
       }
+    } else if (block.type === 'update-tasks') {
+      let skipped = 0;
+      for (const row of block.rows) {
+        const updateCourse = row.course ?? extractCourseFromTitle(row.title);
+        const updatePool = updateCourse
+          ? filterTasksByCourse(workingTasks, projects, updateCourse)
+          : workingTasks;
+        const matches = matchTaskCandidates(updatePool, row.title);
+        if (matches.length !== 1) {
+          skipped++;
+          continue;
+        }
+        const updates: Parameters<typeof onUpdateTask>[1] = {};
+        if (row.dueDate !== undefined) updates.dueDate = row.dueDate;
+        if (row.priority && ['low', 'medium', 'high'].includes(row.priority)) updates.priority = row.priority as Priority;
+        if (row.status && ['todo', 'in-progress', 'done'].includes(row.status)) updates.status = row.status as TaskStatus;
+        if (row.description !== undefined) updates.description = row.description;
+        if (row.recurrence && ['none', 'daily', 'weekly', 'monthly'].includes(row.recurrence)) updates.recurrence = row.recurrence as Recurrence;
+        if (row.course) {
+          const projectId = await resolveProject(row.course);
+          updates.projectId = projectId;
+        }
+        const ok = await onUpdateTask(matches[0].id, updates);
+        if (ok) imported++;
+        else skipped++;
+      }
+      if (skipped > 0) {
+        setPanelError(
+          skipped === 1
+            ? 'Skipped 1 update because the task was ambiguous, missing, or failed to update.'
+            : `Skipped ${skipped} updates because tasks were ambiguous, missing, or failed to update.`,
+        );
+      }
     } else if (block.type === 'calendar-create') {
       let created = 0;
       let skipped = 0;
@@ -868,6 +902,7 @@ export function AIPanel({
         const projectId = await resolveProject(row.course);
         const priority = (['low', 'medium', 'high'].includes(row.priority ?? '') ? row.priority : 'medium') as Priority;
         const recurrence = (['none', 'daily', 'weekly', 'monthly'].includes(row.recurrence ?? '') ? row.recurrence : 'none') as Recurrence;
+        const status = (['todo', 'in-progress', 'done'].includes(row.status ?? '') ? row.status : 'todo') as TaskStatus;
         const result = await onAddTask(
           row.title,
           row.description ?? '',
@@ -875,6 +910,7 @@ export function AIPanel({
           projectId,
           row.dueDate ?? null,
           recurrence,
+          status,
         );
         if (result) {
           imported++;
@@ -884,7 +920,7 @@ export function AIPanel({
               id: result,
               title: row.title,
               description: row.description ?? '',
-              status: 'todo',
+              status,
               priority,
               projectId,
               createdAt: new Date().toISOString(),

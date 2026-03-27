@@ -25,7 +25,7 @@ export interface ChatThread {
 }
 
 export interface ImportBlock {
-  type: 'tasks' | 'deadlines' | 'subtasks' | 'delete-tasks' | 'deadline-links' | 'calendar-create' | 'calendar-update' | 'calendar-delete';
+  type: 'tasks' | 'deadlines' | 'subtasks' | 'delete-tasks' | 'update-tasks' | 'deadline-links' | 'calendar-create' | 'calendar-update' | 'calendar-delete';
   raw: string;
   rows: ParsedImportRow[];
   imported?: boolean;
@@ -243,6 +243,13 @@ Code Trace DaleDB
 \`\`\`
 The parent task title after "subtasks:" MUST exactly match an existing task title. Each line is just a subtask title (no pipes/fields needed). PREFER subtasks over separate tasks when the user wants to break down an existing task into smaller pieces.
 
+To update existing tasks (add/change due date, priority, status, description), output a fenced code block with language "import:update-tasks":
+\`\`\`import:update-tasks
+Exact Task Title | due: 2026-03-29 | priority: high | status: in-progress | course: CS 1332
+Another Task Title | due: 2026-04-10 | status: done
+\`\`\`
+Each line must be the EXACT title of an existing task. Only include the fields that should change. Valid status values: todo, in-progress, done. Use this instead of creating a new task when the user wants to modify an existing one (e.g. "put a date on it", "mark it as done", "change priority").
+
 To delete tasks, output a fenced code block with language "import:delete-tasks":
 \`\`\`import:delete-tasks
 Exact Task Title 1
@@ -325,7 +332,7 @@ Be concise, helpful, and friendly. Use the user's actual data to answer question
 /** Parse import blocks from AI response */
 export function parseImportBlocks(content: string): ImportBlock[] {
   const blocks: ImportBlock[] = [];
-  const regex = /```import:(tasks|deadlines|delete-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|subtasks:([^\n]*))\n([\s\S]*?)```/g;
+  const regex = /```import:(tasks|deadlines|delete-tasks|update-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|subtasks:([^\n]*))\n([\s\S]*?)```/g;
   let match;
 
   while ((match = regex.exec(content)) !== null) {

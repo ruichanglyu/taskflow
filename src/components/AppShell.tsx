@@ -510,6 +510,7 @@ export function AppShell({ user }: AppShellProps) {
         calendarCalendars={calendar.calendars}
         selectedCalendarId={calendar.selectedCalendarId}
         onAddTask={store.addTask}
+        onUpdateTask={store.updateTask}
         onAddDeadline={deadlineStore.addDeadline}
         onAddProject={store.addProject}
         onAddSubtask={store.addSubtask}

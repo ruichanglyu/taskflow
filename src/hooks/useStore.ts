@@ -285,7 +285,7 @@ export function useStore(userId: string) {
     void loadData();
   }, [loadData]);
 
-  const addTask = useCallback(async (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence = 'none'): Promise<string | null> => {
+  const addTask = useCallback(async (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence = 'none', status: TaskStatus = 'todo'): Promise<string | null> => {
     if (!supabase) return null;
 
     setError(null);
@@ -297,7 +297,7 @@ export function useStore(userId: string) {
           user_id: userId,
           title,
           description,
-          status: 'todo',
+          status,
           priority,
           project_id: projectId,
           due_date: dueDate,
@@ -381,7 +381,7 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, projects, tasks, userId, spawnNextRecurrence]);
 
-  const updateTask = useCallback(async (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence }): Promise<boolean> => {
+  const updateTask = useCallback(async (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence; status?: TaskStatus }): Promise<boolean> => {
     if (!supabase) return false;
 
     setError(null);
@@ -394,6 +394,7 @@ export function useStore(userId: string) {
       if (updates.projectId !== undefined) dbUpdates.project_id = updates.projectId;
       if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
       if (updates.recurrence !== undefined) dbUpdates.recurrence = updates.recurrence;
+      if (updates.status !== undefined) dbUpdates.status = updates.status;
 
       const { error: updateError } = await supabase
         .from('tasks')

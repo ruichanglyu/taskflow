@@ -21,12 +21,13 @@ interface AIPanelProps {
   onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence) => Promise<string | null>;
   onAddDeadline: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus) => Promise<boolean>;
   onAddProject: (name: string, description: string) => Promise<string | null>;
+  onAddSubtask: (taskId: string, title: string) => Promise<boolean>;
 }
 
 export function AIPanel({
   open, onClose,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
-  onAddTask, onAddDeadline, onAddProject,
+  onAddTask, onAddDeadline, onAddProject, onAddSubtask,
 }: AIPanelProps) {
   const { messages, isStreaming, error, sendMessage, stopStreaming, clearChat } = useAI();
   const [input, setInput] = useState('');
@@ -134,7 +135,23 @@ export function AIPanel({
       return newId;
     };
 
-    if (block.type === 'tasks') {
+    if (block.type === 'subtasks') {
+      // Find the parent task by title (case-insensitive)
+      const parentTitle = block.parentTaskTitle?.toLowerCase() ?? '';
+      const parentTask = tasks.find(t => t.title.toLowerCase() === parentTitle);
+      if (!parentTask) {
+        // If parent not found, fall back to creating as top-level tasks
+        for (const row of block.rows) {
+          const result = await onAddTask(row.title, '', 'medium', null, null, 'none');
+          if (result) imported++;
+        }
+      } else {
+        for (const row of block.rows) {
+          const ok = await onAddSubtask(parentTask.id, row.title);
+          if (ok) imported++;
+        }
+      }
+    } else if (block.type === 'tasks') {
       for (const row of block.rows) {
         const projectId = await resolveProject(row.course);
         const priority = (['low', 'medium', 'high'].includes(row.priority ?? '') ? row.priority : 'medium') as Priority;
@@ -512,7 +529,7 @@ function renderContentWithBlocks(content: string, importBlocks: ImportBlock[]): 
   const segments: Segment[] = [];
 
   // Find all fenced code blocks
-  const blockRegex = /```(import:(?:tasks|deadlines)|csv)\n([\s\S]*?)```/g;
+  const blockRegex = /```(import:(?:tasks|deadlines|subtasks:[^\n]*)|csv)\n([\s\S]*?)```/g;
   let match;
   let lastIndex = 0;
 
@@ -576,7 +593,7 @@ function ImportCard({
     setImporting(false);
   };
 
-  const label = block.type === 'tasks' ? 'tasks' : 'deadlines';
+  const label = block.type === 'subtasks' ? 'subtasks' : block.type === 'tasks' ? 'tasks' : 'deadlines';
   const done = isImported || result !== null;
 
   return (

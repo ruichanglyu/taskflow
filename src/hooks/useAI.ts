@@ -16,10 +16,11 @@ export interface ChatMessage {
 }
 
 export interface ImportBlock {
-  type: 'tasks' | 'deadlines';
+  type: 'tasks' | 'deadlines' | 'subtasks';
   raw: string;
   rows: ParsedImportRow[];
   imported?: boolean;
+  parentTaskTitle?: string;  // for subtasks — the parent task to attach to
 }
 
 export interface ParsedImportRow {
@@ -139,6 +140,14 @@ Deadline title | course: CourseName | date: YYYY-MM-DD | time: 11:59 PM | type: 
 Another deadline | course: CourseName | date: YYYY-MM-DD | type: exam
 \`\`\`
 
+To create subtasks under an existing task, output a fenced code block with language "import:subtasks:Parent Task Title":
+\`\`\`import:subtasks:Practice CS 1332 Demo 2
+Review HashMap implementation
+Review AVL Tree logic
+Code Trace DaleDB
+\`\`\`
+The parent task title after "subtasks:" MUST exactly match an existing task title. Each line is just a subtask title (no pipes/fields needed). PREFER subtasks over separate tasks when the user wants to break down an existing task into smaller pieces.
+
 FIELD RULES:
 - Tasks: title (required), course, due (YYYY-MM-DD), priority (low/medium/high), description, status (todo/in-progress/done), recurrence (none/daily/weekly/monthly)
 - Deadlines: title (required), course, date (YYYY-MM-DD required), time (HH:MM AM/PM), type (assignment/exam/quiz/lab/project/other), notes, status (not-started/in-progress/done/missed)
@@ -158,12 +167,15 @@ Be concise, helpful, and friendly. Use the user's actual data to answer question
 /** Parse import blocks from AI response */
 export function parseImportBlocks(content: string): ImportBlock[] {
   const blocks: ImportBlock[] = [];
-  const regex = /```import:(tasks|deadlines)\n([\s\S]*?)```/g;
+  const regex = /```import:(tasks|deadlines|subtasks:([^\n]*))\n([\s\S]*?)```/g;
   let match;
 
   while ((match = regex.exec(content)) !== null) {
-    const type = match[1] as 'tasks' | 'deadlines';
-    const raw = match[2].trim();
+    const rawType = match[1];
+    const isSubtasks = rawType.startsWith('subtasks:');
+    const type: ImportBlock['type'] = isSubtasks ? 'subtasks' : rawType as 'tasks' | 'deadlines';
+    const parentTaskTitle = isSubtasks ? (match[2]?.trim() || '') : undefined;
+    const raw = match[3].trim();
     const lines = raw.split('\n').filter(l => l.trim());
     const rows: ParsedImportRow[] = [];
 
@@ -198,7 +210,7 @@ export function parseImportBlocks(content: string): ImportBlock[] {
       rows.push(row);
     }
 
-    blocks.push({ type, raw, rows });
+    blocks.push({ type, raw, rows, ...(parentTaskTitle !== undefined ? { parentTaskTitle } : {}) });
   }
 
   return blocks;

@@ -2188,7 +2188,7 @@ function renderContentWithBlocks(content: string, importBlocks: ImportBlock[]): 
   const segments: Segment[] = [];
 
   // Find all fenced code blocks
-  const blockRegex = /```(import:(?:tasks|deadlines|delete-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|subtasks:[^\n]*)|csv)\n([\s\S]*?)```/g;
+  const blockRegex = /```(import:(?:tasks|deadlines|delete-tasks|update-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|subtasks:[^\n]*)|csv)\n([\s\S]*?)```/g;
   let match;
   let lastIndex = 0;
 

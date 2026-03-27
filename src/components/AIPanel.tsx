@@ -515,7 +515,7 @@ export function AIPanel({
       let skipped = 0;
 
       for (const row of block.rows) {
-        const matches = matchCalendarCandidates(calendarEvents, calendarCalendars, row);
+        const matches = resolvePreferredCalendarCandidates(calendarEvents, calendarCalendars, row);
         const payload = buildCalendarEventPayload(row, 'update');
 
         if (matches.length !== 1 || !payload) {
@@ -1336,8 +1336,28 @@ function addOneDay(dateKey: string) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function resolveCalendarDateInput(value?: string) {
+  if (!value) return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+
+  const absoluteMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (absoluteMatch) return trimmed;
+
+  const today = new Date();
+  const normalized = trimmed.toLowerCase();
+  if (normalized === 'today') {
+    return formatDateKey(today);
+  }
+  if (normalized === 'tomorrow') {
+    return formatDateKey(addDays(today, 1));
+  }
+
+  return trimmed;
+}
+
 function buildCalendarEventPayload(row: ImportBlock['rows'][number], mode: 'create' | 'update') {
-  const date = mode === 'update' ? (row.newDate || row.dueDate || '') : (row.dueDate || '');
+  const date = resolveCalendarDateInput(mode === 'update' ? (row.newDate || row.dueDate || '') : (row.dueDate || ''));
   const startTime = mode === 'update' ? (row.newStartTime || row.startTime || '') : (row.startTime || '');
   const endTime = mode === 'update' ? (row.newEndTime || row.endTime || '') : (row.endTime || '');
   const isAllDay = parseFlag(mode === 'update' ? row.newAllDay || row.allDay : row.allDay);
@@ -1372,6 +1392,27 @@ function buildCalendarEventPayload(row: ImportBlock['rows'][number], mode: 'crea
   } satisfies NewGoogleCalendarEvent;
 }
 
+function matchCalendarUpdateCandidates(
+  events: GoogleCalendarEvent[],
+  calendars: GoogleCalendarListItem[],
+  row: ParsedImportRow,
+) {
+  const exactMatches = matchCalendarCandidates(events, calendars, row);
+  if (exactMatches.length === 1) return exactMatches;
+
+  const identityOnlyMatches = matchCalendarCandidates(events, calendars, {
+    ...row,
+    dueDate: undefined,
+    startTime: undefined,
+  });
+
+  if (identityOnlyMatches.length === 1) {
+    return identityOnlyMatches;
+  }
+
+  return exactMatches;
+}
+
 function matchTaskCandidates(tasks: Array<{ title: string }>, rawTitle: string) {
   const normalizedTitle = normalizeDeleteCandidate(rawTitle);
   const strippedTitle = normalizeDeleteCandidate(stripTrailingCourseTag(rawTitle));
@@ -1399,16 +1440,17 @@ function resolvePreferredTaskCandidates(tasks: Task[], rawTitle: string, recentT
   return matches.filter(task => task.id === recentMatch.id);
 }
 
-function matchCalendarCandidates(
+function matchCalendarCandidatesWithOptions(
   events: GoogleCalendarEvent[],
   calendars: GoogleCalendarListItem[],
   row: ParsedImportRow,
+  options?: { useDate?: boolean; useStart?: boolean },
 ) {
   const normalizedTitle = normalizeDeleteCandidate(row.title);
   const strippedTitle = normalizeDeleteCandidate(stripTrailingCourseTag(row.title));
   const normalizedCalendar = row.calendar ? normalizeCalendarCandidate(row.calendar) : '';
-  const normalizedDate = row.dueDate?.trim() ?? '';
-  const normalizedStart = toTwentyFourHourKey(row.startTime);
+  const normalizedDate = options?.useDate === false ? '' : row.dueDate?.trim() ?? '';
+  const normalizedStart = options?.useStart === false ? '' : toTwentyFourHourKey(row.startTime);
 
   return events.filter(event => {
     const eventTitle = normalizeDeleteCandidate(event.summary || '');
@@ -1439,6 +1481,41 @@ function matchCalendarCandidates(
 
     return true;
   });
+}
+
+function matchCalendarCandidates(
+  events: GoogleCalendarEvent[],
+  calendars: GoogleCalendarListItem[],
+  row: ParsedImportRow,
+) {
+  return matchCalendarCandidatesWithOptions(events, calendars, row, { useDate: true, useStart: true });
+}
+
+function resolvePreferredCalendarCandidates(
+  events: GoogleCalendarEvent[],
+  calendars: GoogleCalendarListItem[],
+  row: ParsedImportRow,
+) {
+  const strategies: Array<{ useDate: boolean; useStart: boolean }> = [
+    { useDate: true, useStart: true },
+    { useDate: true, useStart: false },
+    { useDate: false, useStart: false },
+  ];
+
+  let lastMatches: GoogleCalendarEvent[] = [];
+
+  for (const strategy of strategies) {
+    const matches = matchCalendarCandidatesWithOptions(events, calendars, row, strategy);
+    if (matches.length === 1) {
+      return matches;
+    }
+    if (matches.length > 1) {
+      return matches;
+    }
+    lastMatches = matches;
+  }
+
+  return lastMatches;
 }
 
 function matchDeadlineCandidates(deadlines: Deadline[], projects: Project[], rawTitle: string, course?: string) {
@@ -1774,7 +1851,7 @@ function ActionBundleCard({
     const updates = safeBlocks
       .filter(block => block.type === 'calendar-update')
       .flatMap(block => block.rows.map(row => {
-        const matches = matchCalendarCandidates(calendarEvents, calendarCalendars, row);
+        const matches = resolvePreferredCalendarCandidates(calendarEvents, calendarCalendars, row);
         const valid = matches.length === 1 && Boolean(buildCalendarEventPayload(row, 'update'));
         return {
           label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}`,

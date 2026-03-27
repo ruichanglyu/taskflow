@@ -711,13 +711,22 @@ export function AIPanel({
                   <ChevronDown size={14} className="-rotate-90" />
                 </button>
               ) : (
-                <button
-                  onClick={handleCreateChat}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
-                >
-                  <Plus size={14} />
-                  <span>New session</span>
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={handleCreateChat}
+                    className="flex flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
+                  >
+                    <Plus size={14} />
+                    <span>New session</span>
+                  </button>
+                  <button
+                    onClick={toggleChatSidebar}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+                    title="Collapse sidebar"
+                  >
+                    <ChevronDown size={14} className="rotate-90" />
+                  </button>
+                </div>
               )}
             </div>
             {/* Chat list */}

@@ -16,7 +16,7 @@ export interface ChatMessage {
 }
 
 export interface ImportBlock {
-  type: 'tasks' | 'deadlines' | 'subtasks' | 'delete-tasks';
+  type: 'tasks' | 'deadlines' | 'subtasks' | 'delete-tasks' | 'deadline-links';
   raw: string;
   rows: ParsedImportRow[];
   imported?: boolean;
@@ -36,6 +36,8 @@ export interface ParsedImportRow {
   type?: string;
   dueTime?: string;
   notes?: string;
+  // Deadline links
+  taskTitle?: string;
 }
 
 const KEY_STORAGE = 'taskflow_ai_key';
@@ -156,6 +158,13 @@ Exact Task Title 2
 \`\`\`
 Each line must be the EXACT title of an existing task. Only include tasks the user explicitly asked to delete.
 
+To link an existing task to an existing deadline, output a fenced code block with language "import:deadline-links":
+\`\`\`import:deadline-links
+Deadline title | task: Task Title | course: CourseName
+Another deadline | task: Another Task Title
+\`\`\`
+The deadline title must match an existing deadline. Include \`course\` when there may be duplicates. The task title must match an existing task. The app will only create a real \`deadline_tasks\` link when it can find a unique deadline and a unique task.
+
 FIELD RULES:
 - Tasks: title (required), course, due (YYYY-MM-DD), priority (low/medium/high), description, status (todo/in-progress/done), recurrence (none/daily/weekly/monthly)
 - Deadlines: title (required), course, date (YYYY-MM-DD required), time (HH:MM AM/PM), type (assignment/exam/quiz/lab/project/other), notes, status (not-started/in-progress/done/missed)
@@ -163,8 +172,8 @@ FIELD RULES:
 
 LINKING RULES:
 - Do not claim that tasks are automatically linked to deadlines just because titles or course names match.
-- If the user asks to link a task to a deadline, explain that the chat can create matching items, but the actual task-deadline link must be created in the deadline detail view.
-- Only say a task is linked if the app explicitly created or updated a real deadline_tasks link.
+- If the user asks to link a task to a deadline, use the \`deadline-links\` import block so the app can create the real \`deadline_tasks\` link.
+- Only say a task is linked if the app explicitly created or updated a real \`deadline_tasks\` link.
 
 You can also generate CSV files for manual import when asked. For deadlines CSV:
 status,course,date,time,title,type,notes
@@ -180,13 +189,13 @@ Be concise, helpful, and friendly. Use the user's actual data to answer question
 /** Parse import blocks from AI response */
 export function parseImportBlocks(content: string): ImportBlock[] {
   const blocks: ImportBlock[] = [];
-  const regex = /```import:(tasks|deadlines|delete-tasks|subtasks:([^\n]*))\n([\s\S]*?)```/g;
+  const regex = /```import:(tasks|deadlines|delete-tasks|deadline-links|subtasks:([^\n]*))\n([\s\S]*?)```/g;
   let match;
 
   while ((match = regex.exec(content)) !== null) {
     const rawType = match[1];
     const isSubtasks = rawType.startsWith('subtasks:');
-    const type: ImportBlock['type'] = isSubtasks ? 'subtasks' : rawType as 'tasks' | 'deadlines' | 'delete-tasks';
+    const type: ImportBlock['type'] = isSubtasks ? 'subtasks' : rawType as 'tasks' | 'deadlines' | 'delete-tasks' | 'deadline-links';
     const parentTaskTitle = isSubtasks ? (match[2]?.trim() || '') : undefined;
     const raw = match[3].trim();
     const lines = raw.split('\n').filter(l => l.trim());
@@ -217,6 +226,7 @@ export function parseImportBlocks(content: string): ImportBlock[] {
           case 'type': row.type = val; break;
           case 'time': row.dueTime = val; break;
           case 'notes': row.notes = val; break;
+          case 'task': row.taskTitle = val; break;
         }
       }
 

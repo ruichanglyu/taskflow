@@ -23,12 +23,13 @@ interface AIPanelProps {
   onAddProject: (name: string, description: string) => Promise<string | null>;
   onAddSubtask: (taskId: string, title: string) => Promise<boolean>;
   onDeleteTask: (taskId: string) => Promise<boolean>;
+  onLinkTask: (deadlineId: string, taskId: string) => Promise<boolean>;
 }
 
 export function AIPanel({
   open, onClose,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
-  onAddTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask,
+  onAddTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
 }: AIPanelProps) {
   const { messages, isStreaming, error, sendMessage, stopStreaming, clearChat } = useAI();
   const [panelError, setPanelError] = useState<string | null>(null);
@@ -166,6 +167,51 @@ export function AIPanel({
           skipped === 1
             ? 'Skipped 1 AI delete entry because it was ambiguous, missing, or failed to delete.'
             : `Skipped ${skipped} AI delete entries because they were ambiguous, missing, or failed to delete.`,
+        );
+      }
+    } else if (block.type === 'deadline-links') {
+      let linked = 0;
+      let skipped = 0;
+
+      for (const row of block.rows) {
+        const taskTitle = normalizeDeleteCandidate(row.taskTitle ?? '');
+        const deadlineTitle = normalizeDeleteCandidate(row.title);
+        if (!taskTitle || !deadlineTitle) {
+          skipped++;
+          continue;
+        }
+
+        const taskMatches = tasks.filter(task => {
+          const normalizedTask = normalizeDeleteCandidate(task.title);
+          const strippedTask = normalizeDeleteCandidate(stripTrailingCourseTag(task.title));
+          return normalizedTask === taskTitle || strippedTask === taskTitle;
+        });
+
+        const deadlineMatches = deadlines.filter(deadline => {
+          const normalizedDeadline = normalizeDeleteCandidate(deadline.title);
+          const strippedDeadline = normalizeDeleteCandidate(stripTrailingCourseTag(deadline.title));
+          if (normalizedDeadline !== deadlineTitle && strippedDeadline !== deadlineTitle) return false;
+          if (!row.course) return true;
+          const projectName = deadline.projectId ? projects.find(p => p.id === deadline.projectId)?.name ?? '' : '';
+          return normalizeDeleteCandidate(projectName) === normalizeDeleteCandidate(row.course);
+        });
+
+        if (taskMatches.length !== 1 || deadlineMatches.length !== 1) {
+          skipped++;
+          continue;
+        }
+
+        const ok = await onLinkTask(deadlineMatches[0].id, taskMatches[0].id);
+        if (ok) linked++;
+        else skipped++;
+      }
+
+      imported = linked;
+      if (skipped > 0) {
+        setPanelError(
+          skipped === 1
+            ? 'Skipped 1 deadline link because it was ambiguous, missing, or failed to link.'
+            : `Skipped ${skipped} deadline links because they were ambiguous, missing, or failed to link.`,
         );
       }
     } else if (block.type === 'subtasks') {
@@ -323,6 +369,7 @@ export function AIPanel({
                   key={msg.id}
                   message={msg}
                   tasks={tasks}
+                  deadlines={deadlines}
                   projects={projects}
                   importedBlocks={importedBlocks}
                   onImport={handleImport}
@@ -469,6 +516,7 @@ function stripTrailingCourseTag(value: string) {
 function MessageBubble({
   message,
   tasks,
+  deadlines,
   projects,
   importedBlocks,
   onImport,
@@ -476,6 +524,7 @@ function MessageBubble({
 }: {
   message: ChatMessage;
   tasks: Task[];
+  deadlines: Deadline[];
   projects: Project[];
   importedBlocks: Set<string>;
   onImport: (block: ImportBlock, key: string) => Promise<number>;
@@ -545,6 +594,8 @@ function MessageBubble({
                   blockKey={blockKey}
                   isImported={isImported}
                   tasks={tasks}
+                  deadlines={deadlines}
+                  projects={projects}
                   onImport={onImport}
                 />
               );
@@ -574,7 +625,7 @@ function renderContentWithBlocks(content: string, importBlocks: ImportBlock[]): 
   const segments: Segment[] = [];
 
   // Find all fenced code blocks
-  const blockRegex = /```(import:(?:tasks|deadlines|delete-tasks|subtasks:[^\n]*)|csv)\n([\s\S]*?)```/g;
+  const blockRegex = /```(import:(?:tasks|deadlines|delete-tasks|deadline-links|subtasks:[^\n]*)|csv)\n([\s\S]*?)```/g;
   let match;
   let lastIndex = 0;
 
@@ -660,8 +711,17 @@ function ImportCard({
     await handleConfirmImport();
   };
 
-  const label = block.type === 'delete-tasks' ? 'tasks to delete' : block.type === 'subtasks' ? 'subtasks' : block.type === 'tasks' ? 'tasks' : 'deadlines';
+  const label = block.type === 'delete-tasks'
+    ? 'tasks to delete'
+    : block.type === 'subtasks'
+      ? 'subtasks'
+      : block.type === 'tasks'
+        ? 'tasks'
+        : block.type === 'deadline-links'
+          ? 'deadline links'
+          : 'deadlines';
   const isDelete = block.type === 'delete-tasks';
+  const isLink = block.type === 'deadline-links';
   const done = isImported || result !== null;
   const deleteGroups = isDelete
     ? block.rows.reduce(
@@ -694,7 +754,11 @@ function ImportCard({
           <div>
             <p className="text-sm font-medium text-[var(--text-primary)]">
               {done
-                ? (isDelete ? `Deleted ${result ?? block.rows.length} tasks` : `Imported ${result ?? block.rows.length} ${label}`)
+                ? (isDelete
+                    ? `Deleted ${result ?? block.rows.length} tasks`
+                    : isLink
+                      ? `Linked ${result ?? block.rows.length} task${(result ?? block.rows.length) === 1 ? '' : 's'}`
+                      : `Imported ${result ?? block.rows.length} ${label}`)
                 : `${block.rows.length} ${label} ready`}
             </p>
             {isDelete && deleteGroups ? (

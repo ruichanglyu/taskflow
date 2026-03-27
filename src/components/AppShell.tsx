@@ -505,6 +505,7 @@ export function AppShell({ user }: AppShellProps) {
         onAddProject={store.addProject}
         onAddSubtask={store.addSubtask}
         onDeleteTask={handleDeleteTask}
+        onLinkTask={handleLinkTask}
       />
 
       <div className="pointer-events-none fixed right-4 top-20 z-[80] flex w-full max-w-sm flex-col gap-2 sm:right-6">

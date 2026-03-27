@@ -355,17 +355,21 @@ export function parseImportBlocks(content: string): ImportBlock[] {
           case 'course': row.course = val; break;
           case 'due':
           case 'date': row.dueDate = val; break;
-          case 'priority': row.priority = val as 'low' | 'medium' | 'high'; break;
-          case 'description': row.description = val; break;
-          case 'status': row.status = val; break;
-          case 'recurrence': row.recurrence = val; break;
-          case 'type': row.type = val; break;
+          case 'priority': row.priority = val.toLowerCase() as 'low' | 'medium' | 'high'; break;
+          case 'description':
+          case 'desc': row.description = val; break;
+          case 'status': row.status = val.toLowerCase(); break;
+          case 'recurrence':
+          case 'repeat': row.recurrence = val.toLowerCase(); break;
+          case 'type': row.type = val.toLowerCase(); break;
           case 'time': row.dueTime = val; break;
           case 'notes': row.notes = val; break;
           case 'task': row.taskTitle = val; break;
           case 'calendar': row.calendar = val; break;
-          case 'start': row.startTime = val; break;
-          case 'end': row.endTime = val; break;
+          case 'start':
+          case 'start time': row.startTime = val; break;
+          case 'end':
+          case 'end time': row.endTime = val; break;
           case 'location': row.location = val; break;
           case 'all day':
           case 'all-day': row.allDay = val; break;

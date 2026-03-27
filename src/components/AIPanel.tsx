@@ -844,15 +844,19 @@ export function AIPanel({
         );
       }
     } else if (block.type === 'subtasks') {
-      // Find the parent task by title (case-insensitive)
-      const parentTitle = block.parentTaskTitle?.toLowerCase() ?? '';
-      const parentTask = workingTasks.find(t => t.title.toLowerCase() === parentTitle);
+      // Find the parent task by title (case-insensitive, also try stripped)
+      const parentTitle = block.parentTaskTitle?.trim().toLowerCase() ?? '';
+      const parentStripped = stripTrailingCourseTag(block.parentTaskTitle ?? '').trim().toLowerCase();
+      const parentTask = workingTasks.find(t => {
+        const tt = t.title.trim().toLowerCase();
+        const ts = stripTrailingCourseTag(t.title).trim().toLowerCase();
+        return tt === parentTitle || ts === parentTitle || tt === parentStripped || ts === parentStripped;
+      });
       if (!parentTask) {
-        // If parent not found, fall back to creating as top-level tasks
-        for (const row of block.rows) {
-          const result = await onAddTask(row.title, '', 'medium', null, null, 'none');
-          if (result) imported++;
-        }
+        setPanelError(
+          `Could not find parent task "${block.parentTaskTitle}". Subtasks were not created. ` +
+          `Make sure the parent task exists first, then try again.`
+        );
       } else {
         for (const row of block.rows) {
           const ok = await onAddSubtask(parentTask.id, row.title);
@@ -1598,7 +1602,7 @@ function stripTrailingCourseTag(value: string) {
 }
 
 function normalizeCalendarCandidate(value: string) {
-  return value.trim().toLowerCase().replace(/\s*\(primary\)\s*$/, '').trim();
+  return value.trim().toLowerCase().replace(/\s*\((primary|read-only|read only|owner)\)\s*$/i, '').trim();
 }
 
 function getCalendarSummaryById(calendars: GoogleCalendarListItem[], calendarId?: string) {
@@ -1862,7 +1866,9 @@ function matchCalendarCandidatesWithOptions(
       return false;
     }
 
-    if (normalizedStart && getEventStartKey(event) !== normalizedStart) {
+    // Skip time comparison for all-day events — they don't have start times
+    const isAllDay = !!(event.start?.date && !event.start?.dateTime);
+    if (normalizedStart && !isAllDay && getEventStartKey(event) !== normalizedStart) {
       return false;
     }
 
@@ -1964,15 +1970,29 @@ function extractCourseFromTitle(title: string): string | undefined {
   return match?.[1]?.trim() || undefined;
 }
 
+/** Normalize for fuzzy course matching: lowercase, trim, collapse spaces, strip common separators */
+function normalizeCourse(value: string) {
+  return value.trim().toLowerCase().replace(/[\s\-_]+/g, '');
+}
+
 /** Narrows a task list to only those belonging to a project whose name matches the given course */
 function filterTasksByCourse(tasks: Task[], projects: Project[], course: string): Task[] {
-  const normalizedCourse = normalizeDeleteCandidate(course);
-  const matchingProjectIds = new Set(
+  const normalizedCourse = normalizeCourse(course);
+  // Try exact-ish match first, then fuzzy (no spaces) match
+  let matchingProjectIds = new Set(
     projects
-      .filter(p => normalizeDeleteCandidate(p.name) === normalizedCourse)
+      .filter(p => normalizeDeleteCandidate(p.name) === normalizeDeleteCandidate(course))
       .map(p => p.id)
   );
-  if (matchingProjectIds.size === 0) return tasks; // course not found, don't filter
+  // Fuzzy fallback: "CS1332" matches "CS 1332", "cs-1332", etc.
+  if (matchingProjectIds.size === 0) {
+    matchingProjectIds = new Set(
+      projects
+        .filter(p => normalizeCourse(p.name) === normalizedCourse)
+        .map(p => p.id)
+    );
+  }
+  if (matchingProjectIds.size === 0) return tasks; // course truly not found, don't filter
   return tasks.filter(t => t.projectId && matchingProjectIds.has(t.projectId));
 }
 

@@ -317,6 +317,7 @@ export function AIPanel({
                 <MessageBubble
                   key={msg.id}
                   message={msg}
+                  tasks={tasks}
                   projects={projects}
                   importedBlocks={importedBlocks}
                   onImport={handleImport}
@@ -454,12 +455,14 @@ function SuggestionChip({ text }: { text: string }) {
 // --- Message Bubble ---
 function MessageBubble({
   message,
+  tasks,
   projects,
   importedBlocks,
   onImport,
   isStreaming,
 }: {
   message: ChatMessage;
+  tasks: Task[];
   projects: Project[];
   importedBlocks: Set<string>;
   onImport: (block: ImportBlock, key: string) => Promise<number>;
@@ -528,6 +531,7 @@ function MessageBubble({
                   block={block}
                   blockKey={blockKey}
                   isImported={isImported}
+                  tasks={tasks}
                   onImport={onImport}
                 />
               );
@@ -603,11 +607,13 @@ function ImportCard({
   block,
   blockKey,
   isImported,
+  tasks,
   onImport,
 }: {
   block: ImportBlock;
   blockKey: string;
   isImported: boolean;
+  tasks: Task[];
   onImport: (block: ImportBlock, key: string) => Promise<number>;
 }) {
   const [importing, setImporting] = useState(false);
@@ -644,7 +650,20 @@ function ImportCard({
   const label = block.type === 'delete-tasks' ? 'tasks to delete' : block.type === 'subtasks' ? 'subtasks' : block.type === 'tasks' ? 'tasks' : 'deadlines';
   const isDelete = block.type === 'delete-tasks';
   const done = isImported || result !== null;
-  const deletePreview = block.rows.slice(0, 3).map(r => r.title).join(', ');
+  const deleteGroups = isDelete
+    ? block.rows.reduce(
+        (acc, row) => {
+          const matches = tasks.filter(task => task.title.trim().toLowerCase() === row.title.trim().toLowerCase());
+          if (matches.length === 1) {
+            acc.willDelete.push(matches[0].title);
+          } else {
+            acc.skipped.push(row.title);
+          }
+          return acc;
+        },
+        { willDelete: [] as string[], skipped: [] as string[] }
+      )
+    : null;
 
   return (
     <div className="rounded-2xl border border-[var(--accent)]/30 bg-[var(--accent-soft)]/30 p-3">
@@ -665,10 +684,23 @@ function ImportCard({
                 ? (isDelete ? `Deleted ${result ?? block.rows.length} tasks` : `Imported ${result ?? block.rows.length} ${label}`)
                 : `${block.rows.length} ${label} ready`}
             </p>
-            <p className="text-[10px] text-[var(--text-faint)]">
-              {block.rows.slice(0, 3).map(r => r.title).join(', ')}
-              {block.rows.length > 3 ? ` +${block.rows.length - 3} more` : ''}
-            </p>
+            {isDelete && deleteGroups ? (
+              <div className="mt-1 space-y-1 text-[10px]">
+                <p className="text-[var(--text-faint)]">
+                  Will delete: {deleteGroups.willDelete.slice(0, 3).join(', ') || 'No exact matches'}
+                  {deleteGroups.willDelete.length > 3 ? ` +${deleteGroups.willDelete.length - 3} more` : ''}
+                </p>
+                <p className="text-amber-300/90">
+                  Skipped: {deleteGroups.skipped.slice(0, 3).join(', ') || 'None'}
+                  {deleteGroups.skipped.length > 3 ? ` +${deleteGroups.skipped.length - 3} more` : ''}
+                </p>
+              </div>
+            ) : (
+              <p className="text-[10px] text-[var(--text-faint)]">
+                {block.rows.slice(0, 3).map(r => r.title).join(', ')}
+                {block.rows.length > 3 ? ` +${block.rows.length - 3} more` : ''}
+              </p>
+            )}
           </div>
         </div>
         {!done && (
@@ -692,9 +724,26 @@ function ImportCard({
         <div className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-3">
           <p className="text-xs font-medium text-rose-300">Confirm delete</p>
           <p className="mt-1 text-[11px] leading-relaxed text-rose-200/85">
-            This will permanently delete the uniquely matched tasks in this list. Ambiguous or missing titles will be skipped.
-            {deletePreview ? ` Review: ${deletePreview}${block.rows.length > 3 ? ` +${block.rows.length - 3} more` : ''}.` : ''}
+            This will permanently delete only exact matches. Ambiguous or missing titles will be skipped.
           </p>
+          {deleteGroups && (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2">
+                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-rose-200/80">Will delete</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-rose-100">
+                  {deleteGroups.willDelete.length > 0 ? deleteGroups.willDelete.slice(0, 5).join(', ') : 'No exact matches'}
+                  {deleteGroups.willDelete.length > 5 ? ` +${deleteGroups.willDelete.length - 5} more` : ''}
+                </p>
+              </div>
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-amber-200/80">Skipped</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-amber-100/90">
+                  {deleteGroups.skipped.length > 0 ? deleteGroups.skipped.slice(0, 5).join(', ') : 'None'}
+                  {deleteGroups.skipped.length > 5 ? ` +${deleteGroups.skipped.length - 5} more` : ''}
+                </p>
+              </div>
+            </div>
+          )}
           {deleteError && (
             <p className="mt-2 text-[11px] font-medium text-rose-300">{deleteError}</p>
           )}

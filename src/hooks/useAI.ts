@@ -392,32 +392,16 @@ export function parseImportBlocks(content: string): ImportBlock[] {
 
 /* ── Gemini streaming ─────────────────────────────────────────────── */
 
-async function streamGemini(
+// Models to try in order — if one returns 503/500, fall back to the next
+const GEMINI_MODELS = [GEMINI_MODEL, 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+
+async function tryStreamGemini(
   key: string,
+  model: string,
   systemPrompt: string,
-  history: ChatMessage[],
-  onUpdate: (text: string) => void,
+  contents: Record<string, unknown>[],
   signal: AbortSignal,
-) {
-  // Check if any message has images — if so, use the vision-capable model
-  const hasImages = history.some(m => m.images?.some(img => img.base64));
-  const model = hasImages ? GEMINI_MODEL_VISION : GEMINI_MODEL;
-
-  const contents = history.map(m => {
-    const parts: Record<string, unknown>[] = [];
-    // Add image parts first (if any)
-    if (m.images?.length) {
-      for (const img of m.images) {
-        if (img.base64) {
-          parts.push({ inline_data: { mime_type: img.mimeType, data: img.base64 } });
-        }
-      }
-    }
-    // Add text part
-    if (m.content) parts.push({ text: m.content });
-    return { role: m.role === 'assistant' ? 'model' : 'user', parts };
-  });
-
+): Promise<Response> {
   const url = `${GEMINI_API_URL}/${model}:streamGenerateContent?alt=sse&key=${key}`;
   const res = await fetch(url, {
     method: 'POST',
@@ -453,8 +437,59 @@ async function streamGemini(
       );
     }
 
+    // Transient server errors — throw with status so caller can retry with fallback
+    if (res.status === 500 || res.status === 503) {
+      const err = new Error(`Gemini ${res.status}`);
+      (err as any).status = res.status;
+      (err as any).retryable = true;
+      throw err;
+    }
+
     throw new Error(`Gemini error ${res.status}: ${body.slice(0, 300)}`);
   }
+
+  return res;
+}
+
+async function streamGemini(
+  key: string,
+  systemPrompt: string,
+  history: ChatMessage[],
+  onUpdate: (text: string) => void,
+  signal: AbortSignal,
+) {
+  const hasImages = history.some(m => m.images?.some(img => img.base64));
+  const contents = history.map(m => {
+    const parts: Record<string, unknown>[] = [];
+    if (m.images?.length) {
+      for (const img of m.images) {
+        if (img.base64) {
+          parts.push({ inline_data: { mime_type: img.mimeType, data: img.base64 } });
+        }
+      }
+    }
+    if (m.content) parts.push({ text: m.content });
+    return { role: m.role === 'assistant' ? 'model' : 'user', parts };
+  });
+
+  // For images, only use vision model (no fallback chain)
+  const modelsToTry = hasImages ? [GEMINI_MODEL_VISION] : GEMINI_MODELS;
+
+  let res: Response | null = null;
+  for (const model of modelsToTry) {
+    try {
+      res = await tryStreamGemini(key, model, systemPrompt, contents, signal);
+      break; // success
+    } catch (err: any) {
+      if (err?.retryable && model !== modelsToTry[modelsToTry.length - 1]) {
+        // Transient error, try next model
+        continue;
+      }
+      throw err; // no more fallbacks or non-retryable error
+    }
+  }
+
+  if (!res) throw new Error('All Gemini models failed');
 
   const reader = res.body?.getReader();
   if (!reader) throw new Error('No response body');
@@ -480,7 +515,6 @@ async function streamGemini(
         const parts = parsed?.candidates?.[0]?.content?.parts;
         if (Array.isArray(parts)) {
           for (const part of parts) {
-            // Skip thinking/reasoning parts from thinking models
             if (part.thought) continue;
             if (part.text) {
               accumulated += part.text;
@@ -492,7 +526,6 @@ async function streamGemini(
     }
   }
 
-  // If model finished but produced no text (only thought tokens), show a fallback
   if (!accumulated) {
     onUpdate('I wasn\'t able to generate a response. Please try again.');
   }

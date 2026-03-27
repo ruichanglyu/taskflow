@@ -687,8 +687,9 @@ export function AIPanel({
     if (block.type === 'delete-tasks') {
       let skipped = 0;
       for (const row of block.rows) {
-        const deletePool = row.course
-          ? filterTasksByCourse(workingTasks, projects, row.course)
+        const deleteCourse = row.course ?? extractCourseFromTitle(row.title);
+        const deletePool = deleteCourse
+          ? filterTasksByCourse(workingTasks, projects, deleteCourse)
           : workingTasks;
         const matches = matchTaskCandidates(deletePool, row.title);
         if (matches.length !== 1) {
@@ -817,8 +818,9 @@ export function AIPanel({
 
         // Narrow candidates by course first so "Study for Exam 3 [MATH 2550]" doesn't
         // ambiguously match "Study for Exam 3 [MATH 3012]" after tag-stripping
-        const taskPool = row.course
-          ? filterTasksByCourse(workingTasks, projects, row.course)
+        const linkCourse = row.course ?? extractCourseFromTitle(row.taskTitle ?? '');
+        const taskPool = linkCourse
+          ? filterTasksByCourse(workingTasks, projects, linkCourse)
           : workingTasks;
         const taskMatches = resolvePreferredTaskCandidates(taskPool, row.taskTitle ?? '', recentAiTasksRef.current);
         const deadlineMatches = matchDeadlineCandidates(deadlines, projects, row.title, row.course);
@@ -1954,6 +1956,12 @@ function resolveCalendarDeleteCandidates(
   }
 
   return resolvedMatches.length === 1 ? resolvedMatches : [];
+}
+
+/** Extracts a course name from a trailing bracket tag like "Study for Exam [CS 1332]" → "CS 1332" */
+function extractCourseFromTitle(title: string): string | undefined {
+  const match = title.match(/\[([^\]]+)\]\s*$/);
+  return match?.[1]?.trim() || undefined;
 }
 
 /** Narrows a task list to only those belonging to a project whose name matches the given course */

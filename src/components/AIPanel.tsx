@@ -142,7 +142,12 @@ export function AIPanel({
     if (block.type === 'delete-tasks') {
       let skipped = 0;
       for (const row of block.rows) {
-        const matches = tasks.filter(t => t.title.trim().toLowerCase() === row.title.trim().toLowerCase());
+        const rawTitle = normalizeDeleteCandidate(row.title);
+        const strippedTitle = normalizeDeleteCandidate(stripTrailingCourseTag(row.title));
+        const matches = tasks.filter(t => {
+          const taskTitle = normalizeDeleteCandidate(t.title);
+          return taskTitle === rawTitle || taskTitle === strippedTitle;
+        });
         if (matches.length !== 1) {
           skipped++;
           continue;
@@ -450,6 +455,14 @@ function SuggestionChip({ text }: { text: string }) {
       {text}
     </div>
   );
+}
+
+function normalizeDeleteCandidate(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function stripTrailingCourseTag(value: string) {
+  return value.replace(/\s*\[[^\]]+\]\s*$/, '').trim();
 }
 
 // --- Message Bubble ---

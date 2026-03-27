@@ -1190,6 +1190,17 @@ function matchTaskCandidates(tasks: Array<{ title: string }>, rawTitle: string) 
   });
 }
 
+function resolvePreferredTaskCandidates(tasks: Task[], rawTitle: string, recentTasks: Task[] = []) {
+  const matches = matchTaskCandidates(tasks, rawTitle);
+  if (matches.length <= 1) return matches;
+
+  const recentMatches = matchTaskCandidates(recentTasks, rawTitle);
+  if (recentMatches.length !== 1) return matches;
+
+  const recentMatch = recentMatches[0];
+  return matches.filter(task => task.id === recentMatch.id);
+}
+
 function matchDeadlineCandidates(deadlines: Deadline[], projects: Project[], rawTitle: string, course?: string) {
   const normalizedTitle = normalizeDeleteCandidate(rawTitle);
   const strippedTitle = normalizeDeleteCandidate(stripTrailingCourseTag(rawTitle));

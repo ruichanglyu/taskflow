@@ -316,7 +316,7 @@ export function useGym(userId: string) {
   const uploadExerciseImage = useCallback(async (exerciseId: string, file: File): Promise<string | null> => {
     if (!supabase) return null;
     const ext = file.name.split('.').pop() ?? 'jpg';
-    const path = `exercise-images/${userId}/${exerciseId}-${Date.now()}.${ext}`;
+    const path = `${userId}/exercise-images/${exerciseId}-${Date.now()}.${ext}`;
     const { error: uploadErr } = await supabase.storage.from('workout-photos').upload(path, file, { upsert: true });
     if (uploadErr) { setError(uploadErr.message); return null; }
     const { data: urlData } = supabase.storage.from('workout-photos').getPublicUrl(path);

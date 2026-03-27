@@ -526,6 +526,11 @@ export function useAI() {
     setThreads(prev => prev.map(thread => thread.id === threadId ? updater(thread) : thread));
   }, []);
 
+  const stopStreaming = useCallback(() => {
+    abortRef.current?.abort();
+    setIsStreaming(false);
+  }, []);
+
   const ensureActiveThread = useCallback((threadId: string) => {
     stopStreaming();
     setError(null);
@@ -672,11 +677,6 @@ export function useAI() {
       setIsStreaming(false);
       abortRef.current = null;
     }
-  }, []);
-
-  const stopStreaming = useCallback(() => {
-    abortRef.current?.abort();
-    setIsStreaming(false);
   }, []);
 
   return {

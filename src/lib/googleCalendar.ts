@@ -145,6 +145,19 @@ export async function createGoogleCalendarEvent(
   );
 }
 
+export async function updateGoogleCalendarEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+  event: Partial<NewGoogleCalendarEvent>
+): Promise<GoogleCalendarEvent> {
+  return googleFetch<GoogleCalendarEvent>(
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    accessToken,
+    { method: 'PATCH', body: JSON.stringify(event) }
+  );
+}
+
 export async function deleteGoogleCalendarEvent(
   accessToken: string,
   calendarId: string,

@@ -11,12 +11,25 @@ import {
   isGoogleCalendarConfigured,
   loadGoogleIdentityScript,
   NewGoogleCalendarEvent,
+  updateGoogleCalendarEvent,
 } from '../lib/googleCalendar';
 
 const STORAGE_KEY_PREFIX = 'taskflow_google_calendar';
 
 function getStorageKey(userId: string, suffix: string) {
   return `${STORAGE_KEY_PREFIX}:${userId}:${suffix}`;
+}
+
+function getDefaultCalendarRange() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  end.setHours(0, 0, 0, 0);
+  return {
+    timeMin: start.toISOString(),
+    timeMax: end.toISOString(),
+  };
 }
 
 export function useGoogleCalendar(userId: string) {
@@ -36,7 +49,7 @@ export function useGoogleCalendar(userId: string) {
   const tokenStorageKey = useMemo(() => getStorageKey(userId, 'access-token'), [userId]);
   const tokenExpiryStorageKey = useMemo(() => getStorageKey(userId, 'access-token-expiry'), [userId]);
   const connectedStorageKey = useMemo(() => getStorageKey(userId, 'connected'), [userId]);
-  const [eventRange, setEventRange] = useState<{ timeMin?: string; timeMax?: string }>({});
+  const [eventRange, setEventRange] = useState<{ timeMin?: string; timeMax?: string }>(() => getDefaultCalendarRange());
 
   useEffect(() => {
     const storedCalendarId = localStorage.getItem(calendarStorageKey);
@@ -379,20 +392,66 @@ export function useGoogleCalendar(userId: string) {
     }
   }, [accessToken, calendars, selectedCalendarId]);
 
-  const deleteEvent = useCallback(async (eventId: string): Promise<boolean> => {
-    if (!accessToken || !selectedCalendarId) return false;
+  const updateEvent = useCallback(async (
+    eventId: string,
+    event: Partial<NewGoogleCalendarEvent>,
+    calendarIdOverride?: string,
+  ): Promise<boolean> => {
+    const targetCalendarId =
+      calendarIdOverride ||
+      events.find(existing => existing.id === eventId)?.calendarId ||
+      selectedCalendarId;
+    if (!accessToken || !targetCalendarId) return false;
 
     setError(null);
 
     try {
-      await deleteGoogleCalendarEvent(accessToken, selectedCalendarId, eventId);
+      const updated = await updateGoogleCalendarEvent(accessToken, targetCalendarId, eventId, event);
+      const calendarMeta = calendars.find(calendar => calendar.id === targetCalendarId);
+      setEvents(prev =>
+        prev
+          .map(existing =>
+            existing.id === eventId
+              ? {
+                  ...existing,
+                  ...updated,
+                  calendarId: targetCalendarId,
+                  calendarSummary: calendarMeta?.summary,
+                  calendarColor: calendarMeta?.backgroundColor,
+                }
+              : existing,
+          )
+          .sort((a, b) => {
+            const aTime = a.start?.dateTime || a.start?.date || '';
+            const bTime = b.start?.dateTime || b.start?.date || '';
+            return aTime.localeCompare(bTime);
+          }),
+      );
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update event.');
+      return false;
+    }
+  }, [accessToken, calendars, events, selectedCalendarId]);
+
+  const deleteEvent = useCallback(async (eventId: string, calendarIdOverride?: string): Promise<boolean> => {
+    const targetCalendarId =
+      calendarIdOverride ||
+      events.find(existing => existing.id === eventId)?.calendarId ||
+      selectedCalendarId;
+    if (!accessToken || !targetCalendarId) return false;
+
+    setError(null);
+
+    try {
+      await deleteGoogleCalendarEvent(accessToken, targetCalendarId, eventId);
       setEvents(prev => prev.filter(e => e.id !== eventId));
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete event.');
       return false;
     }
-  }, [accessToken, selectedCalendarId]);
+  }, [accessToken, events, selectedCalendarId]);
 
   return {
     isConfigured: isGoogleCalendarConfigured,
@@ -411,6 +470,9 @@ export function useGoogleCalendar(userId: string) {
     chooseCalendar,
     toggleCalendarVisibility,
     createEvent,
+    updateEvent,
     deleteEvent,
   };
 }
+
+export type GoogleCalendarController = ReturnType<typeof useGoogleCalendar>;

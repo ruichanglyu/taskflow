@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise } from '../types';
+import type { GoogleCalendarEvent, GoogleCalendarListItem } from '../lib/googleCalendar';
 
 export interface ImageAttachment {
   base64: string;      // data without prefix
@@ -24,7 +25,7 @@ export interface ChatThread {
 }
 
 export interface ImportBlock {
-  type: 'tasks' | 'deadlines' | 'subtasks' | 'delete-tasks' | 'deadline-links';
+  type: 'tasks' | 'deadlines' | 'subtasks' | 'delete-tasks' | 'deadline-links' | 'calendar-create' | 'calendar-update' | 'calendar-delete';
   raw: string;
   rows: ParsedImportRow[];
   imported?: boolean;
@@ -46,6 +47,20 @@ export interface ParsedImportRow {
   notes?: string;
   // Deadline links
   taskTitle?: string;
+  // Calendar
+  calendar?: string;
+  startTime?: string;
+  endTime?: string;
+  location?: string;
+  allDay?: string;
+  newTitle?: string;
+  newDate?: string;
+  newStartTime?: string;
+  newEndTime?: string;
+  newDescription?: string;
+  newLocation?: string;
+  newCalendar?: string;
+  newAllDay?: string;
 }
 
 const GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
@@ -109,6 +124,9 @@ function buildSystemPrompt(data: {
   dayTemplates: WorkoutDayTemplate[];
   exercises: Exercise[];
   dayExercises: WorkoutDayExercise[];
+  calendarEvents: GoogleCalendarEvent[];
+  calendarCalendars: GoogleCalendarListItem[];
+  selectedCalendarId?: string;
 }): string {
   const today = new Date().toISOString().split('T')[0];
 
@@ -158,6 +176,24 @@ function buildSystemPrompt(data: {
       }).join('\n');
   }
 
+  const calendarsSummary = data.calendarCalendars.length > 0
+    ? data.calendarCalendars.map(calendar => `- ${calendar.summary}${calendar.id === data.selectedCalendarId ? ' (active)' : ''}`).join('\n')
+    : '(not connected)';
+
+  const upcomingCalendarSummary = data.calendarEvents.length > 0
+    ? data.calendarEvents
+        .slice(0, 40)
+        .map(event => {
+          const start = event.start?.dateTime
+            ? new Date(event.start.dateTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+            : event.start?.date
+              ? event.start.date
+              : 'unknown';
+          return `- ${event.summary || 'Untitled event'} — ${start}${event.calendarSummary ? ` [${event.calendarSummary}]` : ''}`;
+        })
+        .join('\n')
+    : '(none loaded)';
+
   return `You are a personal AI assistant inside TaskFlow, a student life management app. Today is ${today}.
 
 USER'S DATA:
@@ -177,8 +213,14 @@ ${pastDeadlinesSummary}
 ACTIVE GYM PLAN:
 ${gymSummary}
 
+CONNECTED CALENDARS:
+${calendarsSummary}
+
+LOADED CALENDAR EVENTS:
+${upcomingCalendarSummary}
+
 CAPABILITIES:
-You can have normal conversations AND help create/import data. When the user asks you to create tasks, deadlines, or workout plans, output them in special import blocks.
+You can have normal conversations AND help create/import data. When the user asks you to create tasks, deadlines, calendar events, or workout plans, output them in special import blocks.
 
 IMPORT BLOCK FORMAT:
 To create tasks, output a fenced code block with language "import:tasks":
@@ -216,9 +258,30 @@ Another deadline | task: Another Task Title
 Treat the deadline title and task title as lookup keys only. They do not create a link by themselves. Include \`course\` when there may be duplicates so the app can find the right deadline. The app will only create a real \`deadline_tasks\` link when it can find a unique deadline and a unique task.
 If the user asks you to both create a task and link it to a deadline, you MUST output the \`import:tasks\` block first and then an \`import:deadline-links\` block that references the exact task title you just created.
 
+To create calendar events, output a fenced code block with language "import:calendar-create":
+\`\`\`import:calendar-create
+Study Block | calendar: Study Blocks | date: 2026-03-29 | start: 7:00 PM | end: 9:00 PM | description: Review exam 3 topics
+Office Hours | calendar: Personal | date: 2026-03-30 | start: 1:30 PM | end: 2:15 PM | location: Skiles 268
+\`\`\`
+
+To update calendar events, output a fenced code block with language "import:calendar-update":
+\`\`\`import:calendar-update
+Study Block | calendar: Study Blocks | date: 2026-03-29 | start: 7:00 PM | new date: 2026-03-30 | new start: 8:00 PM | new end: 10:00 PM | new description: Review exam 3 topics
+\`\`\`
+For updates, the first title/date/start/calendar identify the existing event. The \`new ...\` fields are the replacement values.
+
+To delete calendar events, output a fenced code block with language "import:calendar-delete":
+\`\`\`import:calendar-delete
+Study Block | calendar: Study Blocks | date: 2026-03-29 | start: 7:00 PM
+\`\`\`
+For update/delete, include calendar, date, and start time whenever possible so the app can find a unique event safely.
+
 FIELD RULES:
 - Tasks: title (required), course, due (YYYY-MM-DD), priority (low/medium/high), description, status (todo/in-progress/done), recurrence (none/daily/weekly/monthly)
 - Deadlines: title (required), course, date (YYYY-MM-DD required), time (HH:MM AM/PM), type (assignment/exam/quiz/lab/project/other), notes, status (not-started/in-progress/done/missed)
+- Calendar create: title, calendar, date (YYYY-MM-DD), start, end, description, location, all day
+- Calendar update: title, calendar, date, start, then any \`new ...\` fields to change
+- Calendar delete: title, calendar, date, start
 - Course names should match existing courses when possible
 
 LINKING RULES:
@@ -230,6 +293,8 @@ LINKING RULES:
 - When linking is requested, prefer a single \`import:deadline-links\` block and avoid creating a duplicate task unless the user explicitly asked for a new task.
 - If the link cannot be created because the app cannot find a unique deadline and task, ask the user for the exact titles instead of pretending it worked.
 - Only say a task is linked if the app explicitly created or updated a real \`deadline_tasks\` link.
+- Never claim a calendar event was created, updated, or deleted unless you emitted the matching calendar import block.
+- For calendar update/delete, do not guess. If you are not sure which event is meant, ask a follow-up instead of emitting the block.
 
 STRICT RESPONSE RULES FOR NORMAL CHAT:
 - Use plain sentences or short paragraphs.
@@ -258,13 +323,13 @@ Be concise, helpful, and friendly. Use the user's actual data to answer question
 /** Parse import blocks from AI response */
 export function parseImportBlocks(content: string): ImportBlock[] {
   const blocks: ImportBlock[] = [];
-  const regex = /```import:(tasks|deadlines|delete-tasks|deadline-links|subtasks:([^\n]*))\n([\s\S]*?)```/g;
+  const regex = /```import:(tasks|deadlines|delete-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|subtasks:([^\n]*))\n([\s\S]*?)```/g;
   let match;
 
   while ((match = regex.exec(content)) !== null) {
     const rawType = match[1];
     const isSubtasks = rawType.startsWith('subtasks:');
-    const type: ImportBlock['type'] = isSubtasks ? 'subtasks' : rawType as 'tasks' | 'deadlines' | 'delete-tasks' | 'deadline-links';
+    const type: ImportBlock['type'] = isSubtasks ? 'subtasks' : rawType as ImportBlock['type'];
     const parentTaskTitle = isSubtasks ? (match[2]?.trim() || '') : undefined;
     const raw = match[3].trim();
     const lines = raw.split('\n').filter(l => l.trim());
@@ -296,6 +361,21 @@ export function parseImportBlocks(content: string): ImportBlock[] {
           case 'time': row.dueTime = val; break;
           case 'notes': row.notes = val; break;
           case 'task': row.taskTitle = val; break;
+          case 'calendar': row.calendar = val; break;
+          case 'start': row.startTime = val; break;
+          case 'end': row.endTime = val; break;
+          case 'location': row.location = val; break;
+          case 'all day':
+          case 'all-day': row.allDay = val; break;
+          case 'new title': row.newTitle = val; break;
+          case 'new date': row.newDate = val; break;
+          case 'new start': row.newStartTime = val; break;
+          case 'new end': row.newEndTime = val; break;
+          case 'new description': row.newDescription = val; break;
+          case 'new location': row.newLocation = val; break;
+          case 'new calendar': row.newCalendar = val; break;
+          case 'new all day':
+          case 'new all-day': row.newAllDay = val; break;
         }
       }
 

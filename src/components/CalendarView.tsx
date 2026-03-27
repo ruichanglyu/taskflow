@@ -1,10 +1,10 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { CalendarDays, Check, ChevronDown, ExternalLink, List, LayoutGrid, Plus, RefreshCcw, Trash2, Unplug } from 'lucide-react';
-import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import { GoogleCalendarEvent } from '../lib/googleCalendar';
 import { CreateEventModal } from './CreateEventModal';
 import { CalendarGrid } from './CalendarGrid';
 import { cn } from '../utils/cn';
+import type { GoogleCalendarController } from '../hooks/useGoogleCalendar';
 
 type CalendarViewMode = 'month' | 'week' | 'list';
 
@@ -337,7 +337,7 @@ function CalendarMiniMonth({
 }
 
 interface CalendarViewProps {
-  userId: string;
+  calendar: GoogleCalendarController;
   deadlines?: import('../types').Deadline[];
 }
 
@@ -807,8 +807,7 @@ function WeekCalendarGrid({
   );
 }
 
-export function CalendarView({ userId, deadlines = [] }: CalendarViewProps) {
-  const calendar = useGoogleCalendar(userId);
+export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createDate, setCreateDate] = useState<string | undefined>(undefined);

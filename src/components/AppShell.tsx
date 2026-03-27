@@ -23,6 +23,7 @@ import { ThemeSwitcher } from './ThemeSwitcher';
 import { ProfileModal } from './ProfileModal';
 import { AIPanel } from './AIPanel';
 import { migrateLegacyAIData } from '../hooks/useAI';
+import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 
 interface AppShellProps {
   user: User;
@@ -73,6 +74,7 @@ export function AppShell({ user }: AppShellProps) {
   const deadlineStore = useDeadlines(user.id);
   const canvasStore = useCanvas(user.id, store.projects);
   const gym = useGym(user.id);
+  const calendar = useGoogleCalendar(user.id);
   const { requestPermission } = useNotifications(store.tasks);
   const searchParams = new URLSearchParams(location.search);
   const projectFocusId = searchParams.get('project');
@@ -413,7 +415,7 @@ export function AppShell({ user }: AppShellProps) {
             />
           )}
           {currentView === 'calendar' && (
-            <CalendarView userId={user.id} deadlines={deadlineStore.deadlines} />
+            <CalendarView calendar={calendar} deadlines={deadlineStore.deadlines} />
           )}
           {currentView === 'timeline' && (
             <TimelineView
@@ -504,12 +506,18 @@ export function AppShell({ user }: AppShellProps) {
         dayTemplates={gym.dayTemplates}
         exercises={gym.exercises}
         dayExercises={gym.dayExercises}
+        calendarEvents={calendar.events}
+        calendarCalendars={calendar.calendars}
+        selectedCalendarId={calendar.selectedCalendarId}
         onAddTask={store.addTask}
         onAddDeadline={deadlineStore.addDeadline}
         onAddProject={store.addProject}
         onAddSubtask={store.addSubtask}
         onDeleteTask={handleDeleteTask}
         onLinkTask={handleLinkTask}
+        onCreateCalendarEvent={calendar.createEvent}
+        onUpdateCalendarEvent={calendar.updateEvent}
+        onDeleteCalendarEvent={calendar.deleteEvent}
       />
 
       <div className="pointer-events-none fixed right-4 top-20 z-[80] flex w-full max-w-sm flex-col gap-2 sm:right-6">

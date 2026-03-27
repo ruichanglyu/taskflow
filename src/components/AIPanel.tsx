@@ -5,6 +5,7 @@ import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type Chat
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus } from '../types';
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
+import type { GoogleCalendarEvent, GoogleCalendarListItem, NewGoogleCalendarEvent } from '../lib/googleCalendar';
 
 /* Error boundary — prevents the entire app from crashing if AI panel rendering fails */
 class AIPanelErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
@@ -152,6 +153,9 @@ interface AIPanelProps {
   dayTemplates: WorkoutDayTemplate[];
   exercises: Exercise[];
   dayExercises: WorkoutDayExercise[];
+  calendarEvents: GoogleCalendarEvent[];
+  calendarCalendars: GoogleCalendarListItem[];
+  selectedCalendarId: string;
   // Callbacks for imports
   onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence) => Promise<string | null>;
   onAddDeadline: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus) => Promise<boolean>;
@@ -159,12 +163,17 @@ interface AIPanelProps {
   onAddSubtask: (taskId: string, title: string) => Promise<boolean>;
   onDeleteTask: (taskId: string) => Promise<boolean>;
   onLinkTask: (deadlineId: string, taskId: string) => Promise<boolean>;
+  onCreateCalendarEvent: (event: NewGoogleCalendarEvent, calendarId?: string) => Promise<boolean>;
+  onUpdateCalendarEvent: (eventId: string, event: Partial<NewGoogleCalendarEvent>, calendarId?: string) => Promise<boolean>;
+  onDeleteCalendarEvent: (eventId: string, calendarId?: string) => Promise<boolean>;
 }
 
 export function AIPanel({
   open, onClose, userId,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
+  calendarEvents, calendarCalendars, selectedCalendarId,
   onAddTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
+  onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
 }: AIPanelProps) {
   const {
     threads,
@@ -330,8 +339,19 @@ export function AIPanel({
     setPanelError(null);
     setInput('');
     setPendingImages([]);
-    await sendMessage(msg, { tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises }, images);
-  }, [input, pendingImages, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises]);
+    await sendMessage(msg, {
+      tasks,
+      deadlines,
+      projects,
+      plans,
+      dayTemplates,
+      exercises,
+      dayExercises,
+      calendarEvents,
+      calendarCalendars,
+      selectedCalendarId,
+    }, images);
+  }, [input, pendingImages, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises, calendarEvents, calendarCalendars, selectedCalendarId]);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -460,6 +480,88 @@ export function AIPanel({
           skipped === 1
             ? 'Skipped 1 AI delete entry because it was ambiguous, missing, or failed to delete.'
             : `Skipped ${skipped} AI delete entries because they were ambiguous, missing, or failed to delete.`,
+        );
+      }
+    } else if (block.type === 'calendar-create') {
+      let created = 0;
+      let skipped = 0;
+
+      for (const row of block.rows) {
+        const payload = buildCalendarEventPayload(row, 'create');
+        if (!payload) {
+          skipped++;
+          continue;
+        }
+
+        const targetCalendarId = row.calendar
+          ? calendarCalendars.find(item => normalizeCalendarCandidate(item.summary) === normalizeCalendarCandidate(row.calendar || ''))?.id
+          : selectedCalendarId;
+
+        const ok = await onCreateCalendarEvent(payload, targetCalendarId);
+        if (ok) created++;
+        else skipped++;
+      }
+
+      imported = created;
+      if (skipped > 0) {
+        setPanelError(
+          skipped === 1
+            ? 'Skipped 1 calendar create because it was incomplete or failed to save.'
+            : `Skipped ${skipped} calendar creates because they were incomplete or failed to save.`,
+        );
+      }
+    } else if (block.type === 'calendar-update') {
+      let updated = 0;
+      let skipped = 0;
+
+      for (const row of block.rows) {
+        const matches = matchCalendarCandidates(calendarEvents, calendarCalendars, row);
+        const payload = buildCalendarEventPayload(row, 'update');
+
+        if (matches.length !== 1 || !payload) {
+          skipped++;
+          continue;
+        }
+
+        const targetCalendarId = row.newCalendar
+          ? calendarCalendars.find(item => normalizeCalendarCandidate(item.summary) === normalizeCalendarCandidate(row.newCalendar || ''))?.id
+          : matches[0].calendarId;
+
+        const ok = await onUpdateCalendarEvent(matches[0].id, payload, targetCalendarId);
+        if (ok) updated++;
+        else skipped++;
+      }
+
+      imported = updated;
+      if (skipped > 0) {
+        setPanelError(
+          skipped === 1
+            ? 'Skipped 1 calendar update because it was ambiguous, incomplete, or failed to save.'
+            : `Skipped ${skipped} calendar updates because they were ambiguous, incomplete, or failed to save.`,
+        );
+      }
+    } else if (block.type === 'calendar-delete') {
+      let deleted = 0;
+      let skipped = 0;
+
+      for (const row of block.rows) {
+        const matches = matchCalendarCandidates(calendarEvents, calendarCalendars, row);
+        if (matches.length !== 1) {
+          skipped++;
+          continue;
+        }
+
+        const ok = await onDeleteCalendarEvent(matches[0].id, matches[0].calendarId);
+        if (ok) deleted++;
+        else skipped++;
+      }
+
+      imported = deleted;
+      if (skipped > 0) {
+        setPanelError(
+          skipped === 1
+            ? 'Skipped 1 calendar delete because it was ambiguous, missing, or failed to delete.'
+            : `Skipped ${skipped} calendar deletes because they were ambiguous, missing, or failed to delete.`,
         );
       }
     } else if (block.type === 'deadline-links') {
@@ -987,6 +1089,8 @@ export function AIPanel({
                         tasks={tasks}
                         deadlines={deadlines}
                         projects={projects}
+                        calendarEvents={calendarEvents}
+                        calendarCalendars={calendarCalendars}
                         importedBlocks={importedBlocks}
                         onImport={handleImport}
                         isStreaming={isStreaming && msg === messages[messages.length - 1] && msg.role === 'assistant'}
@@ -1051,7 +1155,7 @@ export function AIPanel({
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={hasKey ? 'Ask anything or request tasks/deadlines...' : 'Add your Gemini API key above to start'}
+                  placeholder={hasKey ? 'Ask anything or request tasks, deadlines, or calendar events...' : 'Add your Gemini API key above to start'}
                   disabled={!hasKey || isStreaming}
                   rows={1}
                   className="max-h-32 min-h-[38px] flex-1 resize-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-50"
@@ -1143,13 +1247,14 @@ function WelcomeScreen({ hasKey }: { hasKey: boolean }) {
       <h3 className="text-lg font-semibold text-[var(--text-primary)]">AI Assistant</h3>
       <p className="mt-2 max-w-xs text-sm text-[var(--text-muted)]">
         {hasKey
-          ? 'Ask me anything about your schedule, or tell me to create tasks and deadlines for you.'
+          ? 'Ask me about your schedule, or tell me to create tasks, deadlines, and calendar events for you.'
           : 'Add your Google Gemini API key above to get started — it\'s free!'}
       </p>
       {hasKey && (
         <div className="mt-6 space-y-2 text-left">
           <SuggestionChip text="What's due this week?" />
           <SuggestionChip text="Create study tasks for my next exam" />
+          <SuggestionChip text="Create a study block on my calendar tomorrow" />
           <SuggestionChip text="Summarize my workload" />
           <SuggestionChip text="Generate a deadlines CSV for this month" />
         </div>
@@ -1172,6 +1277,99 @@ function normalizeDeleteCandidate(value: string) {
 
 function stripTrailingCourseTag(value: string) {
   return value.replace(/\s*\[[^\]]+\]\s*$/, '').trim();
+}
+
+function normalizeCalendarCandidate(value: string) {
+  return value.trim().toLowerCase().replace(/\s*\(primary\)\s*$/, '').trim();
+}
+
+function parseClockTime(value?: string) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  const ampmMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
+  if (ampmMatch) {
+    let hours = Number(ampmMatch[1]);
+    const minutes = Number(ampmMatch[2]);
+    const meridiem = ampmMatch[3].toUpperCase();
+    if (hours === 12) hours = 0;
+    if (meridiem === 'PM') hours += 12;
+    return { hours, minutes };
+  }
+
+  const twentyFourMatch = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+  if (twentyFourMatch) {
+    return { hours: Number(twentyFourMatch[1]), minutes: Number(twentyFourMatch[2]) };
+  }
+
+  return null;
+}
+
+function toTwentyFourHourKey(value?: string) {
+  const parsed = parseClockTime(value);
+  if (!parsed) return '';
+  return `${String(parsed.hours).padStart(2, '0')}:${String(parsed.minutes).padStart(2, '0')}`;
+}
+
+function getEventDateKey(event: GoogleCalendarEvent) {
+  if (event.start?.date) return event.start.date;
+  if (event.start?.dateTime) {
+    const date = new Date(event.start.dateTime);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  }
+  return '';
+}
+
+function getEventStartKey(event: GoogleCalendarEvent) {
+  if (!event.start?.dateTime) return '';
+  const date = new Date(event.start.dateTime);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function parseFlag(value?: string) {
+  if (!value) return false;
+  return ['true', 'yes', 'y', '1'].includes(value.trim().toLowerCase());
+}
+
+function addOneDay(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  date.setDate(date.getDate() + 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function buildCalendarEventPayload(row: ImportBlock['rows'][number], mode: 'create' | 'update') {
+  const date = mode === 'update' ? (row.newDate || row.dueDate || '') : (row.dueDate || '');
+  const startTime = mode === 'update' ? (row.newStartTime || row.startTime || '') : (row.startTime || '');
+  const endTime = mode === 'update' ? (row.newEndTime || row.endTime || '') : (row.endTime || '');
+  const isAllDay = parseFlag(mode === 'update' ? row.newAllDay || row.allDay : row.allDay);
+  const summary = mode === 'update' ? (row.newTitle || row.title) : row.title;
+  const description = mode === 'update' ? (row.newDescription ?? row.description) : row.description;
+  const location = mode === 'update' ? (row.newLocation ?? row.location) : row.location;
+
+  if (!summary || !date) return null;
+
+  if (isAllDay) {
+    return {
+      summary,
+      ...(description ? { description } : {}),
+      ...(location ? { location } : {}),
+      start: { date },
+      end: { date: addOneDay(date) },
+    } satisfies NewGoogleCalendarEvent;
+  }
+
+  if (!startTime || !endTime) return null;
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const startKey = toTwentyFourHourKey(startTime);
+  const endKey = toTwentyFourHourKey(endTime);
+  if (!startKey || !endKey) return null;
+
+  return {
+    summary,
+    ...(description ? { description } : {}),
+    ...(location ? { location } : {}),
+    start: { dateTime: `${date}T${startKey}:00`, timeZone },
+    end: { dateTime: `${date}T${endKey}:00`, timeZone },
+  } satisfies NewGoogleCalendarEvent;
 }
 
 function matchTaskCandidates(tasks: Array<{ title: string }>, rawTitle: string) {
@@ -1199,6 +1397,48 @@ function resolvePreferredTaskCandidates(tasks: Task[], rawTitle: string, recentT
 
   const recentMatch = recentMatches[0];
   return matches.filter(task => task.id === recentMatch.id);
+}
+
+function matchCalendarCandidates(
+  events: GoogleCalendarEvent[],
+  calendars: GoogleCalendarListItem[],
+  row: ParsedImportRow,
+) {
+  const normalizedTitle = normalizeDeleteCandidate(row.title);
+  const strippedTitle = normalizeDeleteCandidate(stripTrailingCourseTag(row.title));
+  const normalizedCalendar = row.calendar ? normalizeCalendarCandidate(row.calendar) : '';
+  const normalizedDate = row.dueDate?.trim() ?? '';
+  const normalizedStart = toTwentyFourHourKey(row.startTime);
+
+  return events.filter(event => {
+    const eventTitle = normalizeDeleteCandidate(event.summary || '');
+    const strippedEventTitle = normalizeDeleteCandidate(stripTrailingCourseTag(event.summary || ''));
+    if (
+      eventTitle !== normalizedTitle &&
+      strippedEventTitle !== normalizedTitle &&
+      eventTitle !== strippedTitle &&
+      strippedEventTitle !== strippedTitle
+    ) {
+      return false;
+    }
+
+    if (normalizedCalendar) {
+      const calendarSummary = event.calendarSummary || calendars.find(calendar => calendar.id === event.calendarId)?.summary || '';
+      if (normalizeCalendarCandidate(calendarSummary) !== normalizedCalendar) {
+        return false;
+      }
+    }
+
+    if (normalizedDate && getEventDateKey(event) !== normalizedDate) {
+      return false;
+    }
+
+    if (normalizedStart && getEventStartKey(event) !== normalizedStart) {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 function matchDeadlineCandidates(deadlines: Deadline[], projects: Project[], rawTitle: string, course?: string) {
@@ -1234,6 +1474,8 @@ function MessageBubble({
   tasks,
   deadlines,
   projects,
+  calendarEvents,
+  calendarCalendars,
   importedBlocks,
   onImport,
   isStreaming,
@@ -1242,6 +1484,8 @@ function MessageBubble({
   tasks: Task[];
   deadlines: Deadline[];
   projects: Project[];
+  calendarEvents: GoogleCalendarEvent[];
+  calendarCalendars: GoogleCalendarListItem[];
   importedBlocks: Set<string>;
   onImport: (block: ImportBlock, key: string) => Promise<number>;
   isStreaming: boolean;
@@ -1326,6 +1570,8 @@ function MessageBubble({
               tasks={tasks}
               deadlines={deadlines}
               projects={projects}
+              calendarEvents={calendarEvents}
+              calendarCalendars={calendarCalendars}
               importedBlocks={importedBlocks}
               onImport={onImport}
             />
@@ -1348,7 +1594,7 @@ function renderContentWithBlocks(content: string, importBlocks: ImportBlock[]): 
   const segments: Segment[] = [];
 
   // Find all fenced code blocks
-  const blockRegex = /```(import:(?:tasks|deadlines|delete-tasks|deadline-links|subtasks:[^\n]*)|csv)\n([\s\S]*?)```/g;
+  const blockRegex = /```(import:(?:tasks|deadlines|delete-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|subtasks:[^\n]*)|csv)\n([\s\S]*?)```/g;
   let match;
   let lastIndex = 0;
 
@@ -1395,6 +1641,8 @@ function ActionBundleCard({
   tasks,
   deadlines,
   projects,
+  calendarEvents,
+  calendarCalendars,
   importedBlocks,
   onImport,
 }: {
@@ -1403,6 +1651,8 @@ function ActionBundleCard({
   tasks: Task[];
   deadlines: Deadline[];
   projects: Project[];
+  calendarEvents: GoogleCalendarEvent[];
+  calendarCalendars: GoogleCalendarListItem[];
   importedBlocks: Set<string>;
   onImport: (block: ImportBlock, key: string) => Promise<number>;
 }) {
@@ -1429,13 +1679,16 @@ function ActionBundleCard({
       order:
         block.type === 'tasks' ? 0 :
         block.type === 'deadlines' ? 1 :
-        block.type === 'subtasks' ? 2 :
-        block.type === 'deadline-links' ? 3 : 4,
+        block.type === 'calendar-create' ? 2 :
+        block.type === 'calendar-update' ? 3 :
+        block.type === 'subtasks' ? 4 :
+        block.type === 'deadline-links' ? 5 :
+        block.type === 'calendar-delete' ? 6 : 7,
     }))
   ), [safeBlocks, importedBlocks, messageId]);
 
   const pendingEntries = entries.filter(entry => !entry.imported);
-  const hasDeletes = entries.some(entry => entry.block?.type === 'delete-tasks');
+  const hasDeletes = entries.some(entry => entry.block?.type === 'delete-tasks' || entry.block?.type === 'calendar-delete');
   const allDone = entries.every(entry => entry.imported);
 
   const summary = useMemo(() => {
@@ -1445,6 +1698,9 @@ function ActionBundleCard({
       subtasks: 0,
       links: 0,
       deletes: 0,
+      calendarCreates: 0,
+      calendarUpdates: 0,
+      calendarDeletes: 0,
     };
 
     for (const block of safeBlocks) {
@@ -1453,6 +1709,9 @@ function ActionBundleCard({
       if (block.type === 'subtasks') counts.subtasks += block.rows.length;
       if (block.type === 'deadline-links') counts.links += block.rows.length;
       if (block.type === 'delete-tasks') counts.deletes += block.rows.length;
+      if (block.type === 'calendar-create') counts.calendarCreates += block.rows.length;
+      if (block.type === 'calendar-update') counts.calendarUpdates += block.rows.length;
+      if (block.type === 'calendar-delete') counts.calendarDeletes += block.rows.length;
     }
 
     return counts;
@@ -1503,6 +1762,46 @@ function ActionBundleCard({
         }),
       );
   }, [safeBlocks, tasks]);
+
+  const calendarGroups = useMemo(() => {
+    const creates = safeBlocks
+      .filter(block => block.type === 'calendar-create')
+      .flatMap(block => block.rows.map(row => ({
+        label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${row.dueDate ? ` · ${row.dueDate}` : ''}`,
+        valid: Boolean(buildCalendarEventPayload(row, 'create')),
+      })));
+
+    const updates = safeBlocks
+      .filter(block => block.type === 'calendar-update')
+      .flatMap(block => block.rows.map(row => {
+        const matches = matchCalendarCandidates(calendarEvents, calendarCalendars, row);
+        const valid = matches.length === 1 && Boolean(buildCalendarEventPayload(row, 'update'));
+        return {
+          label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}`,
+          valid,
+          reason: valid
+            ? ''
+            : matches.length === 0
+              ? 'event not found'
+              : matches.length > 1
+                ? 'event ambiguous'
+                : 'replacement details incomplete',
+        };
+      }));
+
+    const deletes = safeBlocks
+      .filter(block => block.type === 'calendar-delete')
+      .flatMap(block => block.rows.map(row => {
+        const matches = matchCalendarCandidates(calendarEvents, calendarCalendars, row);
+        return {
+          label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}`,
+          valid: matches.length === 1,
+          reason: matches.length === 0 ? 'event not found' : matches.length > 1 ? 'event ambiguous' : '',
+        };
+      }));
+
+    return { creates, updates, deletes };
+  }, [calendarCalendars, calendarEvents, safeBlocks]);
 
   const resultSummary = useMemo(() => {
     const total = Object.values(results).reduce((sum, count) => sum + count, 0);
@@ -1558,6 +1857,9 @@ function ActionBundleCard({
               <p className="text-[11px] text-[var(--text-faint)]">
                 {[summary.tasks ? `${summary.tasks} task${summary.tasks === 1 ? '' : 's'}` : null,
                   summary.deadlines ? `${summary.deadlines} deadline${summary.deadlines === 1 ? '' : 's'}` : null,
+                  summary.calendarCreates ? `${summary.calendarCreates} event create${summary.calendarCreates === 1 ? '' : 's'}` : null,
+                  summary.calendarUpdates ? `${summary.calendarUpdates} event update${summary.calendarUpdates === 1 ? '' : 's'}` : null,
+                  summary.calendarDeletes ? `${summary.calendarDeletes} event delete${summary.calendarDeletes === 1 ? '' : 's'}` : null,
                   summary.subtasks ? `${summary.subtasks} subtask${summary.subtasks === 1 ? '' : 's'}` : null,
                   summary.links ? `${summary.links} link${summary.links === 1 ? '' : 's'}` : null,
                   summary.deletes ? `${summary.deletes} delete${summary.deletes === 1 ? '' : 's'}` : null]
@@ -1592,7 +1894,7 @@ function ActionBundleCard({
         <div className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-3">
           <p className="text-xs font-medium text-rose-300">Approve delete actions</p>
           <p className="mt-1 text-[11px] leading-relaxed text-rose-200/85">
-            This response includes deletions. We’ll only delete exact task matches and skip anything ambiguous.
+            This response includes deletions. We’ll only delete uniquely matched items and skip anything ambiguous.
           </p>
           <div className="mt-3 flex gap-2">
             <button
@@ -1641,6 +1943,27 @@ function ActionBundleCard({
               label="Deadlines"
               tone="default"
               items={safeBlocks.filter(block => block.type === 'deadlines').flatMap(block => block.rows.map(row => row.title))}
+            />
+          )}
+          {summary.calendarCreates > 0 && (
+            <ActionSection
+              label="Create events"
+              tone="default"
+              items={calendarGroups.creates.map(group => group.valid ? group.label : `${group.label} · incomplete`)}
+            />
+          )}
+          {summary.calendarUpdates > 0 && (
+            <ActionSection
+              label="Update events"
+              tone="success"
+              items={calendarGroups.updates.map(group => group.valid ? group.label : `${group.label} · ${group.reason}`)}
+            />
+          )}
+          {summary.calendarDeletes > 0 && (
+            <ActionSection
+              label="Delete events"
+              tone="warning"
+              items={calendarGroups.deletes.map(group => group.valid ? group.label : `${group.label} · ${group.reason}`)}
             />
           )}
           {summary.links > 0 && (

@@ -160,7 +160,8 @@ function CalendarChecklist({
       <button
         type="button"
         onClick={onToggleOpen}
-        className="mb-3 flex w-full items-center justify-between gap-2 text-left"
+        className="flex w-full items-center justify-between gap-2 text-left"
+        aria-expanded={open}
       >
         <span className="flex items-center gap-2">
           <CalendarDays size={16} className="text-[var(--text-muted)]" />
@@ -169,69 +170,74 @@ function CalendarChecklist({
         <ChevronDown
           size={16}
           className={cn(
-            'text-[var(--text-faint)] transition-transform',
-            open ? 'rotate-180' : 'rotate-0'
-          )}
-        />
+          'text-[var(--text-faint)] transition-transform',
+          open ? 'rotate-180' : 'rotate-0'
+        )}
+      />
       </button>
       {open && (
-        <div className="space-y-1.5">
-          {calendars.map(item => {
-            const checked = visibleCalendarIds.includes(item.id);
-            const isActive = selectedCalendarId === item.id;
-            const color = item.backgroundColor || '#818cf8';
+        <div className="mt-3 space-y-1.5">
+          {calendars.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-[var(--border-soft)] px-3 py-4 text-xs text-[var(--text-faint)]">
+              No calendars loaded yet.
+            </div>
+          ) : (
+            calendars.map(item => {
+              const checked = visibleCalendarIds.includes(item.id);
+              const isActive = selectedCalendarId === item.id;
+              const color = item.backgroundColor || '#818cf8';
 
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onToggleVisibility(item.id)}
-                className={cn(
-                  'flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left transition',
-                  checked ? 'bg-[var(--surface-muted)]' : 'hover:bg-[var(--surface-muted)]'
-                )}
-              >
-                <span
-                  className="flex h-5 w-5 items-center justify-center rounded-[6px] border-2"
-                  style={{
-                    borderColor: color,
-                    backgroundColor: checked ? color : 'transparent',
-                    color: checked ? '#111827' : 'transparent',
-                  }}
-                >
-                  <Check size={12} strokeWidth={3} />
-                </span>
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
-                <span
+              return (
+                <div
+                  key={item.id}
                   className={cn(
-                    'min-w-0 flex-1 truncate text-sm',
-                    checked ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+                    'flex items-center gap-3 rounded-2xl px-2.5 py-2 transition',
+                    checked ? 'bg-[var(--surface-muted)]' : 'hover:bg-[var(--surface-muted)]'
                   )}
                 >
-                  {item.summary}
-                  {item.primary ? ' (Primary)' : ''}
-                </span>
-                <button
-                  type="button"
-                  onClick={event => {
-                    event.stopPropagation();
-                    onChooseCalendar(item.id);
-                  }}
-                  className={cn(
-                    'rounded-full px-2 py-0.5 text-[10px] font-medium transition',
-                    isActive
-                      ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
-                      : 'bg-[var(--surface)] text-[var(--text-faint)]'
-                  )}
-                >
-                  {isActive ? 'Active' : 'Use'}
-                </button>
-              </button>
-            );
-          })}
+                  <button
+                    type="button"
+                    onClick={() => onToggleVisibility(item.id)}
+                    aria-pressed={checked}
+                    className="flex h-5 w-5 items-center justify-center rounded-[6px] border-2 transition"
+                    style={{
+                      borderColor: color,
+                      backgroundColor: checked ? color : 'transparent',
+                      color: checked ? '#111827' : 'transparent',
+                    }}
+                    title={checked ? 'Hide calendar' : 'Show calendar'}
+                  >
+                    <Check size={12} strokeWidth={3} />
+                  </button>
+                  <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                  <span
+                    className={cn(
+                      'min-w-0 flex-1 truncate text-sm',
+                      checked ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+                    )}
+                  >
+                    {item.summary}
+                    {item.primary ? ' (Primary)' : ''}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onChooseCalendar(item.id)}
+                    className={cn(
+                      'rounded-full px-2 py-0.5 text-[10px] font-medium transition',
+                      isActive
+                        ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+                        : 'bg-[var(--surface)] text-[var(--text-faint)]'
+                    )}
+                  >
+                    {isActive ? 'Active' : 'Use'}
+                  </button>
+                </div>
+              );
+            })
+          )}
         </div>
       )}
-      {isLoading && <p className="mt-2 text-xs text-[var(--text-faint)]">Loading...</p>}
+      {isLoading && <p className="mt-2 text-xs text-[var(--text-faint)]">Loading calendars...</p>}
     </div>
   );
 }

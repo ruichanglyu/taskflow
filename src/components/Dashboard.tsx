@@ -9,6 +9,15 @@ interface DashboardProps {
   deadlines?: Deadline[];
 }
 
+function SummaryPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-full border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs text-[var(--text-secondary)] shadow-sm">
+      <span className="font-medium text-[var(--text-primary)]">{value}</span>
+      <span className="ml-1.5 text-[var(--text-faint)]">{label}</span>
+    </div>
+  );
+}
+
 function StatCard({ icon, label, value, color, bg }: { icon: React.ReactNode; label: string; value: number; color: string; bg: string }) {
   return (
     <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm transition-colors hover:border-[var(--border-strong)] hover:shadow-lg">
@@ -43,6 +52,10 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
   const done = tasks.filter(t => t.status === 'done');
   const highPriority = tasks.filter(t => t.priority === 'high' && t.status !== 'done');
   const overdue = tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'done');
+  const activeTasksCount = todo.length + inProgress.length;
+  const upcomingDeadlinesCount = deadlines.length > 0
+    ? deadlines.filter(d => d.status !== 'done' && d.status !== 'missed' && new Date(d.dueDate + 'T00:00:00') >= new Date()).length
+    : tasks.filter(t => t.dueDate && t.status !== 'done' && new Date(t.dueDate) >= new Date()).length;
 
   const completionRate = tasks.length > 0 ? Math.round((done.length / tasks.length) * 100) : 0;
 
@@ -101,23 +114,33 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">
-            Dashboard
-          </h1>
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-5 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">
+              Dashboard
+            </h1>
+            <p className="max-w-2xl text-sm leading-relaxed text-[var(--text-faint)]">
+              A quick read on your current workload, course progress, and what needs attention next.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SummaryPill label="active tasks" value={`${activeTasksCount}`} />
+            <SummaryPill label="upcoming deadlines" value={`${upcomingDeadlinesCount}`} />
+            <SummaryPill label="courses" value={`${projects.length}`} />
+          </div>
         </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={<ListTodo size={22} />} label="Total Tasks" value={tasks.length} color="text-indigo-400" bg="bg-indigo-400/10" />
         <StatCard icon={<Clock size={22} />} label="In Progress" value={inProgress.length} color="text-blue-400" bg="bg-blue-400/10" />
         <StatCard icon={<CheckCircle2 size={22} />} label="Completed" value={done.length} color="text-emerald-400" bg="bg-emerald-400/10" />
         <StatCard icon={<AlertCircle size={22} />} label="Overdue" value={overdue.length} color="text-red-400" bg="bg-red-400/10" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Completion Progress */}
         <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
@@ -202,7 +225,7 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Recent Tasks */}
         <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
           <h3 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">Recent Tasks</h3>
@@ -305,19 +328,19 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
       </div>
 
       {/* Courses Overview */}
-      <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-5">
-        <div className="flex items-center gap-2 mb-4">
+      <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
           <FolderKanban size={18} className="text-indigo-400" />
           <h3 className="text-sm font-semibold text-[var(--text-primary)]">Courses Overview</h3>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map(project => {
             const projectTasks = tasks.filter(t => t.projectId === project.id);
             const projectDone = projectTasks.filter(t => t.status === 'done').length;
             const progress = projectTasks.length > 0 ? Math.round((projectDone / projectTasks.length) * 100) : 0;
 
             return (
-              <div key={project.id} className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
+              <div key={project.id} className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4 shadow-sm transition-colors hover:border-[var(--border-strong)]">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: project.color }} />
                   <h4 className="text-sm font-medium text-[var(--text-primary)] truncate">{project.name}</h4>

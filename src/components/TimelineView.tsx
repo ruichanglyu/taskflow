@@ -92,32 +92,35 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">
             <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Timeline</h1>
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Drag bars to reschedule work across the next four weeks.
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setOffsetWeeks(0)}
-            className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)]"
-          >
-            Today
-          </button>
-          <button
-            type="button"
-            onClick={() => setOffsetWeeks(w => w - 1)}
-            className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)]"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setOffsetWeeks(w => w + 1)}
-            className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)]"
-          >
-            <ChevronRight size={16} />
-          </button>
-          <span className="ml-2 rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-muted)] shadow-sm">
-            {formatShortDate(rangeStart)} — {formatShortDate(addDays(rangeEnd, -1))}
-          </span>
+            <button
+              type="button"
+              onClick={() => setOffsetWeeks(0)}
+              className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)]"
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => setOffsetWeeks(w => w - 1)}
+              className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)]"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setOffsetWeeks(w => w + 1)}
+              className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)]"
+            >
+              <ChevronRight size={16} />
+            </button>
+            <span className="whitespace-nowrap rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-muted)] shadow-sm">
+              {formatShortDate(rangeStart)} — {formatShortDate(addDays(rangeEnd, -1))}
+            </span>
           </div>
         </div>
       </div>
@@ -126,7 +129,9 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
         {/* Day headers */}
         <div className="flex border-b border-[var(--border-soft)]">
           <div className="w-56 shrink-0 border-r border-[var(--border-soft)] px-4 py-2">
-            <span className="text-xs font-medium text-[var(--text-muted)]">Task</span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-faint)]">
+              Task
+            </span>
           </div>
           <div className="flex flex-1 min-w-0">
             {days.map((day, i) => {
@@ -136,18 +141,18 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
                 <div
                   key={i}
                   className={cn(
-                'flex-1 min-w-[36px] border-r border-[var(--border-soft)] last:border-r-0 px-0.5 py-2 text-center',
+                    'flex-1 min-w-[36px] border-r border-[var(--border-soft)] last:border-r-0 px-0.5 py-2 text-center',
                     isWeekend && 'bg-[var(--surface-muted)]',
                   )}
                 >
                   <span className={cn(
-                    'text-[9px] font-medium block',
+                    'block text-[9px] font-semibold uppercase tracking-[0.18em]',
                     isToday ? 'text-[var(--accent)]' : 'text-[var(--text-faint)]'
                   )}>
                     {day.toLocaleDateString('en-US', { weekday: 'narrow' })}
                   </span>
                   <span className={cn(
-                    'text-[10px] block',
+                    'mt-1 block text-[10px]',
                     isToday ? 'text-[var(--accent)] font-bold' : 'text-[var(--text-faint)]'
                   )}>
                     {day.getDate()}
@@ -197,10 +202,10 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
                 : null;
 
               return (
-                <div key={task.id} className="flex items-center border-b border-[var(--border-soft)] transition-colors last:border-b-0 hover:bg-[var(--surface-muted)]">
-                  <div className="w-56 shrink-0 border-r border-[var(--border-soft)] px-4 py-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {project && (
+            <div key={task.id} className="flex items-center border-b border-[var(--border-soft)] transition-colors last:border-b-0 hover:bg-[var(--surface-muted)]/70">
+              <div className="w-56 shrink-0 border-r border-[var(--border-soft)] px-4 py-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  {project && (
                         <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: project.color }} />
                       )}
                       <span className="text-sm text-[var(--text-primary)] truncate">{task.title}</span>
@@ -319,10 +324,15 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
 
             {/* Tasks without dates */}
             {tasksWithoutDates.length > 0 && (
-              <div className="border-t border-[var(--border-soft)] px-4 py-3">
-                <p className="text-xs font-medium text-[var(--text-faint)] mb-2">
-                  {tasksWithoutDates.length} task{tasksWithoutDates.length !== 1 ? 's' : ''} without due dates
-                </p>
+              <div className="border-t border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-faint)]">
+                    Tasks without dates
+                  </p>
+                  <span className="rounded-full border border-[var(--border-soft)] bg-[var(--surface-muted)] px-2.5 py-1 text-[10px] font-medium text-[var(--text-muted)]">
+                    {tasksWithoutDates.length} total
+                  </span>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {tasksWithoutDates.slice(0, 10).map(t => (
                     <span key={t.id} className="rounded-full bg-[var(--surface-muted)] px-2.5 py-1 text-xs text-[var(--text-muted)]">

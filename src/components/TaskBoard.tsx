@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, ChevronDown, Search, Filter, Pencil, Repeat, MessageSquare, Target } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, Search, Filter, Pencil, Repeat, MessageSquare, Target, ListTodo, Clock3, CheckCircle2, AlertCircle } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Task, Project, Deadline, TaskStatus, Priority, Recurrence } from '../types';
 import { cn } from '../utils/cn';
@@ -179,6 +179,10 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
   const [search, setSearch] = useState('');
   const [filterPriority, setFilterPriority] = useState<Priority | 'all'>('all');
   const [filterProject, setFilterProject] = useState<string>(initialProjectFilter);
+  const totalTasks = tasks.length;
+  const openTasks = tasks.filter(task => task.status !== 'done').length;
+  const completedTasks = tasks.filter(task => task.status === 'done').length;
+  const overdueTasks = tasks.filter(task => task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'done').length;
 
   useEffect(() => {
     setFilterProject(initialProjectFilter);
@@ -204,71 +208,112 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Tasks</h1>
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-5 shadow-sm sm:px-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
+              <ListTodo size={12} />
+              Execution board
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Tasks</h1>
+              <p className="max-w-2xl text-sm leading-relaxed text-[var(--text-faint)]">
+                Drag tasks between status columns, filter by course or priority, and keep the active work in front of you.
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[420px]">
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-faint)]">Total</p>
+                <ListTodo size={14} className="text-indigo-400" />
+              </div>
+              <p className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{totalTasks}</p>
+            </div>
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-faint)]">Open</p>
+                <Clock3 size={14} className="text-blue-400" />
+              </div>
+              <p className="mt-1 text-2xl font-bold text-blue-400">{openTasks}</p>
+            </div>
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-faint)]">Done</p>
+                <CheckCircle2 size={14} className="text-emerald-400" />
+              </div>
+              <p className="mt-1 text-2xl font-bold text-emerald-400">{completedTasks}</p>
+            </div>
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-faint)]">Overdue</p>
+                <AlertCircle size={14} className="text-red-400" />
+              </div>
+              <p className="mt-1 text-2xl font-bold text-red-400">{overdueTasks}</p>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
-          <input
-            type="text"
-            placeholder="Search tasks..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] py-2.5 pr-4 pl-9 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <div className="relative">
-            <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
-            <select
-              value={filterPriority}
-              onChange={e => setFilterPriority(e.target.value as Priority | 'all')}
-              className="cursor-pointer appearance-none rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] py-2.5 pr-8 pl-8 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
-            >
-              <option value="all">All Priorities</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
+      <div className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
+            <input
+              type="text"
+              placeholder="Search tasks by title or notes..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] py-3 pr-4 pl-9 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+            />
           </div>
+          <div className="flex flex-wrap gap-2">
+            <div className="relative">
+              <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
+              <select
+                value={filterPriority}
+                onChange={e => setFilterPriority(e.target.value as Priority | 'all')}
+                className="cursor-pointer appearance-none rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] py-3 pr-8 pl-8 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+              >
+                <option value="all">All Priorities</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
             <select
               value={filterProject}
               onChange={e => setFilterProject(e.target.value)}
-            className="cursor-pointer appearance-none rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2.5 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+              className="cursor-pointer appearance-none rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-3 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
             >
-            <option value="all">All Courses</option>
-            {projects.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] shadow-lg transition-colors"
-            style={{ backgroundColor: 'var(--accent-strong)', boxShadow: '0 16px 34px var(--glow-accent)' }}
-          >
-            <Plus size={16} /> New Task
-          </button>
+              <option value="all">All Courses</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium text-[var(--accent-contrast)] shadow-lg transition-colors"
+              style={{ backgroundColor: 'var(--accent-strong)', boxShadow: '0 16px 34px var(--glow-accent)' }}
+            >
+              <Plus size={16} /> New Task
+            </button>
+          </div>
         </div>
-      </div>
       </div>
 
       {/* Kanban Columns with Drag & Drop */}
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {statusColumns.map(col => {
             const columnTasks = filteredTasks.filter(t => t.status === col.status);
             return (
-              <div key={col.status} className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
-                <div className="mb-4 flex items-center gap-2">
-                  <div className={cn('w-2.5 h-2.5 rounded-full', col.dotColor)} />
-                  <h3 className="text-sm font-semibold text-[var(--text-secondary)]">{col.label}</h3>
-                  <span className="ml-auto rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-xs text-[var(--text-faint)]">{columnTasks.length}</span>
+              <div key={col.status} className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm transition-colors hover:border-[var(--border-strong)]">
+                <div className="mb-4 flex items-center gap-2 border-b border-[var(--border-soft)] pb-3">
+                  <div className={cn('h-2.5 w-2.5 rounded-full', col.dotColor)} />
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">{col.label}</h3>
+                  <span className="ml-auto rounded-full bg-[var(--surface-muted)] px-2.5 py-0.5 text-xs font-medium text-[var(--text-faint)]">{columnTasks.length}</span>
                 </div>
                 <Droppable droppableId={col.status}>
                   {(provided, snapshot) => (
@@ -304,8 +349,8 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
                       ))}
                       {provided.placeholder}
                       {columnTasks.length === 0 && !snapshot.isDraggingOver && (
-                        <div className="flex h-24 items-center justify-center rounded-lg border-2 border-dashed border-[var(--border-soft)]">
-                          <p className="text-xs text-[var(--text-faint)]">No tasks</p>
+                        <div className="flex h-24 items-center justify-center rounded-xl border-2 border-dashed border-[var(--border-soft)] bg-[var(--surface-muted)]/40">
+                          <p className="text-xs text-[var(--text-faint)]">No tasks here yet</p>
                         </div>
                       )}
                     </div>

@@ -347,6 +347,7 @@ async function streamGemini(
   const decoder = new TextDecoder();
   let buffer = '';
   let accumulated = '';
+  let isThinking = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -365,9 +366,19 @@ async function streamGemini(
         const parts = parsed?.candidates?.[0]?.content?.parts;
         if (Array.isArray(parts)) {
           for (const part of parts) {
-            // Skip thinking/reasoning parts from thinking models
-            if (part.thought) continue;
+            if (part.thought) {
+              // Show thinking indicator while model is reasoning
+              if (!isThinking && !accumulated) {
+                isThinking = true;
+                onUpdate('*Thinking...*');
+              }
+              continue;
+            }
             if (part.text) {
+              if (isThinking) {
+                isThinking = false;
+                accumulated = '';  // Clear the thinking indicator
+              }
               accumulated += part.text;
               onUpdate(accumulated);
             }
@@ -681,10 +692,15 @@ export function useAI() {
     try {
       abortRef.current = new AbortController();
       const systemPrompt = buildSystemPrompt(appData);
+      // Send last 20 messages to keep payload size manageable
+      const recentHistory = [...thread.messages, userMsg];
+      const trimmedHistory = recentHistory.length > 20
+        ? recentHistory.slice(-20)
+        : recentHistory;
       await streamGemini(
         key,
         systemPrompt,
-        [...thread.messages, userMsg],
+        trimmedHistory,
         updateContent,
         abortRef.current.signal,
       );

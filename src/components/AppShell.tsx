@@ -22,6 +22,7 @@ import { supabase } from '../lib/supabase';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import { ProfileModal } from './ProfileModal';
 import { AIPanel } from './AIPanel';
+import { migrateLegacyAIData } from '../hooks/useAI';
 
 interface AppShellProps {
   user: User;
@@ -66,6 +67,8 @@ export function AppShell({ user }: AppShellProps) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  // Migrate legacy AI data (global keys/chats) to this user on first load
+  useState(() => { migrateLegacyAIData(user.id); });
   const store = useStore(user.id);
   const deadlineStore = useDeadlines(user.id);
   const canvasStore = useCanvas(user.id, store.projects);

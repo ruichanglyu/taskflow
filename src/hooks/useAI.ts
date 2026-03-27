@@ -60,8 +60,7 @@ function activeChatStorage(userId: string) { return `taskflow_ai_active_chat_${u
 
 export function getAPIKey(userId: string): string | null {
   try {
-    // Try user-scoped key first, fall back to legacy global key
-    return localStorage.getItem(keyStorage(userId)) ?? localStorage.getItem('taskflow_ai_key');
+    return localStorage.getItem(keyStorage(userId));
   } catch {
     return null;
   }
@@ -69,13 +68,36 @@ export function getAPIKey(userId: string): string | null {
 
 export function setAPIKey(userId: string, key: string) {
   localStorage.setItem(keyStorage(userId), key);
-  // Clean up legacy global key if it exists
-  localStorage.removeItem('taskflow_ai_key');
 }
 
 export function removeAPIKey(userId: string) {
   localStorage.removeItem(keyStorage(userId));
-  localStorage.removeItem('taskflow_ai_key');
+}
+
+/** One-time migration: move legacy global data to the current user. Call once on app load. */
+export function migrateLegacyAIData(userId: string) {
+  try {
+    // Migrate API key
+    const legacyKey = localStorage.getItem('taskflow_ai_key');
+    if (legacyKey && !localStorage.getItem(keyStorage(userId))) {
+      localStorage.setItem(keyStorage(userId), legacyKey);
+    }
+    localStorage.removeItem('taskflow_ai_key');
+
+    // Migrate chat history
+    const legacyChats = localStorage.getItem('taskflow_ai_chats');
+    if (legacyChats && !localStorage.getItem(chatStorage(userId))) {
+      localStorage.setItem(chatStorage(userId), legacyChats);
+    }
+    localStorage.removeItem('taskflow_ai_chats');
+
+    // Migrate active chat
+    const legacyActive = localStorage.getItem('taskflow_ai_active_chat');
+    if (legacyActive && !localStorage.getItem(activeChatStorage(userId))) {
+      localStorage.setItem(activeChatStorage(userId), legacyActive);
+    }
+    localStorage.removeItem('taskflow_ai_active_chat');
+  } catch { /* ignore */ }
 }
 
 
@@ -438,8 +460,7 @@ function makeNewThread(title = 'New chat'): ChatThread {
 
 function loadSavedThreads(userId: string): ChatThread[] {
   try {
-    // Try user-scoped storage first, fall back to legacy global storage
-    const saved = localStorage.getItem(chatStorage(userId)) ?? localStorage.getItem('taskflow_ai_chats');
+    const saved = localStorage.getItem(chatStorage(userId));
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
@@ -500,8 +521,6 @@ function saveThreads(userId: string, threads: ChatThread[]) {
   try {
     const toSave = threads.map(sanitizeThread);
     localStorage.setItem(chatStorage(userId), JSON.stringify(toSave));
-    // Clean up legacy global storage
-    localStorage.removeItem('taskflow_ai_chats');
   } catch { /* storage full — ignore */ }
 }
 
@@ -511,7 +530,7 @@ export function useAI(userId: string) {
     const initialThreads = loadSavedThreads(userId);
     let initialChatId = initialThreads[0]?.id ?? makeNewThread().id;
     try {
-      const saved = localStorage.getItem(activeChatStorage(userId)) ?? localStorage.getItem('taskflow_ai_active_chat');
+      const saved = localStorage.getItem(activeChatStorage(userId));
       if (saved && initialThreads.some(thread => thread.id === saved)) {
         initialChatId = saved;
       }
@@ -562,7 +581,6 @@ export function useAI(userId: string) {
       saveThreads(userId, threads);
       localStorage.setItem(activeChatStorage(userId), activeChatId);
       localStorage.removeItem(LEGACY_CHAT_STORAGE);
-      localStorage.removeItem('taskflow_ai_active_chat');
     }
   }, [threads, activeChatId, isStreaming, userId]);
 

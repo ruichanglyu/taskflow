@@ -314,7 +314,11 @@ async function streamGemini(
     body: JSON.stringify({
       system_instruction: { parts: [{ text: systemPrompt }] },
       contents,
-      generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 8192,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     }),
     signal,
   });
@@ -347,7 +351,6 @@ async function streamGemini(
   const decoder = new TextDecoder();
   let buffer = '';
   let accumulated = '';
-  let isThinking = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -366,19 +369,9 @@ async function streamGemini(
         const parts = parsed?.candidates?.[0]?.content?.parts;
         if (Array.isArray(parts)) {
           for (const part of parts) {
-            if (part.thought) {
-              // Show thinking indicator while model is reasoning
-              if (!isThinking && !accumulated) {
-                isThinking = true;
-                onUpdate('*Thinking...*');
-              }
-              continue;
-            }
+            // Skip thinking/reasoning parts from thinking models
+            if (part.thought) continue;
             if (part.text) {
-              if (isThinking) {
-                isThinking = false;
-                accumulated = '';  // Clear the thinking indicator
-              }
               accumulated += part.text;
               onUpdate(accumulated);
             }
@@ -386,6 +379,11 @@ async function streamGemini(
         }
       } catch { /* skip malformed lines */ }
     }
+  }
+
+  // If model finished but produced no text (only thought tokens), show a fallback
+  if (!accumulated) {
+    onUpdate('I wasn\'t able to generate a response. Please try again.');
   }
 }
 
@@ -657,7 +655,7 @@ export function useAI() {
     const assistantMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'assistant',
-      content: '',
+      content: '*Thinking...*',
       timestamp: Date.now(),
     };
 

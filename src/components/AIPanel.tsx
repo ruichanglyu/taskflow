@@ -898,22 +898,22 @@ export function AIPanel({
               )}
             </div>
 
-            {/* Bottom branding */}
-            <div className="border-t border-[var(--border-soft)] px-1.5 py-2">
+            {/* Bottom branding — aligned with input bar */}
+            <div className="border-t border-[var(--border-soft)] px-3 py-3">
               {chatSidebarCollapsed ? (
                 <div className="flex items-center justify-center" title="AI Assistant · Powered by Gemini">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ backgroundImage: 'var(--sidebar-gradient)' }}>
-                    <Sparkles size={12} className="text-white" />
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl" style={{ backgroundImage: 'var(--sidebar-gradient)' }}>
+                    <Sparkles size={13} className="text-white" />
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 px-1">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ backgroundImage: 'var(--sidebar-gradient)' }}>
-                    <Sparkles size={12} className="text-white" />
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl" style={{ backgroundImage: 'var(--sidebar-gradient)' }}>
+                    <Sparkles size={13} className="text-white" />
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-[11px] font-medium text-[var(--text-primary)]">AI Assistant</p>
-                    <p className="truncate text-[9px] text-[var(--text-faint)]">Powered by Gemini</p>
+                    <p className="truncate text-xs font-medium text-[var(--text-primary)]">AI Assistant</p>
+                    <p className="truncate text-[10px] text-[var(--text-faint)]">Powered by Gemini</p>
                   </div>
                 </div>
               )}

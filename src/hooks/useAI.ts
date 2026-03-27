@@ -87,6 +87,10 @@ function buildSystemPrompt(data: {
 
   const activeTasks = data.tasks.filter(t => t.status !== 'done');
   const doneTasks = data.tasks.filter(t => t.status === 'done');
+  const pastDeadlines = data.deadlines
+    .filter(d => d.dueDate < today)
+    .sort((a, b) => b.dueDate.localeCompare(a.dueDate))
+    .slice(0, 20);
   const upcomingDeadlines = data.deadlines
     .filter(d => d.dueDate >= today && d.status !== 'done')
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
@@ -102,6 +106,13 @@ function buildSystemPrompt(data: {
 
   const deadlinesSummary = upcomingDeadlines.length > 0
     ? upcomingDeadlines.map(d => {
+        const proj = d.projectId ? data.projects.find(p => p.id === d.projectId)?.name : null;
+        return `- ${d.title}${proj ? ` [${proj}]` : ''} — ${d.dueDate}${d.dueTime ? ' ' + d.dueTime : ''} (${d.type}) [${d.status}]`;
+      }).join('\n')
+    : '(none)';
+
+  const pastDeadlinesSummary = pastDeadlines.length > 0
+    ? pastDeadlines.map(d => {
         const proj = d.projectId ? data.projects.find(p => p.id === d.projectId)?.name : null;
         return `- ${d.title}${proj ? ` [${proj}]` : ''} — ${d.dueDate}${d.dueTime ? ' ' + d.dueTime : ''} (${d.type}) [${d.status}]`;
       }).join('\n')
@@ -134,6 +145,9 @@ ${tasksSummary}
 
 UPCOMING DEADLINES (next 20):
 ${deadlinesSummary}
+
+PAST DEADLINES (most recent 20):
+${pastDeadlinesSummary}
 
 ACTIVE GYM PLAN:
 ${gymSummary}

@@ -2252,7 +2252,7 @@ function ActionBundleCard({
   importedBlocks: Set<string>;
   onImport: (block: ImportBlock, key: string) => Promise<number>;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const [applying, setApplying] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -2290,6 +2290,7 @@ function ActionBundleCard({
   const summary = useMemo(() => {
     const counts = {
       tasks: 0,
+      updates: 0,
       deadlines: 0,
       subtasks: 0,
       links: 0,
@@ -2301,6 +2302,7 @@ function ActionBundleCard({
 
     for (const block of safeBlocks) {
       if (block.type === 'tasks') counts.tasks += block.rows.length;
+      if (block.type === 'update-tasks') counts.updates += block.rows.length;
       if (block.type === 'deadlines') counts.deadlines += block.rows.length;
       if (block.type === 'subtasks') counts.subtasks += block.rows.length;
       if (block.type === 'deadline-links') counts.links += block.rows.length;
@@ -2436,8 +2438,8 @@ function ActionBundleCard({
       : 'Add';
 
   return (
-    <div className="rounded-2xl border border-[var(--accent)]/28 bg-[var(--accent-soft)]/25 p-3">
-      <div className="flex items-start justify-between gap-3">
+    <div className="rounded-xl border border-[var(--accent)]/28 bg-[var(--accent-soft)]/25 p-2.5">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <div className={cn(
@@ -2452,6 +2454,7 @@ function ActionBundleCard({
               </p>
               <p className="text-[11px] text-[var(--text-faint)]">
                 {[summary.tasks ? `${summary.tasks} task${summary.tasks === 1 ? '' : 's'}` : null,
+                  summary.updates ? `${summary.updates} update${summary.updates === 1 ? '' : 's'}` : null,
                   summary.deadlines ? `${summary.deadlines} deadline${summary.deadlines === 1 ? '' : 's'}` : null,
                   summary.calendarCreates ? `${summary.calendarCreates} event create${summary.calendarCreates === 1 ? '' : 's'}` : null,
                   summary.calendarUpdates ? `${summary.calendarUpdates} event update${summary.calendarUpdates === 1 ? '' : 's'}` : null,
@@ -2512,19 +2515,41 @@ function ActionBundleCard({
 
       <button
         onClick={() => setExpanded(prev => !prev)}
-        className="mt-2 flex items-center gap-1 text-[10px] text-[var(--text-faint)] hover:text-[var(--text-muted)]"
+        className="mt-1.5 flex items-center gap-1 text-[10px] text-[var(--text-faint)] hover:text-[var(--text-muted)]"
       >
         <ChevronDown size={12} className={cn('transition', expanded && 'rotate-180')} />
-        {expanded ? 'Hide details' : 'Preview'}
+        {expanded ? 'Hide details' : 'Show details'}
       </button>
 
       {expanded && (
-        <div className="mt-3 space-y-3">
+        <div className="mt-2 space-y-2">
           {summary.tasks > 0 && (
             <ActionSection
               label="Tasks"
               tone="default"
-              items={safeBlocks.filter(block => block.type === 'tasks').flatMap(block => block.rows.map(row => row.title))}
+              items={safeBlocks.filter(block => block.type === 'tasks').flatMap(block => block.rows.map(row => {
+                const parts = [row.title];
+                if (row.dueDate) parts.push(`due ${row.dueDate}`);
+                if (row.priority && row.priority !== 'medium') parts.push(row.priority);
+                if (row.status && row.status !== 'todo') parts.push(row.status);
+                if (row.course) parts.push(row.course);
+                return parts.join(' · ');
+              }))}
+            />
+          )}
+          {summary.updates > 0 && (
+            <ActionSection
+              label="Updates"
+              tone="success"
+              items={safeBlocks.filter(block => block.type === 'update-tasks').flatMap(block => block.rows.map(row => {
+                const changes: string[] = [];
+                if (row.dueDate) changes.push(`due ${row.dueDate}`);
+                if (row.priority) changes.push(`priority: ${row.priority}`);
+                if (row.status) changes.push(`status: ${row.status}`);
+                if (row.description) changes.push('description updated');
+                if (row.recurrence) changes.push(`repeat: ${row.recurrence}`);
+                return changes.length > 0 ? `${row.title} → ${changes.join(', ')}` : row.title;
+              }))}
             />
           )}
           {summary.subtasks > 0 && (
@@ -2599,9 +2624,9 @@ function ActionSection({
         : 'border-[var(--border-soft)] bg-[var(--surface)]/80';
 
   return (
-    <div className={cn('rounded-xl border px-3 py-3', toneClasses)}>
+    <div className={cn('rounded-lg border px-2.5 py-2', toneClasses)}>
       <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[var(--text-faint)]">{label}</p>
-      <div className="mt-2 space-y-1.5 text-[11px] text-[var(--text-primary)]">
+      <div className="mt-1.5 space-y-1 text-[11px] text-[var(--text-primary)]">
         {items.slice(0, 6).map(item => (
           <p key={item}>{item}</p>
         ))}

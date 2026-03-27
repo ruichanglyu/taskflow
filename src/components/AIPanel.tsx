@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil } from 'lucide-react';
+import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ImageAttachment, type ChatThread } from '../hooks/useAI';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus } from '../types';
@@ -609,7 +609,7 @@ export function AIPanel({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">AI Assistant</h3>
-              <p className="text-[10px] text-[var(--text-faint)]">Powered by Gemini · {currentChat.title}</p>
+              <p className="text-[10px] text-[var(--text-faint)]">Powered by Gemini</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -695,42 +695,70 @@ export function AIPanel({
               chatSidebarCollapsed ? 'overflow-hidden' : 'overflow-visible',
             )}
             style={{
-              width: chatSidebarCollapsed ? 56 : chatSidebarWidth,
-              minWidth: chatSidebarCollapsed ? 56 : chatSidebarWidth,
-              maxWidth: chatSidebarCollapsed ? 56 : chatSidebarWidth,
+              width: chatSidebarCollapsed ? 44 : chatSidebarWidth,
+              minWidth: chatSidebarCollapsed ? 44 : chatSidebarWidth,
+              maxWidth: chatSidebarCollapsed ? 44 : chatSidebarWidth,
             }}
           >
-            {/* New session button */}
-            <div className="border-b border-[var(--border-soft)] px-2 py-2">
+            {/* Top actions */}
+            <div className="flex flex-col gap-0.5 px-1.5 py-2">
               {chatSidebarCollapsed ? (
-                <button
-                  onClick={toggleChatSidebar}
-                  className="flex h-8 w-full items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
-                  title="Expand chats"
-                >
-                  <ChevronDown size={14} className="-rotate-90" />
-                </button>
-              ) : (
-                <div className="flex items-center gap-1">
+                <>
                   <button
                     onClick={handleCreateChat}
-                    className="flex flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
+                    className="flex h-8 w-full items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
+                    title="New session"
                   >
-                    <Plus size={14} />
-                    <span>New session</span>
+                    <Plus size={16} />
+                  </button>
+                  <button
+                    onClick={() => { toggleChatSidebar(); }}
+                    className="flex h-8 w-full items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
+                    title="Search chats"
+                  >
+                    <Search size={16} />
                   </button>
                   <button
                     onClick={toggleChatSidebar}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+                    className="flex h-8 w-full items-center justify-center rounded-lg text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+                    title="Expand sidebar"
+                  >
+                    <PanelLeftOpen size={16} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={handleCreateChat}
+                    className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-xs text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
+                  >
+                    <Plus size={16} className="shrink-0" />
+                    <span>New session</span>
+                  </button>
+                  <button
+                    onClick={() => {/* TODO: search */}}
+                    className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-xs text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
+                  >
+                    <Search size={16} className="shrink-0" />
+                    <span>Search</span>
+                  </button>
+                  <button
+                    onClick={toggleChatSidebar}
+                    className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-xs text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
                     title="Collapse sidebar"
                   >
-                    <ChevronDown size={14} className="rotate-90" />
+                    <PanelLeftClose size={16} className="shrink-0" />
+                    <span>Collapse</span>
                   </button>
-                </div>
+                </>
               )}
             </div>
+
+            {/* Divider */}
+            <div className="mx-2 border-t border-[var(--border-soft)]" />
+
             {/* Chat list */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
+            <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5">
               {chatSidebarCollapsed ? (
                 <div className="space-y-0.5">
                   {threads.map(chat => {
@@ -744,17 +772,18 @@ export function AIPanel({
                           setPanelError(null);
                           cancelRenameChat();
                           setPendingDeleteChat(null);
+                          toggleChatSidebar();
                           requestAnimationFrame(() => inputRef.current?.focus());
                         }}
                         className={cn(
-                          'flex h-8 w-full items-center justify-center rounded-lg text-xs font-medium transition',
+                          'flex h-8 w-full items-center justify-center rounded-lg text-[11px] font-medium transition',
                           active
                             ? 'bg-[var(--accent-soft)]/30 text-[var(--accent)]'
                             : 'text-[var(--text-secondary)] hover:bg-[var(--surface-muted)]',
                         )}
                         title={chat.title}
                       >
-                        {chat.title.slice(0, 1).toUpperCase() || '•'}
+                        {chat.title.slice(0, 2)}
                       </button>
                     );
                   })}

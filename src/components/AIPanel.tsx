@@ -745,12 +745,18 @@ function matchTaskCandidates(tasks: Task[], rawTitle: string) {
 
 function matchDeadlineCandidates(deadlines: Deadline[], projects: Project[], rawTitle: string, course?: string) {
   const normalizedTitle = normalizeDeleteCandidate(rawTitle);
+  const strippedTitle = normalizeDeleteCandidate(stripTrailingCourseTag(rawTitle));
   const normalizedCourse = course ? normalizeDeleteCandidate(course) : '';
 
   return deadlines.filter(deadline => {
     const deadlineTitle = normalizeDeleteCandidate(deadline.title);
     const strippedDeadlineTitle = normalizeDeleteCandidate(stripTrailingCourseTag(deadline.title));
-    if (deadlineTitle !== normalizedTitle && strippedDeadlineTitle !== normalizedTitle) {
+    if (
+      deadlineTitle !== normalizedTitle &&
+      strippedDeadlineTitle !== normalizedTitle &&
+      deadlineTitle !== strippedTitle &&
+      strippedDeadlineTitle !== strippedTitle
+    ) {
       return false;
     }
 

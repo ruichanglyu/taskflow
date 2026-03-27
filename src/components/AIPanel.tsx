@@ -535,7 +535,7 @@ function MessageBubble({
 
             if (segment.type === 'import') {
               const block = segment.block!;
-              const blockKey = `${block.type}-${block.raw.slice(0, 50)}`;
+              const blockKey = `${message.id}:${i}`;
               const isImported = importedBlocks.has(blockKey);
 
               return (

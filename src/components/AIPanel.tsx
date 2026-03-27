@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown } from 'lucide-react';
+import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock } from '../hooks/useAI';
+import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ImageAttachment } from '../hooks/useAI';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus } from '../types';
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
@@ -34,8 +34,10 @@ export function AIPanel({
   const [hasKey, setHasKey] = useState(!!getAPIKey());
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [importedBlocks, setImportedBlocks] = useState<Set<string>>(new Set());
+  const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -50,11 +52,44 @@ export function AIPanel({
   }, [open, hasKey]);
 
   const handleSend = useCallback(async () => {
-    if (!input.trim() || isStreaming) return;
-    const msg = input.trim();
+    if ((!input.trim() && !pendingImages.length) || isStreaming) return;
+    const msg = input.trim() || (pendingImages.length ? 'What do you see in this image?' : '');
+    const images = pendingImages.length ? [...pendingImages] : undefined;
     setInput('');
-    await sendMessage(msg, { tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises });
-  }, [input, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises]);
+    setPendingImages([]);
+    await sendMessage(msg, { tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises }, images);
+  }, [input, pendingImages, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises]);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      if (!file.type.startsWith('image/')) return;
+      // Limit to 4MB per image (base64 will be ~33% larger)
+      if (file.size > 4 * 1024 * 1024) {
+        setError('Image too large (max 4MB). Try a smaller image or screenshot.');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        // Extract base64 data and mime type
+        const [header, base64] = dataUrl.split(',');
+        const mimeType = header.match(/data:(.*?);/)?.[1] ?? 'image/png';
+        setPendingImages(prev => [...prev, { base64, mimeType, preview: dataUrl }]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Reset file input so same file can be selected again
+    e.target.value = '';
+  };
+
+  const removePendingImage = (index: number) => {
+    setPendingImages(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -258,7 +293,45 @@ export function AIPanel({
 
         {/* Input */}
         <div className="border-t border-[var(--border-soft)] px-4 py-3">
+          {/* Pending image previews */}
+          {pendingImages.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {pendingImages.map((img, i) => (
+                <div key={i} className="group relative">
+                  <img
+                    src={img.preview}
+                    alt="Pending upload"
+                    className="h-16 w-16 rounded-lg border border-[var(--border-soft)] object-cover"
+                  />
+                  <button
+                    onClick={() => removePendingImage(i)}
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] text-white opacity-0 shadow transition group-hover:opacity-100"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex items-end gap-2">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageSelect}
+              className="hidden"
+            />
+            {/* Image upload button */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!hasKey || isStreaming}
+              className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl border border-[var(--border-soft)] text-[var(--text-faint)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
+              title="Attach image"
+            >
+              <ImagePlus size={16} />
+            </button>
             <textarea
               ref={inputRef}
               value={input}
@@ -285,7 +358,7 @@ export function AIPanel({
             ) : (
               <button
                 onClick={handleSend}
-                disabled={!input.trim() || !hasKey}
+                disabled={(!input.trim() && !pendingImages.length) || !hasKey}
                 className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl text-[var(--accent-contrast)] transition disabled:opacity-40"
                 style={{ backgroundColor: 'var(--accent-strong)' }}
               >
@@ -350,8 +423,30 @@ function MessageBubble({
   if (message.role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-[var(--accent)] px-3.5 py-2 text-sm text-[var(--accent-contrast)]">
-          <p className="whitespace-pre-wrap">{message.content}</p>
+        <div className="max-w-[85%] space-y-2">
+          {message.images?.length ? (
+            <div className="flex flex-wrap justify-end gap-1.5">
+              {message.images.map((img, i) =>
+                img.preview ? (
+                  <img
+                    key={i}
+                    src={img.preview}
+                    alt="Uploaded"
+                    className="max-h-48 max-w-full rounded-xl border border-white/10 object-contain"
+                  />
+                ) : (
+                  <div key={i} className="flex h-16 w-20 items-center justify-center rounded-xl border border-white/10 bg-[var(--surface-muted)]">
+                    <ImagePlus size={14} className="text-[var(--text-faint)]" />
+                  </div>
+                )
+              )}
+            </div>
+          ) : null}
+          {message.content && (
+            <div className="rounded-2xl rounded-br-md bg-[var(--accent)] px-3.5 py-2 text-sm text-[var(--accent-contrast)]">
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            </div>
+          )}
         </div>
       </div>
     );

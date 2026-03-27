@@ -1,11 +1,18 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise } from '../types';
 
+export interface ImageAttachment {
+  base64: string;      // data without prefix
+  mimeType: string;    // e.g. "image/png"
+  preview: string;     // data URL for display
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
+  images?: ImageAttachment[];
 }
 
 export interface ImportBlock {
@@ -206,10 +213,18 @@ async function streamGemini(
   onUpdate: (text: string) => void,
   signal: AbortSignal,
 ) {
-  const contents = history.map(m => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
-  }));
+  const contents = history.map(m => {
+    const parts: Record<string, unknown>[] = [];
+    // Add image parts first (if any)
+    if (m.images?.length) {
+      for (const img of m.images) {
+        parts.push({ inline_data: { mime_type: img.mimeType, data: img.base64 } });
+      }
+    }
+    // Add text part
+    if (m.content) parts.push({ text: m.content });
+    return { role: m.role === 'assistant' ? 'model' : 'user', parts };
+  });
 
   const url = `${GEMINI_API_URL}/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${key}`;
   const res = await fetch(url, {
@@ -287,7 +302,19 @@ function loadSavedMessages(): ChatMessage[] {
 
 function saveMessages(messages: ChatMessage[]) {
   try {
-    localStorage.setItem(CHAT_STORAGE, JSON.stringify(messages));
+    // Strip base64 image data before saving — keep a placeholder so we know images were attached
+    const toSave = messages.map(m => {
+      if (!m.images?.length) return m;
+      return {
+        ...m,
+        images: m.images.map(img => ({
+          base64: '',           // don't persist large base64
+          mimeType: img.mimeType,
+          preview: '',          // don't persist data URLs either
+        })),
+      };
+    });
+    localStorage.setItem(CHAT_STORAGE, JSON.stringify(toSave));
   } catch { /* storage full — ignore */ }
 }
 
@@ -304,7 +331,8 @@ export function useAI() {
 
   const sendMessage = useCallback(async (
     userMessage: string,
-    appData: Parameters<typeof buildSystemPrompt>[0]
+    appData: Parameters<typeof buildSystemPrompt>[0],
+    images?: ImageAttachment[],
   ) => {
     const key = getAPIKey();
     if (!key) {
@@ -317,6 +345,7 @@ export function useAI() {
       role: 'user',
       content: userMessage,
       timestamp: Date.now(),
+      images: images?.length ? images : undefined,
     };
 
     setMessages(prev => [...prev, userMsg]);

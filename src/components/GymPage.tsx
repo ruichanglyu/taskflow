@@ -212,6 +212,9 @@ interface GymPageProps {
 
 export function GymPage(props: GymPageProps) {
   const { activeSession } = props;
+  const planCount = props.plans.length;
+  const workoutDayCount = props.dayTemplates.length;
+  const exerciseCount = props.exercises.length;
 
   const [tab, setTab] = useState<GymTab>(activeSession ? 'workout' : 'plan');
 
@@ -229,9 +232,16 @@ export function GymPage(props: GymPageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Gym</h1>
+      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Gym</h1>
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:min-w-[280px]">
+            <StatPill label="Plans" value={planCount.toString()} />
+            <StatPill label="Days" value={workoutDayCount.toString()} />
+            <StatPill label="Exercises" value={exerciseCount.toString()} />
+          </div>
         </div>
       </div>
 
@@ -1854,7 +1864,7 @@ function WorkoutTab(props: GymPageProps) {
   return (
     <div className="space-y-4">
       {/* Session header */}
-      <div className="rounded-[24px] border border-emerald-400/20 bg-[linear-gradient(135deg,rgba(16,185,129,0.16),rgba(14,165,233,0.08)_60%,rgba(15,23,42,0.02)_100%)] p-4 shadow-sm">
+      <div className="overflow-hidden rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2">

@@ -95,27 +95,41 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
       </div>
 
       <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search courses..."
-            className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] py-2.5 pl-9 pr-4 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-          />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search courses..."
+              className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] py-2.5 pl-9 pr-4 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+            />
+          </div>
+          <select
+            value={sort}
+            onChange={e => setSort(e.target.value as CourseSort)}
+            className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+          >
+            <option value="urgency">Sort by urgency</option>
+            <option value="alphabetical">Sort alphabetically</option>
+            <option value="next-deadline">Sort by next deadline</option>
+          </select>
         </div>
-        <select
-          value={sort}
-          onChange={e => setSort(e.target.value as CourseSort)}
-          className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
-        >
-          <option value="urgency">Sort by urgency</option>
-          <option value="alphabetical">Sort alphabetically</option>
-          <option value="next-deadline">Sort by next deadline</option>
-        </select>
-      </div>
+        <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[var(--text-faint)]">
+          <span>
+            Showing {visibleProjects.length} of {projects.length} courses
+          </span>
+          {search.trim() && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="rounded-full border border-[var(--border-soft)] px-2.5 py-1 font-medium transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+            >
+              Clear search
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Add Project Form */}
@@ -129,12 +143,12 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
             autoFocus
             className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
           />
-          <input
-            type="text"
+          <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
             placeholder="Brief description"
-            className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+            rows={3}
+            className="w-full resize-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
           />
           <div className="flex gap-2">
             <button
@@ -172,12 +186,20 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
           const nextDeadline = upcomingDeadlines[0] ?? null;
 
           return (
-            <button
+            <div
               key={project.id}
-              type="button"
               onClick={() => setSelectedProjectId(project.id)}
-              className="group rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 text-left shadow-sm transition-all hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)] hover:shadow-lg"
+              onKeyDown={event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setSelectedProjectId(project.id);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              className="group relative cursor-pointer rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 text-left shadow-sm transition-all hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)] hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20"
             >
+              <div className="absolute inset-x-0 top-0 h-1.5 rounded-t-[24px]" style={{ backgroundColor: project.color }} />
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm" style={{ backgroundColor: project.color + '20' }}>
@@ -189,11 +211,25 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={e => { e.stopPropagation(); setConfirmDeleteProject(project); }}
                   className="p-1 text-[var(--text-faint)] opacity-100 transition-all hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
+                  aria-label={`Delete ${project.name}`}
                 >
                   <Trash2 size={14} />
                 </button>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-[var(--text-faint)]">
+                <span className="rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-1">
+                  {projectTasks.length} tasks
+                </span>
+                <span className="rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-1">
+                  {activeDeadlines.length} active deadlines
+                </span>
+                <span className="rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-1">
+                  {projectDeadlines.length} total deadlines
+                </span>
               </div>
 
               <div className="mt-5">
@@ -256,7 +292,7 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
               <p className="mt-3 text-[10px] text-[var(--text-faint)]">
                 Created {new Date(project.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </p>
-            </button>
+            </div>
           );
         })}
 

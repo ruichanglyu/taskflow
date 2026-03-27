@@ -210,17 +210,8 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
     <div className="space-y-6">
       <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-5 shadow-sm sm:px-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--text-faint)]">
-              <ListTodo size={12} />
-              Execution board
-            </div>
-            <div className="space-y-1">
-              <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Tasks</h1>
-              <p className="max-w-2xl text-sm leading-relaxed text-[var(--text-faint)]">
-                Drag tasks between status columns, filter by course or priority, and keep the active work in front of you.
-              </p>
-            </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Tasks</h1>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[420px]">
             <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3">

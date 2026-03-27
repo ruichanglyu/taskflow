@@ -495,9 +495,10 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
+              type="button"
               onClick={() => setShowFilters(f => !f)}
               className={cn(
-                'flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-xs font-medium shadow-sm transition',
+                'flex h-10 items-center gap-1.5 rounded-2xl border px-3 text-xs font-medium shadow-sm transition',
                 showFilters || activeFilters > 0
                   ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--surface)]'
                   : 'border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]'
@@ -507,23 +508,26 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
               Filters{activeFilters > 0 && ` (${activeFilters})`}
             </button>
             <button
+              type="button"
               onClick={() => setShowImportModal(true)}
-              className="flex items-center gap-1.5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+              className="flex h-10 items-center gap-1.5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
             >
               <Upload size={14} />
               Import CSV
             </button>
             <button
+              type="button"
               onClick={() => setShowDeleteAllModal(true)}
               disabled={deadlines.length === 0}
-              className="flex items-center gap-1.5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-10 items-center gap-1.5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Trash2 size={14} />
               Delete All
             </button>
             <button
+              type="button"
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1.5 rounded-2xl px-4 py-2 text-xs font-medium text-[var(--accent-contrast)] shadow-lg"
+              className="flex h-10 items-center gap-1.5 rounded-2xl px-4 text-xs font-medium text-[var(--accent-contrast)] shadow-lg"
               style={{ backgroundColor: 'var(--accent-strong)', boxShadow: '0 16px 34px var(--glow-accent)' }}
             >
               <Plus size={14} />
@@ -1263,15 +1267,6 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
       </div>
       </>
       )}
-
-      {/* Summary footer */}
-      <div className="flex flex-wrap gap-4 text-xs text-[var(--text-faint)]">
-        <span>{deadlines.length} total</span>
-        <span>{deadlines.filter(d => d.status === 'not-started').length} not started</span>
-        <span>{deadlines.filter(d => d.status === 'in-progress').length} in progress</span>
-        <span>{deadlines.filter(d => d.status === 'done').length} done</span>
-        <span className="text-red-400">{deadlines.filter(d => daysUntil(d.dueDate) < 0 && d.status !== 'done' && d.status !== 'missed').length} overdue</span>
-      </div>
 
       {/* Add Modal */}
       {showAddModal && (

@@ -116,13 +116,10 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
     <div className="space-y-6">
       <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="space-y-1">
+          <div>
             <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">
               Dashboard
             </h1>
-            <p className="max-w-2xl text-sm leading-relaxed text-[var(--text-faint)]">
-              A quick read on your current workload, course progress, and what needs attention next.
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <SummaryPill label="active tasks" value={`${activeTasksCount}`} />

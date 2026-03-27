@@ -90,11 +90,8 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
     <div className="space-y-6">
       <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-2xl">
+          <div>
             <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Timeline</h1>
-            <p className="mt-2 text-sm text-[var(--text-muted)]">
-              Drag bars to reschedule work across the next four weeks.
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button

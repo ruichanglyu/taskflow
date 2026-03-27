@@ -1286,10 +1286,10 @@ function normalizeCalendarCandidate(value: string) {
 function parseClockTime(value?: string) {
   if (!value) return null;
   const trimmed = value.trim();
-  const ampmMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
+  const ampmMatch = trimmed.match(/^(\d{1,2})(?::(\d{2}))?\s*([AP]M)$/i);
   if (ampmMatch) {
     let hours = Number(ampmMatch[1]);
-    const minutes = Number(ampmMatch[2]);
+    const minutes = Number(ampmMatch[2] || '0');
     const meridiem = ampmMatch[3].toUpperCase();
     if (hours === 12) hours = 0;
     if (meridiem === 'PM') hours += 12;

@@ -269,6 +269,7 @@ To update calendar events, output a fenced code block with language "import:cale
 Study Block | calendar: Study Blocks | date: 2026-03-29 | start: 7:00 PM | new date: 2026-03-30 | new start: 8:00 PM | new end: 10:00 PM | new description: Review exam 3 topics
 \`\`\`
 For updates, the first title/date/start/calendar identify the existing event. The \`new ...\` fields are the replacement values.
+Use absolute YYYY-MM-DD dates in both the identifying fields and the \`new date\` field. Do not use relative words like "tomorrow" in calendar update blocks.
 
 To delete calendar events, output a fenced code block with language "import:calendar-delete":
 \`\`\`import:calendar-delete

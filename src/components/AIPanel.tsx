@@ -164,6 +164,9 @@ export function AIPanel({
   const initialSidebarState = useMemo(() => loadSavedChatSidebarState(), []);
   const [chatSidebarWidth, setChatSidebarWidth] = useState(initialSidebarState.width);
   const [chatSidebarCollapsed, setChatSidebarCollapsed] = useState(initialSidebarState.collapsed);
+  const [sidebarSearch, setSidebarSearch] = useState('');
+  const [showSidebarSearch, setShowSidebarSearch] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [panelFrame, setPanelFrame] = useState<PanelFrame>(() => loadSavedPanelFrame());
   const [interaction, setInteraction] = useState<PanelInteraction>(null);
   const [sidebarInteraction, setSidebarInteraction] = useState<{
@@ -700,8 +703,29 @@ export function AIPanel({
               maxWidth: chatSidebarCollapsed ? 44 : chatSidebarWidth,
             }}
           >
-            {/* Top actions */}
-            <div className="flex flex-col gap-0.5 px-1.5 py-2">
+            {/* Top: Collapse toggle */}
+            <div className="px-1.5 pt-2 pb-0.5">
+              {chatSidebarCollapsed ? (
+                <button
+                  onClick={toggleChatSidebar}
+                  className="flex h-8 w-full items-center justify-center rounded-lg text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+                  title="Expand sidebar"
+                >
+                  <PanelLeftOpen size={16} />
+                </button>
+              ) : (
+                <button
+                  onClick={toggleChatSidebar}
+                  className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-xs text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+                >
+                  <PanelLeftClose size={16} className="shrink-0" />
+                  <span>Collapse</span>
+                </button>
+              )}
+            </div>
+
+            {/* Actions: New session + Search */}
+            <div className="flex flex-col gap-0.5 px-1.5 pb-1">
               {chatSidebarCollapsed ? (
                 <>
                   <button
@@ -712,18 +736,11 @@ export function AIPanel({
                     <Plus size={16} />
                   </button>
                   <button
-                    onClick={() => { toggleChatSidebar(); }}
+                    onClick={() => { toggleChatSidebar(); setShowSidebarSearch(true); requestAnimationFrame(() => searchInputRef.current?.focus()); }}
                     className="flex h-8 w-full items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
                     title="Search chats"
                   >
                     <Search size={16} />
-                  </button>
-                  <button
-                    onClick={toggleChatSidebar}
-                    className="flex h-8 w-full items-center justify-center rounded-lg text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
-                    title="Expand sidebar"
-                  >
-                    <PanelLeftOpen size={16} />
                   </button>
                 </>
               ) : (
@@ -736,23 +753,29 @@ export function AIPanel({
                     <span>New session</span>
                   </button>
                   <button
-                    onClick={() => {/* TODO: search */}}
+                    onClick={() => { setShowSidebarSearch(s => !s); setSidebarSearch(''); requestAnimationFrame(() => searchInputRef.current?.focus()); }}
                     className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-xs text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
                   >
                     <Search size={16} className="shrink-0" />
                     <span>Search</span>
                   </button>
-                  <button
-                    onClick={toggleChatSidebar}
-                    className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-xs text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
-                    title="Collapse sidebar"
-                  >
-                    <PanelLeftClose size={16} className="shrink-0" />
-                    <span>Collapse</span>
-                  </button>
                 </>
               )}
             </div>
+
+            {/* Search input (expanded only) */}
+            {!chatSidebarCollapsed && showSidebarSearch && (
+              <div className="px-2 pb-1.5">
+                <input
+                  ref={searchInputRef}
+                  value={sidebarSearch}
+                  onChange={e => setSidebarSearch(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Escape') { setShowSidebarSearch(false); setSidebarSearch(''); } }}
+                  placeholder="Search chats..."
+                  className="w-full rounded-md border border-[var(--border-soft)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                />
+              </div>
+            )}
 
             {/* Divider */}
             <div className="mx-2 border-t border-[var(--border-soft)]" />
@@ -772,7 +795,6 @@ export function AIPanel({
                           setPanelError(null);
                           cancelRenameChat();
                           setPendingDeleteChat(null);
-                          toggleChatSidebar();
                           requestAnimationFrame(() => inputRef.current?.focus());
                         }}
                         className={cn(
@@ -790,7 +812,13 @@ export function AIPanel({
                 </div>
               ) : (
                 <div className="space-y-0.5">
-                  {threads.map(chat => {
+                  {(() => {
+                    const q = sidebarSearch.toLowerCase().trim();
+                    const filtered = q ? threads.filter(c => c.title.toLowerCase().includes(q) || c.messages.some(m => m.content.toLowerCase().includes(q))) : threads;
+                    if (q && filtered.length === 0) {
+                      return <p className="px-2 py-3 text-center text-[11px] text-[var(--text-faint)]">No chats found</p>;
+                    }
+                    return filtered.map(chat => {
                     const active = chat.id === currentChatId;
                     const isEditing = editingChatId === chat.id;
                     return (
@@ -817,6 +845,8 @@ export function AIPanel({
                               setPanelError(null);
                               cancelRenameChat();
                               setPendingDeleteChat(null);
+                              setSidebarSearch('');
+                              setShowSidebarSearch(false);
                               requestAnimationFrame(() => inputRef.current?.focus());
                             }}
                             role="button"
@@ -829,6 +859,8 @@ export function AIPanel({
                                 setPanelError(null);
                                 cancelRenameChat();
                                 setPendingDeleteChat(null);
+                                setSidebarSearch('');
+                                setShowSidebarSearch(false);
                                 requestAnimationFrame(() => inputRef.current?.focus());
                               }
                             }}
@@ -860,10 +892,33 @@ export function AIPanel({
                         )}
                       </div>
                     );
-                  })}
+                  });
+                  })()}
                 </div>
               )}
             </div>
+
+            {/* Bottom branding */}
+            <div className="border-t border-[var(--border-soft)] px-1.5 py-2">
+              {chatSidebarCollapsed ? (
+                <div className="flex items-center justify-center" title="AI Assistant · Powered by Gemini">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ backgroundImage: 'var(--sidebar-gradient)' }}>
+                    <Sparkles size={12} className="text-white" />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-1">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style={{ backgroundImage: 'var(--sidebar-gradient)' }}>
+                    <Sparkles size={12} className="text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-[11px] font-medium text-[var(--text-primary)]">AI Assistant</p>
+                    <p className="truncate text-[9px] text-[var(--text-faint)]">Powered by Gemini</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {!chatSidebarCollapsed && (
               <button
                 onMouseDown={beginSidebarResize}

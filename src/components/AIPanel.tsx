@@ -1310,6 +1310,19 @@ function toTwentyFourHourKey(value?: string) {
   return `${String(parsed.hours).padStart(2, '0')}:${String(parsed.minutes).padStart(2, '0')}`;
 }
 
+function buildLocalDateTimeString(dateKey: string, timeKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const [hours, minutes] = timeKey.split(':').map(Number);
+  const date = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absoluteOffset = Math.abs(offsetMinutes);
+  const offsetHours = String(Math.floor(absoluteOffset / 60)).padStart(2, '0');
+  const offsetMins = String(absoluteOffset % 60).padStart(2, '0');
+
+  return `${dateKey}T${timeKey}:00${sign}${offsetHours}:${offsetMins}`;
+}
+
 function getEventDateKey(event: GoogleCalendarEvent) {
   if (event.start?.date) return event.start.date;
   if (event.start?.dateTime) {
@@ -1391,8 +1404,8 @@ function buildCalendarEventPayload(row: ImportBlock['rows'][number], mode: 'crea
     summary,
     ...(description ? { description } : {}),
     ...(location ? { location } : {}),
-    start: { dateTime: `${date}T${startKey}:00`, timeZone },
-    end: { dateTime: `${date}T${endKey}:00`, timeZone },
+    start: { dateTime: buildLocalDateTimeString(date, startKey), timeZone },
+    end: { dateTime: buildLocalDateTimeString(date, endKey), timeZone },
   } satisfies NewGoogleCalendarEvent;
 }
 

@@ -771,15 +771,25 @@ export function AIPanel({
       let skipped = 0;
 
       for (const row of block.rows) {
-        const matches = matchCalendarCandidates(calendarEvents, calendarCalendars, row);
-        if (matches.length !== 1) {
+        const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, row);
+        if (matches.length === 0) {
           skipped++;
           continue;
         }
 
-        const ok = await onDeleteCalendarEvent(matches[0].id, matches[0].calendarId);
-        if (ok) deleted++;
-        else skipped++;
+        let allDeleted = true;
+        for (const match of matches) {
+          const ok = await onDeleteCalendarEvent(match.id, match.calendarId);
+          if (ok) {
+            deleted++;
+          } else {
+            allDeleted = false;
+          }
+        }
+
+        if (!allDeleted) {
+          skipped++;
+        }
       }
 
       imported = deleted;
@@ -1889,6 +1899,40 @@ function resolvePreferredCalendarCandidates(
   return lastMatches;
 }
 
+function resolveCalendarDeleteCandidates(
+  events: GoogleCalendarEvent[],
+  calendars: GoogleCalendarListItem[],
+  row: ParsedImportRow,
+) {
+  const strictMatches = matchCalendarCandidates(events, calendars, row);
+  if (strictMatches.length <= 1) {
+    return strictMatches;
+  }
+
+  const resolvedMatches = resolvePreferredCalendarCandidates(events, calendars, row);
+  if (resolvedMatches.length <= 1) {
+    return resolvedMatches;
+  }
+
+  const normalizedTitle = normalizeDeleteCandidate(stripTrailingCourseTag(row.title));
+  const normalizedCalendar = row.calendar ? normalizeCalendarCandidate(row.calendar) : '';
+  const dateKeys = new Set(resolvedMatches.map(getEventDateKey));
+
+  const canDeleteDuplicatesTogether = resolvedMatches.every(event => {
+    const eventTitle = normalizeDeleteCandidate(stripTrailingCourseTag(event.summary || ''));
+    const eventCalendar = normalizeCalendarCandidate(
+      event.calendarId ? calendars.find(calendar => calendar.id === event.calendarId)?.summary ?? '' : ''
+    );
+
+    return (
+      eventTitle === normalizedTitle &&
+      (!normalizedCalendar || eventCalendar === normalizedCalendar)
+    );
+  }) && dateKeys.size === 1;
+
+  return canDeleteDuplicatesTogether ? resolvedMatches : [];
+}
+
 function matchDeadlineCandidates(deadlines: Deadline[], projects: Project[], rawTitle: string, course?: string) {
   const normalizedTitle = normalizeDeleteCandidate(rawTitle);
   const strippedTitle = normalizeDeleteCandidate(stripTrailingCourseTag(rawTitle));
@@ -2240,11 +2284,11 @@ function ActionBundleCard({
     const deletes = safeBlocks
       .filter(block => block.type === 'calendar-delete')
       .flatMap(block => block.rows.map(row => {
-        const matches = matchCalendarCandidates(calendarEvents, calendarCalendars, row);
+        const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, row);
         return {
-          label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}`,
-          valid: matches.length === 1,
-          reason: matches.length === 0 ? 'event not found' : matches.length > 1 ? 'event ambiguous' : '',
+          label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${matches.length > 1 ? ` · ${matches.length} matches` : ''}`,
+          valid: matches.length > 0,
+          reason: matches.length === 0 ? 'event not found' : '',
         };
       }));
 

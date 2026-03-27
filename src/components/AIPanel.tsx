@@ -892,49 +892,38 @@ export function AIPanel({
           `Make sure the parent task exists first, then try again.`
         );
       } else {
-        for (const row of block.rows) {
-          const ok = await onAddSubtask(parentTask.id, row.title);
-          if (ok) imported++;
-        }
+        const subtaskResults = await Promise.all(
+          block.rows.map(row => onAddSubtask(parentTask.id, row.title))
+        );
+        imported += subtaskResults.filter(Boolean).length;
       }
     } else if (block.type === 'tasks') {
-      for (const row of block.rows) {
-        const projectId = await resolveProject(row.course);
-        const priority = (['low', 'medium', 'high'].includes(row.priority ?? '') ? row.priority : 'medium') as Priority;
-        const recurrence = (['none', 'daily', 'weekly', 'monthly'].includes(row.recurrence ?? '') ? row.recurrence : 'none') as Recurrence;
-        const status = (['todo', 'in-progress', 'done'].includes(row.status ?? '') ? row.status : 'todo') as TaskStatus;
-        const result = await onAddTask(
-          row.title,
-          row.description ?? '',
-          priority,
-          projectId,
-          row.dueDate ?? null,
-          recurrence,
-          status,
-        );
+      // Resolve all project IDs first (may create projects), then insert all tasks in parallel
+      const resolvedRows = await Promise.all(
+        block.rows.map(async row => ({
+          row,
+          projectId: await resolveProject(row.course),
+          priority: (['low', 'medium', 'high'].includes(row.priority ?? '') ? row.priority : 'medium') as Priority,
+          recurrence: (['none', 'daily', 'weekly', 'monthly'].includes(row.recurrence ?? '') ? row.recurrence : 'none') as Recurrence,
+          status: (['todo', 'in-progress', 'done'].includes(row.status ?? '') ? row.status : 'todo') as TaskStatus,
+        }))
+      );
+
+      const taskResults = await Promise.all(
+        resolvedRows.map(({ row, projectId, priority, recurrence, status }) =>
+          onAddTask(row.title, row.description ?? '', priority, projectId, row.dueDate ?? null, recurrence, status)
+            .then(result => ({ result, row, projectId, priority, recurrence, status }))
+        )
+      );
+
+      for (const { result, row, projectId, priority, recurrence, status } of taskResults) {
         if (result) {
           imported++;
-          recentAiTasksRef.current = [
-            ...recentAiTasksRef.current,
-            {
-              id: result,
-              title: row.title,
-              description: row.description ?? '',
-              status,
-              priority,
-              projectId,
-              createdAt: new Date().toISOString(),
-              dueDate: row.dueDate ?? null,
-              recurrence,
-              subtasks: [],
-              comments: [],
-            },
-          ];
-          workingTasks.push({
+          const newTask: Task = {
             id: result,
             title: row.title,
             description: row.description ?? '',
-            status: 'todo',
+            status,
             priority,
             projectId,
             createdAt: new Date().toISOString(),
@@ -942,7 +931,9 @@ export function AIPanel({
             recurrence,
             subtasks: [],
             comments: [],
-          });
+          };
+          recentAiTasksRef.current = [...recentAiTasksRef.current, newTask];
+          workingTasks.push(newTask);
         }
       }
     } else if (block.type === 'deadlines') {
@@ -2254,6 +2245,7 @@ function ActionBundleCard({
 }) {
   const [expanded, setExpanded] = useState(true);
   const [applying, setApplying] = useState(false);
+  const [optimisticDone, setOptimisticDone] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, number>>({});
@@ -2285,7 +2277,7 @@ function ActionBundleCard({
 
   const pendingEntries = entries.filter(entry => !entry.imported);
   const hasDeletes = entries.some(entry => entry.block?.type === 'delete-tasks' || entry.block?.type === 'calendar-delete');
-  const allDone = entries.every(entry => entry.imported);
+  const allDone = optimisticDone || entries.every(entry => entry.imported);
 
   const summary = useMemo(() => {
     const counts = {
@@ -2406,29 +2398,34 @@ function ActionBundleCard({
     return total;
   }, [results]);
 
-  const handleApply = async () => {
+  const handleApply = () => {
     if (hasDeletes && !confirmDelete) {
       setExpanded(true);
       setConfirmDelete(true);
       return;
     }
 
-    setApplying(true);
+    // Flip to "Applied" immediately — imports run in background
+    setOptimisticDone(true);
     setActionError(null);
-    const nextResults: Record<string, number> = {};
 
-    try {
-      for (const entry of [...pendingEntries].sort((a, b) => a.order - b.order)) {
-        const count = await onImport(entry.block, entry.key);
-        nextResults[entry.key] = count;
+    const sortedEntries = [...pendingEntries].sort((a, b) => a.order - b.order);
+
+    (async () => {
+      try {
+        const nextResults: Record<string, number> = {};
+        for (const entry of sortedEntries) {
+          const count = await onImport(entry.block, entry.key);
+          nextResults[entry.key] = count;
+        }
+        setResults(prev => ({ ...prev, ...nextResults }));
+        setConfirmDelete(false);
+      } catch (error) {
+        // Revert optimistic state and show error
+        setOptimisticDone(false);
+        setActionError(error instanceof Error ? error.message : 'Could not apply these actions.');
       }
-      setResults(prev => ({ ...prev, ...nextResults }));
-      setConfirmDelete(false);
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'Could not apply these actions.');
-    } finally {
-      setApplying(false);
-    }
+    })();
   };
 
   const primaryLabel = allDone
@@ -2471,16 +2468,15 @@ function ActionBundleCard({
         {!allDone && (
           <button
             onClick={handleApply}
-            disabled={applying}
             className={cn(
-              'rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-60',
+              'rounded-lg px-3 py-1.5 text-xs font-medium transition',
               hasDeletes && confirmDelete
                 ? 'bg-rose-500 text-white'
                 : 'text-[var(--accent-contrast)]',
             )}
             style={hasDeletes && confirmDelete ? undefined : { backgroundColor: 'var(--accent-strong)' }}
           >
-            {applying ? 'Applying...' : primaryLabel}
+            {primaryLabel}
           </button>
         )}
       </div>

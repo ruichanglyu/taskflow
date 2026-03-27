@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise } from '../types';
 
 export interface ImageAttachment {
@@ -13,6 +13,14 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   images?: ImageAttachment[];
+}
+
+export interface ChatThread {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: ChatMessage[];
 }
 
 export interface ImportBlock {
@@ -45,6 +53,9 @@ const KEY_STORAGE = 'taskflow_ai_key';
 const GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
 const GEMINI_MODEL_VISION = 'gemini-2.5-flash';  // lite model doesn't support images, use 2.5 flash for multimodal
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+const CHAT_STORAGE = 'taskflow_ai_chats';
+const ACTIVE_CHAT_STORAGE = 'taskflow_ai_active_chat';
+const LEGACY_CHAT_STORAGE = 'taskflow_ai_chat';
 
 export function getAPIKey(): string | null {
   try {
@@ -163,7 +174,8 @@ To link an existing task to an existing deadline, output a fenced code block wit
 Deadline title | task: Task Title | course: CourseName
 Another deadline | task: Another Task Title
 \`\`\`
-The deadline title must match an existing deadline. Include \`course\` when there may be duplicates. The task title must match an existing task. The app will only create a real \`deadline_tasks\` link when it can find a unique deadline and a unique task.
+Treat the deadline title and task title as lookup keys only. They do not create a link by themselves. Include \`course\` when there may be duplicates so the app can find the right deadline. The app will only create a real \`deadline_tasks\` link when it can find a unique deadline and a unique task.
+If the user asks you to both create a task and link it to a deadline, you MUST output the \`import:tasks\` block first and then an \`import:deadline-links\` block that references the exact task title you just created.
 
 FIELD RULES:
 - Tasks: title (required), course, due (YYYY-MM-DD), priority (low/medium/high), description, status (todo/in-progress/done), recurrence (none/daily/weekly/monthly)
@@ -171,9 +183,17 @@ FIELD RULES:
 - Course names should match existing courses when possible
 
 LINKING RULES:
-- Do not claim that tasks are automatically linked to deadlines just because titles or course names match.
+- Never say a task is linked just because the task title or course name looks similar to a deadline.
 - If the user asks to link a task to a deadline, use the \`deadline-links\` import block so the app can create the real \`deadline_tasks\` link.
+- If you create a task that should be linked, include \`import:tasks\` and \`import:deadline-links\` in the same response.
+- If you do not emit an \`import:deadline-links\` block, then you must not claim the task is linked.
+- If the user asks to "link", "attach", "connect", or "match" a task to a deadline, do NOT fake it by renaming the task.
+- When linking is requested, prefer a single \`import:deadline-links\` block and avoid creating a duplicate task unless the user explicitly asked for a new task.
+- If the link cannot be created because the app cannot find a unique deadline and task, ask the user for the exact titles instead of pretending it worked.
 - Only say a task is linked if the app explicitly created or updated a real \`deadline_tasks\` link.
+\`\`\`import:deadline-links
+Exam 3 [MATH 2550] | task: Study for MATH 2550 Exam 3 | course: MATH 2550
+\`\`\`
 
 You can also generate CSV files for manual import when asked. For deadlines CSV:
 status,course,date,time,title,type,notes
@@ -332,43 +352,234 @@ async function streamGemini(
   }
 }
 
-const CHAT_STORAGE = 'taskflow_ai_chat';
-
-function loadSavedMessages(): ChatMessage[] {
+function loadLegacyMessages(): ChatMessage[] {
   try {
-    const saved = localStorage.getItem(CHAT_STORAGE);
+    const saved = localStorage.getItem(LEGACY_CHAT_STORAGE);
     return saved ? JSON.parse(saved) : [];
   } catch { return []; }
 }
 
-function saveMessages(messages: ChatMessage[]) {
+function makeChatTitle(messages: ChatMessage[], fallback = 'New chat') {
+  const firstUser = messages.find(m => m.role === 'user' && m.content.trim());
+  const source = firstUser?.content.trim().replace(/\s+/g, ' ') ?? '';
+  if (!source) return fallback;
+  return source.length > 42 ? `${source.slice(0, 39).trimEnd()}…` : source;
+}
+
+function stripAttachmentPayload(message: ChatMessage): ChatMessage {
+  if (!message.images?.length) return message;
+  return {
+    ...message,
+    images: message.images.map(img => ({
+      base64: '',
+      mimeType: img.mimeType,
+      preview: '',
+    })),
+  };
+}
+
+function sanitizeThread(thread: ChatThread): ChatThread {
+  return {
+    ...thread,
+    messages: thread.messages.map(stripAttachmentPayload),
+  };
+}
+
+function makeNewThread(title = 'New chat'): ChatThread {
+  const now = Date.now();
+  return {
+    id: crypto.randomUUID(),
+    title,
+    createdAt: now,
+    updatedAt: now,
+    messages: [],
+  };
+}
+
+function loadSavedThreads(): ChatThread[] {
   try {
-    // Strip base64 image data before saving — keep a placeholder so we know images were attached
-    const toSave = messages.map(m => {
-      if (!m.images?.length) return m;
-      return {
-        ...m,
-        images: m.images.map(img => ({
-          base64: '',           // don't persist large base64
-          mimeType: img.mimeType,
-          preview: '',          // don't persist data URLs either
-        })),
-      };
-    });
+    const saved = localStorage.getItem(CHAT_STORAGE);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        const threads = parsed
+          .map((item): ChatThread | null => {
+            if (!item || typeof item !== 'object') return null;
+            const id = typeof item.id === 'string' ? item.id : crypto.randomUUID();
+            const title = typeof item.title === 'string' && item.title.trim() ? item.title : 'New chat';
+            const createdAt = typeof item.createdAt === 'number' ? item.createdAt : Date.now();
+            const updatedAt = typeof item.updatedAt === 'number' ? item.updatedAt : createdAt;
+            const messages = Array.isArray(item.messages)
+              ? item.messages
+                  .map((message: ChatMessage) => {
+                    if (!message || typeof message !== 'object') return null;
+                    if (typeof message.id !== 'string' || typeof message.role !== 'string') return null;
+                    return {
+                      id: message.id,
+                      role: message.role as ChatMessage['role'],
+                      content: typeof message.content === 'string' ? message.content : '',
+                      timestamp: typeof message.timestamp === 'number' ? message.timestamp : Date.now(),
+                      images: Array.isArray(message.images)
+                        ? message.images
+                            .filter(Boolean)
+                            .map((img: ImageAttachment) => ({
+                              base64: typeof img?.base64 === 'string' ? img.base64 : '',
+                              mimeType: typeof img?.mimeType === 'string' ? img.mimeType : 'image/png',
+                              preview: typeof img?.preview === 'string' ? img.preview : '',
+                            }))
+                        : undefined,
+                    } as ChatMessage;
+                  })
+                  .filter(Boolean) as ChatMessage[]
+              : [];
+            return { id, title, createdAt, updatedAt, messages };
+          })
+          .filter(Boolean) as ChatThread[];
+        if (threads.length > 0) return threads;
+      }
+    }
+
+    const legacyMessages = loadLegacyMessages();
+    if (legacyMessages.length > 0) {
+      const now = Date.now();
+      return [{
+        id: crypto.randomUUID(),
+        title: makeChatTitle(legacyMessages),
+        createdAt: legacyMessages[0]?.timestamp ?? now,
+        updatedAt: legacyMessages[legacyMessages.length - 1]?.timestamp ?? now,
+        messages: legacyMessages.map(stripAttachmentPayload),
+      }];
+    }
+  } catch { /* ignore */ }
+
+  return [makeNewThread()];
+}
+
+function saveThreads(threads: ChatThread[]) {
+  try {
+    const toSave = threads.map(sanitizeThread);
     localStorage.setItem(CHAT_STORAGE, JSON.stringify(toSave));
   } catch { /* storage full — ignore */ }
 }
 
 export function useAI() {
-  const [messages, setMessages] = useState<ChatMessage[]>(loadSavedMessages);
+  const initialStateRef = useRef<{ threads: ChatThread[]; activeChatId: string } | null>(null);
+  if (!initialStateRef.current) {
+    const initialThreads = loadSavedThreads();
+    let initialChatId = initialThreads[0]?.id ?? makeNewThread().id;
+    try {
+      const saved = localStorage.getItem(ACTIVE_CHAT_STORAGE);
+      if (saved && initialThreads.some(thread => thread.id === saved)) {
+        initialChatId = saved;
+      }
+    } catch { /* ignore */ }
+    initialStateRef.current = {
+      threads: initialThreads,
+      activeChatId: initialChatId,
+    };
+  }
+
+  const [threads, setThreads] = useState<ChatThread[]>(() => initialStateRef.current?.threads ?? [makeNewThread()]);
+  const [activeChatId, setActiveChatId] = useState<string>(() => initialStateRef.current?.activeChatId ?? initialStateRef.current?.threads[0]?.id ?? makeNewThread().id);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const threadsRef = useRef<ChatThread[]>(threads);
+  const activeChatIdRef = useRef(activeChatId);
 
-  // Persist messages to localStorage whenever they change
   useEffect(() => {
-    if (!isStreaming) saveMessages(messages);
-  }, [messages, isStreaming]);
+    threadsRef.current = threads;
+  }, [threads]);
+
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+  }, [activeChatId]);
+
+  useEffect(() => {
+    if (!threads.some(thread => thread.id === activeChatId) && threads[0]) {
+      setActiveChatId(threads[0].id);
+    }
+  }, [threads, activeChatId]);
+
+  const currentChat = useMemo(() => {
+    const found = threads.find(thread => thread.id === activeChatId);
+    if (found) return found;
+    return threads[0] ?? makeNewThread();
+  }, [threads, activeChatId]);
+
+  const messages = currentChat.messages;
+  const orderedThreads = useMemo(
+    () => [...threads].sort((a, b) => b.updatedAt - a.updatedAt),
+    [threads],
+  );
+
+  // Persist threads to localStorage whenever they change
+  useEffect(() => {
+    if (!isStreaming) {
+      saveThreads(threads);
+      localStorage.setItem(ACTIVE_CHAT_STORAGE, activeChatId);
+      localStorage.removeItem(LEGACY_CHAT_STORAGE);
+    }
+  }, [threads, activeChatId, isStreaming]);
+
+  const updateThread = useCallback((threadId: string, updater: (thread: ChatThread) => ChatThread) => {
+    setThreads(prev => prev.map(thread => thread.id === threadId ? updater(thread) : thread));
+  }, []);
+
+  const ensureActiveThread = useCallback((threadId: string) => {
+    stopStreaming();
+    setError(null);
+    setActiveChatId(threadId);
+  }, [stopStreaming]);
+
+  const createChat = useCallback((title = 'New chat') => {
+    stopStreaming();
+    const thread = makeNewThread(title);
+    setThreads(prev => [thread, ...prev]);
+    setActiveChatId(thread.id);
+    setError(null);
+    return thread.id;
+  }, [stopStreaming]);
+
+  const renameChat = useCallback((threadId: string, title: string) => {
+    const nextTitle = title.trim() || 'New chat';
+    updateThread(threadId, thread => ({
+      ...thread,
+      title: nextTitle,
+      updatedAt: Date.now(),
+    }));
+  }, [updateThread]);
+
+  const deleteChat = useCallback((threadId: string) => {
+    stopStreaming();
+    setThreads(prev => {
+      const remaining = prev.filter(thread => thread.id !== threadId);
+      if (remaining.length === 0) {
+        const fresh = makeNewThread();
+        setActiveChatId(fresh.id);
+        return [fresh];
+      }
+
+      if (activeChatIdRef.current === threadId) {
+        const nextActive = [...remaining].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+        setActiveChatId(nextActive.id);
+      }
+
+      return remaining;
+    });
+    setError(null);
+  }, [stopStreaming]);
+
+  const clearChat = useCallback(() => {
+    const threadId = activeChatIdRef.current;
+    updateThread(threadId, thread => ({
+      ...thread,
+      messages: [],
+      title: thread.title === 'New chat' ? thread.title : thread.title,
+      updatedAt: Date.now(),
+    }));
+    setError(null);
+  }, [updateThread]);
 
   const sendMessage = useCallback(async (
     userMessage: string,
@@ -381,6 +592,18 @@ export function useAI() {
       return;
     }
 
+    let threadId = activeChatIdRef.current;
+    let thread = threadsRef.current.find(item => item.id === threadId) ?? threadsRef.current[0];
+    if (!thread) {
+      const fresh = makeNewThread();
+      threadId = fresh.id;
+      thread = fresh;
+      setThreads(prev => [fresh, ...prev]);
+      setActiveChatId(fresh.id);
+      threadsRef.current = [fresh, ...threadsRef.current];
+      activeChatIdRef.current = fresh.id;
+    }
+
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -389,49 +612,86 @@ export function useAI() {
       images: images?.length ? images : undefined,
     };
 
-    setMessages(prev => [...prev, userMsg]);
-    setIsStreaming(true);
-    setError(null);
-
     const assistantMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'assistant',
       content: '',
       timestamp: Date.now(),
     };
-    setMessages(prev => [...prev, assistantMsg]);
+
+    const nextTitle = thread.title === 'New chat' || thread.messages.length === 0
+      ? makeChatTitle([...(thread.messages), userMsg], makeChatTitle([userMsg]))
+      : thread.title;
+
+    setThreads(prev => prev.map(item => {
+      if (item.id !== threadId) return item;
+      const updatedMessages = [...item.messages, userMsg, assistantMsg];
+      return {
+        ...item,
+        title: nextTitle,
+        updatedAt: Date.now(),
+        messages: updatedMessages,
+      };
+    }));
+    setIsStreaming(true);
+    setError(null);
 
     const updateContent = (text: string) => {
-      setMessages(prev =>
-        prev.map(m => m.id === assistantMsg.id ? { ...m, content: text } : m)
-      );
+      setThreads(prev => prev.map(item => {
+        if (item.id !== threadId) return item;
+        return {
+          ...item,
+          updatedAt: Date.now(),
+          messages: item.messages.map(m => m.id === assistantMsg.id ? { ...m, content: text } : m),
+        };
+      }));
     };
 
     try {
       abortRef.current = new AbortController();
       const systemPrompt = buildSystemPrompt(appData);
-      await streamGemini(key, systemPrompt, [...messages, userMsg], updateContent, abortRef.current.signal);
+      await streamGemini(
+        key,
+        systemPrompt,
+        [...thread.messages, userMsg],
+        updateContent,
+        abortRef.current.signal,
+      );
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
       const errMsg = err instanceof Error ? err.message : 'Something went wrong';
       setError(errMsg);
-      setMessages(prev => prev.filter(m => m.id !== assistantMsg.id));
+      setThreads(prev => prev.map(item => {
+        if (item.id !== threadId) return item;
+        return {
+          ...item,
+          messages: item.messages.filter(m => m.id !== assistantMsg.id),
+        };
+      }));
     } finally {
       setIsStreaming(false);
       abortRef.current = null;
     }
-  }, [messages]);
+  }, []);
 
   const stopStreaming = useCallback(() => {
     abortRef.current?.abort();
     setIsStreaming(false);
   }, []);
 
-  const clearChat = useCallback(() => {
-    setMessages([]);
-    setError(null);
-    localStorage.removeItem(CHAT_STORAGE);
-  }, []);
-
-  return { messages, isStreaming, error, sendMessage, stopStreaming, clearChat };
+  return {
+    threads: orderedThreads,
+    currentChat,
+    currentChatId: activeChatId,
+    messages,
+    isStreaming,
+    error,
+    createChat,
+    selectChat: ensureActiveThread,
+    renameChat,
+    deleteChat,
+    clearChat,
+    sendMessage,
+    stopStreaming,
+  };
 }

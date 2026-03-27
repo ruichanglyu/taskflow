@@ -416,7 +416,7 @@ export function AIPanel({
     setPanelError(null);
     let imported = 0;
     const projectCache = new Map<string, string | null>();
-    const availableTasks = [
+    const workingTasks: Task[] = [
       ...tasks,
       ...recentAiTasksRef.current.filter(recent => !tasks.some(task => task.id === recent.id)),
     ];
@@ -441,7 +441,7 @@ export function AIPanel({
     if (block.type === 'delete-tasks') {
       let skipped = 0;
       for (const row of block.rows) {
-        const matches = matchTaskCandidates(availableTasks, row.title);
+        const matches = matchTaskCandidates(workingTasks, row.title);
         if (matches.length !== 1) {
           skipped++;
           continue;
@@ -474,7 +474,7 @@ export function AIPanel({
           continue;
         }
 
-        const taskMatches = matchTaskCandidates(availableTasks, row.taskTitle ?? '');
+        const taskMatches = resolvePreferredTaskCandidates(workingTasks, row.taskTitle ?? '', recentAiTasksRef.current);
         const deadlineMatches = matchDeadlineCandidates(deadlines, projects, row.title, row.course);
 
         if (taskMatches.length !== 1 || deadlineMatches.length !== 1) {
@@ -498,7 +498,7 @@ export function AIPanel({
     } else if (block.type === 'subtasks') {
       // Find the parent task by title (case-insensitive)
       const parentTitle = block.parentTaskTitle?.toLowerCase() ?? '';
-      const parentTask = availableTasks.find(t => t.title.toLowerCase() === parentTitle);
+      const parentTask = workingTasks.find(t => t.title.toLowerCase() === parentTitle);
       if (!parentTask) {
         // If parent not found, fall back to creating as top-level tasks
         for (const row of block.rows) {
@@ -542,6 +542,19 @@ export function AIPanel({
               comments: [],
             },
           ];
+          workingTasks.push({
+            id: result,
+            title: row.title,
+            description: row.description ?? '',
+            status: 'todo',
+            priority,
+            projectId,
+            createdAt: new Date().toISOString(),
+            dueDate: row.dueDate ?? null,
+            recurrence,
+            subtasks: [],
+            comments: [],
+          });
         }
       }
     } else if (block.type === 'deadlines') {
@@ -1161,7 +1174,7 @@ function stripTrailingCourseTag(value: string) {
   return value.replace(/\s*\[[^\]]+\]\s*$/, '').trim();
 }
 
-function matchTaskCandidates(tasks: Task[], rawTitle: string) {
+function matchTaskCandidates(tasks: Array<{ title: string }>, rawTitle: string) {
   const normalizedTitle = normalizeDeleteCandidate(rawTitle);
   const strippedTitle = normalizeDeleteCandidate(stripTrailingCourseTag(rawTitle));
 
@@ -1434,12 +1447,21 @@ function ActionBundleCard({
     return counts;
   }, [safeBlocks]);
 
+  const previewTasks = useMemo(() => (
+    [
+      ...tasks,
+      ...safeBlocks
+        .filter(block => block.type === 'tasks')
+        .flatMap(block => block.rows.map(row => ({ title: row.title }))),
+    ]
+  ), [safeBlocks, tasks]);
+
   const linkGroups = useMemo(() => {
     return safeBlocks
       .filter(block => block.type === 'deadline-links')
       .flatMap(block =>
         block.rows.map(row => {
-          const taskMatches = matchTaskCandidates(tasks, row.taskTitle ?? '');
+          const taskMatches = matchTaskCandidates(previewTasks, row.taskTitle ?? '');
           const deadlineMatches = matchDeadlineCandidates(deadlines, projects, row.title, row.course);
           const valid = taskMatches.length === 1 && deadlineMatches.length === 1;
           return {
@@ -1454,7 +1476,7 @@ function ActionBundleCard({
           };
         }),
       );
-  }, [safeBlocks, deadlines, projects, tasks]);
+  }, [safeBlocks, deadlines, previewTasks, projects]);
 
   const deleteGroups = useMemo(() => {
     return safeBlocks

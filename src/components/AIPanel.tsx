@@ -6,6 +6,75 @@ import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
 
+interface PanelFrame {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type PanelInteraction =
+  | {
+      type: 'move' | 'resize';
+      startX: number;
+      startY: number;
+      initial: PanelFrame;
+    }
+  | null;
+
+const PANEL_FRAME_STORAGE = 'taskflow_ai_panel_frame';
+const DEFAULT_PANEL_FRAME: PanelFrame = {
+  x: 0,
+  y: 88,
+  width: 920,
+  height: 760,
+};
+
+function clampPanelFrame(frame: PanelFrame): PanelFrame {
+  if (typeof window === 'undefined') return frame;
+
+  const minWidth = Math.min(640, window.innerWidth - 32);
+  const minHeight = Math.min(520, window.innerHeight - 32);
+  const width = Math.max(minWidth, Math.min(frame.width, window.innerWidth - 24));
+  const height = Math.max(minHeight, Math.min(frame.height, window.innerHeight - 24));
+  const maxX = Math.max(12, window.innerWidth - width - 12);
+  const maxY = Math.max(12, window.innerHeight - height - 12);
+
+  return {
+    width,
+    height,
+    x: Math.max(12, Math.min(frame.x, maxX)),
+    y: Math.max(12, Math.min(frame.y, maxY)),
+  };
+}
+
+function loadSavedPanelFrame(): PanelFrame {
+  if (typeof window === 'undefined') return DEFAULT_PANEL_FRAME;
+
+  try {
+    const saved = localStorage.getItem(PANEL_FRAME_STORAGE);
+    if (!saved) {
+      const width = Math.min(DEFAULT_PANEL_FRAME.width, window.innerWidth - 24);
+      return clampPanelFrame({
+        ...DEFAULT_PANEL_FRAME,
+        x: Math.max(12, window.innerWidth - width - 24),
+        width,
+        height: Math.min(DEFAULT_PANEL_FRAME.height, window.innerHeight - 24),
+      });
+    }
+
+    const parsed = JSON.parse(saved) as Partial<PanelFrame>;
+    return clampPanelFrame({
+      x: typeof parsed.x === 'number' ? parsed.x : DEFAULT_PANEL_FRAME.x,
+      y: typeof parsed.y === 'number' ? parsed.y : DEFAULT_PANEL_FRAME.y,
+      width: typeof parsed.width === 'number' ? parsed.width : DEFAULT_PANEL_FRAME.width,
+      height: typeof parsed.height === 'number' ? parsed.height : DEFAULT_PANEL_FRAME.height,
+    });
+  } catch {
+    return clampPanelFrame(DEFAULT_PANEL_FRAME);
+  }
+}
+
 interface AIPanelProps {
   open: boolean;
   onClose: () => void;
@@ -55,9 +124,12 @@ export function AIPanel({
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingChatTitle, setEditingChatTitle] = useState('');
   const [pendingDeleteChat, setPendingDeleteChat] = useState<ChatThread | null>(null);
+  const [panelFrame, setPanelFrame] = useState<PanelFrame>(() => loadSavedPanelFrame());
+  const [interaction, setInteraction] = useState<PanelInteraction>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recentAiTasksRef = useRef<Task[]>([]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = messagesScrollRef.current;
@@ -77,6 +149,68 @@ export function AIPanel({
       setTimeout(() => inputRef.current?.focus(), 300);
     }
   }, [open, hasKey]);
+
+  useEffect(() => {
+    if (!open) return;
+    setPanelFrame(prev => clampPanelFrame(prev));
+  }, [open]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PANEL_FRAME_STORAGE, JSON.stringify(panelFrame));
+    } catch {
+      // ignore storage errors
+    }
+  }, [panelFrame]);
+
+  useEffect(() => {
+    if (!interaction) return;
+
+    const handleMove = (event: MouseEvent) => {
+      const deltaX = event.clientX - interaction.startX;
+      const deltaY = event.clientY - interaction.startY;
+
+      if (interaction.type === 'move') {
+        setPanelFrame(clampPanelFrame({
+          ...interaction.initial,
+          x: interaction.initial.x + deltaX,
+          y: interaction.initial.y + deltaY,
+        }));
+        return;
+      }
+
+      setPanelFrame(clampPanelFrame({
+        ...interaction.initial,
+        width: interaction.initial.width + deltaX,
+        height: interaction.initial.height + deltaY,
+      }));
+    };
+
+    const handleUp = () => setInteraction(null);
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = interaction.type === 'move' ? 'grabbing' : 'nwse-resize';
+
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+  }, [interaction]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [open, onClose]);
 
   const handleSend = useCallback(async () => {
     if ((!input.trim() && !pendingImages.length) || isStreaming) return;
@@ -171,6 +305,10 @@ export function AIPanel({
     setPanelError(null);
     let imported = 0;
     const projectCache = new Map<string, string | null>();
+    const availableTasks = [
+      ...tasks,
+      ...recentAiTasksRef.current.filter(recent => !tasks.some(task => task.id === recent.id)),
+    ];
 
     // Resolve course name → projectId, create if needed
     const resolveProject = async (courseName?: string): Promise<string | null> => {
@@ -192,7 +330,7 @@ export function AIPanel({
     if (block.type === 'delete-tasks') {
       let skipped = 0;
       for (const row of block.rows) {
-        const matches = matchTaskCandidates(tasks, row.title);
+        const matches = matchTaskCandidates(availableTasks, row.title);
         if (matches.length !== 1) {
           skipped++;
           continue;
@@ -225,7 +363,7 @@ export function AIPanel({
           continue;
         }
 
-        const taskMatches = matchTaskCandidates(tasks, row.taskTitle ?? '');
+        const taskMatches = matchTaskCandidates(availableTasks, row.taskTitle ?? '');
         const deadlineMatches = matchDeadlineCandidates(deadlines, projects, row.title, row.course);
 
         if (taskMatches.length !== 1 || deadlineMatches.length !== 1) {
@@ -249,7 +387,7 @@ export function AIPanel({
     } else if (block.type === 'subtasks') {
       // Find the parent task by title (case-insensitive)
       const parentTitle = block.parentTaskTitle?.toLowerCase() ?? '';
-      const parentTask = tasks.find(t => t.title.toLowerCase() === parentTitle);
+      const parentTask = availableTasks.find(t => t.title.toLowerCase() === parentTitle);
       if (!parentTask) {
         // If parent not found, fall back to creating as top-level tasks
         for (const row of block.rows) {
@@ -275,7 +413,25 @@ export function AIPanel({
           row.dueDate ?? null,
           recurrence,
         );
-        if (result) imported++;
+        if (result) {
+          imported++;
+          recentAiTasksRef.current = [
+            ...recentAiTasksRef.current,
+            {
+              id: result,
+              title: row.title,
+              description: row.description ?? '',
+              status: 'todo',
+              priority,
+              projectId,
+              createdAt: new Date().toISOString(),
+              dueDate: row.dueDate ?? null,
+              recurrence,
+              subtasks: [],
+              comments: [],
+            },
+          ];
+        }
       }
     } else if (block.type === 'deadlines') {
       for (const row of block.rows) {
@@ -315,16 +471,47 @@ export function AIPanel({
     });
   };
 
+  const beginMove = (event: React.MouseEvent) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    setInteraction({
+      type: 'move',
+      startX: event.clientX,
+      startY: event.clientY,
+      initial: panelFrame,
+    });
+  };
+
+  const beginResize = (event: React.MouseEvent) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    setInteraction({
+      type: 'resize',
+      startX: event.clientX,
+      startY: event.clientY,
+      initial: panelFrame,
+    });
+  };
+
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex justify-end" onClick={onClose}>
+    <div className="pointer-events-none fixed inset-0 z-[60]">
       <div
-        className="relative flex h-full min-h-0 w-[min(100vw,1180px)] flex-col overflow-hidden border-l border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl animate-in slide-in-from-right duration-200"
+        className="pointer-events-auto fixed flex min-h-0 flex-col overflow-hidden rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl animate-in fade-in duration-200"
         onClick={e => e.stopPropagation()}
-        style={{ animationDuration: '200ms' }}
+        style={{
+          animationDuration: '200ms',
+          left: panelFrame.x,
+          top: panelFrame.y,
+          width: panelFrame.width,
+          height: panelFrame.height,
+        }}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-4 py-3">
-          <div className="flex items-center gap-2">
+          <div
+            className="flex flex-1 cursor-grab items-center gap-2 active:cursor-grabbing"
+            onMouseDown={beginMove}
+          >
             <div className="flex h-8 w-8 items-center justify-center rounded-xl" style={{ backgroundImage: 'var(--sidebar-gradient)' }}>
               <Sparkles size={16} className="text-white" />
             </div>
@@ -408,7 +595,7 @@ export function AIPanel({
           </div>
         )}
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[292px_minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)]">
           {/* Chat list */}
           <aside className="flex min-h-0 flex-col border-b border-[var(--border-soft)] bg-[var(--surface-muted)]/40 md:border-b-0 md:border-r">
             <div className="flex items-center justify-between gap-2 border-b border-[var(--border-soft)] px-4 py-3">
@@ -680,6 +867,10 @@ export function AIPanel({
             </div>
           </div>
         )}
+        <div
+          className="absolute bottom-0 right-0 h-6 w-6 cursor-nwse-resize"
+          onMouseDown={beginResize}
+        />
       </div>
     </div>,
     document.body
@@ -841,22 +1032,7 @@ function MessageBubble({
             }
 
             if (segment.type === 'import') {
-              const block = segment.block!;
-              const blockKey = `${message.id}:${i}`;
-              const isImported = importedBlocks.has(blockKey);
-
-              return (
-                <ImportCard
-                  key={i}
-                  block={block}
-                  blockKey={blockKey}
-                  isImported={isImported}
-                  tasks={tasks}
-                  deadlines={deadlines}
-                  projects={projects}
-                  onImport={onImport}
-                />
-              );
+              return null;
             }
 
             if (segment.type === 'csv') {
@@ -865,6 +1041,17 @@ function MessageBubble({
 
             return null;
           })}
+          {importBlocks.length > 0 && (
+            <ActionBundleCard
+              messageId={message.id}
+              blocks={importBlocks}
+              tasks={tasks}
+              deadlines={deadlines}
+              projects={projects}
+              importedBlocks={importedBlocks}
+              onImport={onImport}
+            />
+          )}
           {isStreaming && (
             <span className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--accent)]" />
           )}
@@ -922,6 +1109,293 @@ function renderContentWithBlocks(content: string, importBlocks: ImportBlock[]): 
   if (after) segments.push({ type: 'text', content: after });
 
   return segments;
+}
+
+function ActionBundleCard({
+  messageId,
+  blocks,
+  tasks,
+  deadlines,
+  projects,
+  importedBlocks,
+  onImport,
+}: {
+  messageId: string;
+  blocks: ImportBlock[];
+  tasks: Task[];
+  deadlines: Deadline[];
+  projects: Project[];
+  importedBlocks: Set<string>;
+  onImport: (block: ImportBlock, key: string) => Promise<number>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string, number>>({});
+
+  const entries = useMemo(() => (
+    blocks.map((block, index) => ({
+      block,
+      key: `${messageId}:block:${index}`,
+      imported: importedBlocks.has(`${messageId}:block:${index}`),
+      order:
+        block.type === 'tasks' ? 0 :
+        block.type === 'deadlines' ? 1 :
+        block.type === 'subtasks' ? 2 :
+        block.type === 'deadline-links' ? 3 : 4,
+    }))
+  ), [blocks, importedBlocks, messageId]);
+
+  const pendingEntries = entries.filter(entry => !entry.imported);
+  const hasDeletes = entries.some(entry => entry.block.type === 'delete-tasks');
+  const allDone = entries.every(entry => entry.imported);
+
+  const summary = useMemo(() => {
+    const counts = {
+      tasks: 0,
+      deadlines: 0,
+      subtasks: 0,
+      links: 0,
+      deletes: 0,
+    };
+
+    for (const { block } of blocks) {
+      if (block.type === 'tasks') counts.tasks += block.rows.length;
+      if (block.type === 'deadlines') counts.deadlines += block.rows.length;
+      if (block.type === 'subtasks') counts.subtasks += block.rows.length;
+      if (block.type === 'deadline-links') counts.links += block.rows.length;
+      if (block.type === 'delete-tasks') counts.deletes += block.rows.length;
+    }
+
+    return counts;
+  }, [blocks]);
+
+  const linkGroups = useMemo(() => {
+    return blocks
+      .filter(block => block.type === 'deadline-links')
+      .flatMap(block =>
+        block.rows.map(row => {
+          const taskMatches = matchTaskCandidates(tasks, row.taskTitle ?? '');
+          const deadlineMatches = matchDeadlineCandidates(deadlines, projects, row.title, row.course);
+          const valid = taskMatches.length === 1 && deadlineMatches.length === 1;
+          return {
+            label: `${row.taskTitle ?? 'Unknown task'} → ${row.title}`,
+            valid,
+            reason: valid
+              ? ''
+              : [
+                  deadlineMatches.length !== 1 ? (deadlineMatches.length === 0 ? 'deadline not found' : 'deadline ambiguous') : null,
+                  taskMatches.length !== 1 ? (taskMatches.length === 0 ? 'task not found' : 'task ambiguous') : null,
+                ].filter(Boolean).join(', '),
+          };
+        }),
+      );
+  }, [blocks, deadlines, projects, tasks]);
+
+  const deleteGroups = useMemo(() => {
+    return blocks
+      .filter(block => block.type === 'delete-tasks')
+      .flatMap(block =>
+        block.rows.map(row => {
+          const matches = matchTaskCandidates(tasks, row.title);
+          return {
+            label: row.title,
+            valid: matches.length === 1,
+            resolvedTitle: matches.length === 1 ? matches[0].title : row.title,
+          };
+        }),
+      );
+  }, [blocks, tasks]);
+
+  const resultSummary = useMemo(() => {
+    const total = Object.values(results).reduce((sum, count) => sum + count, 0);
+    return total;
+  }, [results]);
+
+  const handleApply = async () => {
+    if (hasDeletes && !confirmDelete) {
+      setExpanded(true);
+      setConfirmDelete(true);
+      return;
+    }
+
+    setApplying(true);
+    setActionError(null);
+    const nextResults: Record<string, number> = {};
+
+    try {
+      for (const entry of [...pendingEntries].sort((a, b) => a.order - b.order)) {
+        const count = await onImport(entry.block, entry.key);
+        nextResults[entry.key] = count;
+      }
+      setResults(prev => ({ ...prev, ...nextResults }));
+      setConfirmDelete(false);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not apply these actions.');
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const primaryLabel = allDone
+    ? 'Applied'
+    : hasDeletes
+      ? (confirmDelete ? 'Approve actions' : 'Review actions')
+      : 'Add';
+
+  return (
+    <div className="rounded-2xl border border-[var(--accent)]/28 bg-[var(--accent-soft)]/25 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <div className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-lg',
+              allDone ? 'bg-emerald-500/20' : 'bg-[var(--accent-soft)]',
+            )}>
+              {allDone ? <Check size={14} className="text-emerald-400" /> : <Sparkles size={14} className="text-[var(--accent)]" />}
+            </div>
+            <div>
+              <p className="text-sm font-medium text-[var(--text-primary)]">
+                {allDone ? `Applied ${resultSummary} changes` : 'Ready to apply'}
+              </p>
+              <p className="text-[11px] text-[var(--text-faint)]">
+                {[summary.tasks ? `${summary.tasks} task${summary.tasks === 1 ? '' : 's'}` : null,
+                  summary.deadlines ? `${summary.deadlines} deadline${summary.deadlines === 1 ? '' : 's'}` : null,
+                  summary.subtasks ? `${summary.subtasks} subtask${summary.subtasks === 1 ? '' : 's'}` : null,
+                  summary.links ? `${summary.links} link${summary.links === 1 ? '' : 's'}` : null,
+                  summary.deletes ? `${summary.deletes} delete${summary.deletes === 1 ? '' : 's'}` : null]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            </div>
+          </div>
+        </div>
+        {!allDone && (
+          <button
+            onClick={handleApply}
+            disabled={applying}
+            className={cn(
+              'rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-60',
+              hasDeletes && confirmDelete
+                ? 'bg-rose-500 text-white'
+                : 'text-[var(--accent-contrast)]',
+            )}
+            style={hasDeletes && confirmDelete ? undefined : { backgroundColor: 'var(--accent-strong)' }}
+          >
+            {applying ? 'Applying...' : primaryLabel}
+          </button>
+        )}
+      </div>
+
+      {actionError && (
+        <p className="mt-3 text-[11px] font-medium text-rose-300">{actionError}</p>
+      )}
+
+      {hasDeletes && confirmDelete && !allDone && (
+        <div className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-3">
+          <p className="text-xs font-medium text-rose-300">Approve delete actions</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-rose-200/85">
+            This response includes deletions. We’ll only delete exact task matches and skip anything ambiguous.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => setConfirmDelete(false)}
+              className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-[var(--text-secondary)]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleApply}
+              disabled={applying}
+              className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+            >
+              {applying ? 'Applying...' : 'Approve actions'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <button
+        onClick={() => setExpanded(prev => !prev)}
+        className="mt-2 flex items-center gap-1 text-[10px] text-[var(--text-faint)] hover:text-[var(--text-muted)]"
+      >
+        <ChevronDown size={12} className={cn('transition', expanded && 'rotate-180')} />
+        {expanded ? 'Hide details' : 'Preview'}
+      </button>
+
+      {expanded && (
+        <div className="mt-3 space-y-3">
+          {summary.tasks > 0 && (
+            <ActionSection
+              label="Tasks"
+              tone="default"
+              items={blocks.filter(block => block.type === 'tasks').flatMap(block => block.rows.map(row => row.title))}
+            />
+          )}
+          {summary.subtasks > 0 && (
+            <ActionSection
+              label="Subtasks"
+              tone="default"
+              items={blocks.filter(block => block.type === 'subtasks').flatMap(block => block.rows.map(row => row.title))}
+            />
+          )}
+          {summary.deadlines > 0 && (
+            <ActionSection
+              label="Deadlines"
+              tone="default"
+              items={blocks.filter(block => block.type === 'deadlines').flatMap(block => block.rows.map(row => row.title))}
+            />
+          )}
+          {summary.links > 0 && (
+            <ActionSection
+              label="Links"
+              tone="success"
+              items={linkGroups.map(group => group.valid ? group.label : `${group.label} · ${group.reason}`)}
+            />
+          )}
+          {summary.deletes > 0 && (
+            <ActionSection
+              label="Deletes"
+              tone="warning"
+              items={deleteGroups.map(group => group.valid ? group.resolvedTitle : `${group.label} · ambiguous`)}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActionSection({
+  label,
+  items,
+  tone,
+}: {
+  label: string;
+  items: string[];
+  tone: 'default' | 'success' | 'warning';
+}) {
+  const toneClasses =
+    tone === 'success'
+      ? 'border-emerald-500/15 bg-emerald-500/8'
+      : tone === 'warning'
+        ? 'border-amber-500/20 bg-amber-500/10'
+        : 'border-[var(--border-soft)] bg-[var(--surface)]/80';
+
+  return (
+    <div className={cn('rounded-xl border px-3 py-3', toneClasses)}>
+      <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-[var(--text-faint)]">{label}</p>
+      <div className="mt-2 space-y-1.5 text-[11px] text-[var(--text-primary)]">
+        {items.slice(0, 6).map(item => (
+          <p key={item}>{item}</p>
+        ))}
+        {items.length > 6 && (
+          <p className="text-[var(--text-faint)]">+{items.length - 6} more</p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // --- Import Card ---

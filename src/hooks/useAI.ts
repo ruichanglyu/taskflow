@@ -89,12 +89,10 @@ function buildSystemPrompt(data: {
   const doneTasks = data.tasks.filter(t => t.status === 'done');
   const pastDeadlines = data.deadlines
     .filter(d => d.dueDate < today)
-    .sort((a, b) => b.dueDate.localeCompare(a.dueDate))
-    .slice(0, 20);
+    .sort((a, b) => b.dueDate.localeCompare(a.dueDate));
   const upcomingDeadlines = data.deadlines
-    .filter(d => d.dueDate >= today && d.status !== 'done')
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-    .slice(0, 20);
+    .filter(d => d.dueDate >= today)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const activePlan = data.plans.find(p => p.isActive);
 
   const tasksSummary = activeTasks.length > 0
@@ -143,10 +141,10 @@ ${coursesList}
 ACTIVE TASKS (${activeTasks.length} active, ${doneTasks.length} done):
 ${tasksSummary}
 
-UPCOMING DEADLINES (next 20):
+UPCOMING DEADLINES (${upcomingDeadlines.length}):
 ${deadlinesSummary}
 
-PAST DEADLINES (most recent 20):
+PAST DEADLINES (${pastDeadlines.length}):
 ${pastDeadlinesSummary}
 
 ACTIVE GYM PLAN:

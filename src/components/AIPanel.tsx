@@ -94,6 +94,12 @@ const DEFAULT_PANEL_FRAME: PanelFrame = {
 const DEFAULT_CHAT_SIDEBAR_WIDTH = 184;
 const DEFAULT_CHAT_SIDEBAR_COLLAPSED = false;
 
+function formatDictationElapsed(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
 function clampPanelFrame(frame: PanelFrame): PanelFrame {
   if (typeof window === 'undefined') return frame;
 
@@ -254,6 +260,7 @@ export function AIPanel({
   const [isDictating, setIsDictating] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [isComposerDragActive, setIsComposerDragActive] = useState(false);
+  const [dictationSeconds, setDictationSeconds] = useState(0);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = messagesScrollRef.current;
@@ -271,6 +278,19 @@ export function AIPanel({
     const recognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
     setSpeechSupported(Boolean(recognitionCtor));
   }, []);
+
+  useEffect(() => {
+    if (!isDictating) {
+      setDictationSeconds(0);
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setDictationSeconds(prev => prev + 1);
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [isDictating]);
 
   // Focus input when panel opens
   useEffect(() => {
@@ -417,6 +437,7 @@ export function AIPanel({
     if ((!input.trim() && !pendingImages.length) || isStreaming) return;
     speechRecognitionRef.current?.stop();
     setIsDictating(false);
+    setDictationSeconds(0);
     setShowAttachmentMenu(false);
     const msg = input.trim() || (pendingImages.length ? 'What do you see in this image?' : '');
     const images = pendingImages.length ? [...pendingImages] : undefined;
@@ -551,6 +572,7 @@ export function AIPanel({
 
     recognition.onstart = () => {
       setPanelError(null);
+      setDictationSeconds(0);
       setIsDictating(true);
     };
 
@@ -582,6 +604,7 @@ export function AIPanel({
 
     recognition.onend = () => {
       setIsDictating(false);
+      setDictationSeconds(0);
       speechRecognitionRef.current = null;
     };
 
@@ -1348,9 +1371,23 @@ export function AIPanel({
                 {isComposerDragActive && (
                   <div className="pointer-events-none absolute inset-x-3 top-2 flex justify-center">
                     <div className="rounded-full border border-[var(--accent)]/25 bg-[var(--accent)]/12 px-3 py-1 text-[10px] font-medium text-[var(--accent)]">
-                      Drop images to attach
+                      Drop photos here to attach
                     </div>
                   </div>
+                )}
+                {isDictating && (
+                  <button
+                    type="button"
+                    onClick={handleToggleDictation}
+                    className="absolute bottom-full right-3 z-10 mb-2 flex items-center gap-2 rounded-full border border-black/10 bg-[#26211b] px-3 py-1.5 text-xs text-white shadow-lg transition hover:bg-[#312922] dark:border-white/10 dark:bg-[#1b1714] dark:hover:bg-[#26201b]"
+                    title="Stop dictation"
+                  >
+                    <span className="font-medium">Stop dictation</span>
+                    <span className="text-white/70">{formatDictationElapsed(dictationSeconds)}</span>
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/12">
+                      <Square size={10} fill="currentColor" />
+                    </span>
+                  </button>
                 )}
                 {/* Hidden file input */}
                 <input
@@ -1366,7 +1403,7 @@ export function AIPanel({
                     onClick={() => setShowAttachmentMenu(prev => !prev)}
                     disabled={!hasKey || isStreaming}
                     className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-faint)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
-                    title="Add attachment"
+                    title="Add photo"
                     aria-haspopup="menu"
                     aria-expanded={showAttachmentMenu}
                   >
@@ -1379,7 +1416,7 @@ export function AIPanel({
                         className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
                       >
                         <ImagePlus size={15} className="text-[var(--text-muted)]" />
-                        <span>Upload image</span>
+                        <span>Add photo</span>
                       </button>
                     </div>
                   )}

@@ -339,11 +339,11 @@ export function AppShell({ user }: AppShellProps) {
         </header>
 
         <main className="relative flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          {(store.error || deadlineStore.error || canvasStore.error) && (
+          {(store.error || deadlineStore.error || canvasStore.error || gym.error) && (
             <div className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-white/90">
-              <p>{store.error || deadlineStore.error || canvasStore.error}</p>
+              <p>{store.error || deadlineStore.error || canvasStore.error || gym.error}</p>
               <button
-                onClick={() => { store.clearError(); deadlineStore.clearError(); canvasStore.clearError(); }}
+                onClick={() => { store.clearError(); deadlineStore.clearError(); canvasStore.clearError(); gym.clearError(); }}
                 className="shrink-0 rounded-full border border-rose-300/20 px-2 py-1 text-xs text-white/70 transition hover:bg-rose-300/10 hover:text-white"
               >
                 Dismiss

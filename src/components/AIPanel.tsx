@@ -674,6 +674,7 @@ export function AIPanel({
       ...tasks,
       ...recentAiTasksRef.current.filter(recent => !tasks.some(task => task.id === recent.id)),
     ];
+    const workingCalendarEvents: GoogleCalendarEvent[] = [...calendarEvents];
 
     // Resolve course name → projectId, create if needed
     const resolveProject = async (courseName?: string): Promise<string | null> => {
@@ -756,30 +757,59 @@ export function AIPanel({
     } else if (block.type === 'calendar-create') {
       let created = 0;
       let skipped = 0;
+      let adjusted = 0;
 
       for (const row of block.rows) {
-        const payload = buildCalendarEventPayload(row, 'create');
-        if (!payload) {
+        const targetCalendarId = row.calendar
+          ? calendarCalendars.find(item => normalizeCalendarCandidate(item.summary) === normalizeCalendarCandidate(row.calendar || ''))?.id
+          : selectedCalendarId;
+        const targetCalendar = targetCalendarId
+          ? calendarCalendars.find(item => item.id === targetCalendarId)
+          : undefined;
+
+        const rawPayload = buildCalendarEventPayload(row, 'create');
+        if (!rawPayload || !targetCalendarId) {
           skipped++;
           continue;
         }
 
-        const targetCalendarId = row.calendar
-          ? calendarCalendars.find(item => normalizeCalendarCandidate(item.summary) === normalizeCalendarCandidate(row.calendar || ''))?.id
-          : selectedCalendarId;
+        const resolved = maybeResolveCalendarCreateConflict(
+          row,
+          rawPayload,
+          workingCalendarEvents,
+          targetCalendar?.summary ?? row.calendar,
+        );
+        if (!resolved.payload) {
+          skipped++;
+          continue;
+        }
 
-        const ok = await onCreateCalendarEvent(payload, targetCalendarId);
-        if (ok) created++;
-        else skipped++;
+        const ok = await onCreateCalendarEvent(resolved.payload, targetCalendarId);
+        if (ok) {
+          created++;
+          if (resolved.adjusted) adjusted++;
+          workingCalendarEvents.push(
+            buildSyntheticCalendarEvent(
+              resolved.payload,
+              targetCalendarId,
+              targetCalendar?.summary,
+              targetCalendar?.backgroundColor,
+            ),
+          );
+        } else {
+          skipped++;
+        }
       }
 
       imported = created;
       if (skipped > 0) {
         setPanelError(
           skipped === 1
-            ? 'Skipped 1 calendar create because it was incomplete or failed to save.'
-            : `Skipped ${skipped} calendar creates because they were incomplete or failed to save.`,
+            ? 'Skipped 1 calendar create because it conflicted, was incomplete, or failed to save.'
+            : `Skipped ${skipped} calendar creates because they conflicted, were incomplete, or failed to save.`,
         );
+      } else if (adjusted > 0) {
+        setPanelError(null);
       }
     } else if (block.type === 'calendar-update') {
       let updated = 0;
@@ -1857,6 +1887,197 @@ function buildCalendarEventPayload(row: ImportBlock['rows'][number], mode: 'crea
     start: { dateTime: buildLocalDateTimeString(date, startKey), timeZone },
     end: { dateTime: buildLocalDateTimeString(date, endKey), timeZone },
   } satisfies NewGoogleCalendarEvent;
+}
+
+function getTimedPayloadDetails(payload: NewGoogleCalendarEvent) {
+  if (!('dateTime' in payload.start) || !('dateTime' in payload.end)) return null;
+
+  const start = new Date(payload.start.dateTime);
+  const end = new Date(payload.end.dateTime);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+
+  const dateKey = formatDateKey(start);
+  const startMinutes = start.getHours() * 60 + start.getMinutes();
+  const endMinutes = end.getHours() * 60 + end.getMinutes();
+  const durationMinutes = Math.max(0, endMinutes - startMinutes);
+
+  if (durationMinutes <= 0) return null;
+
+  return {
+    dateKey,
+    startMinutes,
+    endMinutes,
+    durationMinutes,
+    timeZone: payload.start.timeZone ?? payload.end.timeZone,
+  };
+}
+
+function getTimedEventDetails(event: GoogleCalendarEvent) {
+  if (!event.start?.dateTime || !event.end?.dateTime) return null;
+
+  const start = new Date(event.start.dateTime);
+  const end = new Date(event.end.dateTime);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+
+  const dateKey = formatDateKey(start);
+  const startMinutes = start.getHours() * 60 + start.getMinutes();
+  const endMinutes = end.getHours() * 60 + end.getMinutes();
+
+  if (endMinutes <= startMinutes) return null;
+
+  return { dateKey, startMinutes, endMinutes };
+}
+
+function isStudyBlockAutoScheduleTarget(row: ParsedImportRow, calendarSummary?: string) {
+  const normalizedTitle = normalizeDeleteCandidate(row.title);
+  const normalizedCalendar = normalizeCalendarCandidate(calendarSummary ?? row.calendar ?? '');
+  return (
+    normalizedTitle.includes('study block') ||
+    normalizedCalendar.includes('study blocks') ||
+    normalizedCalendar.includes('exam prep')
+  );
+}
+
+function findFreeSlotForDuration(
+  events: GoogleCalendarEvent[],
+  dateKey: string,
+  durationMinutes: number,
+  preferredStartMinutes: number,
+) {
+  const DAY_START = 8 * 60;
+  const DAY_END = 22 * 60;
+
+  const mergedBusy = events
+    .map(getTimedEventDetails)
+    .filter((details): details is NonNullable<ReturnType<typeof getTimedEventDetails>> => Boolean(details))
+    .filter(details => details.dateKey === dateKey)
+    .map(details => ({
+      start: Math.max(DAY_START, details.startMinutes),
+      end: Math.min(DAY_END, details.endMinutes),
+    }))
+    .filter(details => details.end > details.start)
+    .sort((a, b) => a.start - b.start)
+    .reduce<Array<{ start: number; end: number }>>((acc, current) => {
+      const previous = acc[acc.length - 1];
+      if (!previous || current.start > previous.end) {
+        acc.push({ ...current });
+      } else {
+        previous.end = Math.max(previous.end, current.end);
+      }
+      return acc;
+    }, []);
+
+  const gaps: Array<{ start: number; end: number }> = [];
+  let cursor = DAY_START;
+  for (const busy of mergedBusy) {
+    if (busy.start > cursor) {
+      gaps.push({ start: cursor, end: busy.start });
+    }
+    cursor = Math.max(cursor, busy.end);
+  }
+  if (cursor < DAY_END) {
+    gaps.push({ start: cursor, end: DAY_END });
+  }
+
+  const preferredGap = gaps.find(gap =>
+    preferredStartMinutes >= gap.start &&
+    preferredStartMinutes + durationMinutes <= gap.end,
+  );
+  if (preferredGap) {
+    return {
+      startMinutes: preferredStartMinutes,
+      endMinutes: preferredStartMinutes + durationMinutes,
+    };
+  }
+
+  const laterGap = gaps.find(gap =>
+    gap.end - Math.max(gap.start, preferredStartMinutes) >= durationMinutes,
+  );
+  if (laterGap) {
+    const nextStart = Math.max(laterGap.start, preferredStartMinutes);
+    return {
+      startMinutes: nextStart,
+      endMinutes: nextStart + durationMinutes,
+    };
+  }
+
+  const earliestGap = gaps.find(gap => gap.end - gap.start >= durationMinutes);
+  if (!earliestGap) return null;
+
+  return {
+    startMinutes: earliestGap.start,
+    endMinutes: earliestGap.start + durationMinutes,
+  };
+}
+
+function maybeResolveCalendarCreateConflict(
+  row: ParsedImportRow,
+  payload: NewGoogleCalendarEvent,
+  events: GoogleCalendarEvent[],
+  calendarSummary?: string,
+) {
+  const timedDetails = getTimedPayloadDetails(payload);
+  if (!timedDetails) {
+    return { payload, adjusted: false };
+  }
+
+  const hasConflict = events.some(event => {
+    const busy = getTimedEventDetails(event);
+    if (!busy || busy.dateKey !== timedDetails.dateKey) return false;
+    return timedDetails.startMinutes < busy.endMinutes && timedDetails.endMinutes > busy.startMinutes;
+  });
+
+  if (!hasConflict) {
+    return { payload, adjusted: false };
+  }
+
+  if (!isStudyBlockAutoScheduleTarget(row, calendarSummary)) {
+    return { payload: null, adjusted: false };
+  }
+
+  const nextSlot = findFreeSlotForDuration(
+    events,
+    timedDetails.dateKey,
+    timedDetails.durationMinutes,
+    timedDetails.startMinutes,
+  );
+
+  if (!nextSlot) {
+    return { payload: null, adjusted: false };
+  }
+
+  const adjustedPayload: NewGoogleCalendarEvent = {
+    ...payload,
+    start: {
+      dateTime: buildLocalDateTimeString(timedDetails.dateKey, minutesToTime(nextSlot.startMinutes)),
+      ...(timedDetails.timeZone ? { timeZone: timedDetails.timeZone } : {}),
+    },
+    end: {
+      dateTime: buildLocalDateTimeString(timedDetails.dateKey, minutesToTime(nextSlot.endMinutes)),
+      ...(timedDetails.timeZone ? { timeZone: timedDetails.timeZone } : {}),
+    },
+  };
+
+  return { payload: adjustedPayload, adjusted: true };
+}
+
+function buildSyntheticCalendarEvent(
+  payload: NewGoogleCalendarEvent,
+  calendarId: string,
+  calendarSummary?: string,
+  calendarColor?: string,
+): GoogleCalendarEvent {
+  return {
+    id: `synthetic-${Math.random().toString(36).slice(2, 10)}`,
+    summary: payload.summary,
+    description: payload.description,
+    location: payload.location,
+    start: payload.start,
+    end: payload.end,
+    calendarId,
+    calendarSummary,
+    calendarColor,
+  };
 }
 
 

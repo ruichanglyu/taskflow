@@ -208,8 +208,8 @@ interface AIPanelProps {
   onDeleteTask: (taskId: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onLinkTask: (deadlineId: string, taskId: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onCreateCalendarEvent: (event: NewGoogleCalendarEvent, calendarId?: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
-  onUpdateCalendarEvent: (eventId: string, event: Partial<NewGoogleCalendarEvent>, calendarId?: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
-  onDeleteCalendarEvent: (eventId: string, calendarId?: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
+  onUpdateCalendarEvent: (eventId: string, event: Partial<NewGoogleCalendarEvent>, calendarId?: string, options?: BehaviorLearningActionOptions, existingEvent?: GoogleCalendarEvent) => Promise<boolean>;
+  onDeleteCalendarEvent: (eventId: string, calendarId?: string, options?: BehaviorLearningActionOptions, existingEvent?: GoogleCalendarEvent) => Promise<boolean>;
   habits: Habit[];
   onAddHabit: (title: string, frequency?: 'daily' | 'weekly', options?: BehaviorLearningActionOptions) => Promise<void>;
   onToggleHabit: (id: string, options?: BehaviorLearningActionOptions) => Promise<void>;
@@ -855,7 +855,7 @@ export function AIPanel({
           : null;
 
         const ok = replacementMatch
-          ? await onUpdateCalendarEvent(replacementMatch.id, resolved.payload, targetCalendarId, aiLearningOptions)
+          ? await onUpdateCalendarEvent(replacementMatch.id, resolved.payload, targetCalendarId, aiLearningOptions, replacementMatch)
           : await onCreateCalendarEvent(resolved.payload, targetCalendarId, aiLearningOptions);
 
         if (ok) {
@@ -908,7 +908,7 @@ export function AIPanel({
           ? calendarCalendars.find(item => normalizeCalendarCandidate(item.summary) === normalizeCalendarCandidate(row.newCalendar || ''))?.id
           : matches[0].calendarId;
 
-        const ok = await onUpdateCalendarEvent(matches[0].id, payload, targetCalendarId, aiLearningOptions);
+        const ok = await onUpdateCalendarEvent(matches[0].id, payload, targetCalendarId, aiLearningOptions, matches[0]);
         if (ok) updated++;
         else skipped++;
       }
@@ -934,7 +934,7 @@ export function AIPanel({
 
         let allDeleted = true;
         for (const match of matches) {
-          const ok = await onDeleteCalendarEvent(match.id, match.calendarId, aiLearningOptions);
+          const ok = await onDeleteCalendarEvent(match.id, match.calendarId, aiLearningOptions, match);
           if (ok) {
             deleted++;
             workingCalendarEvents = workingCalendarEvents.filter(event => !(event.id === match.id && event.calendarId === match.calendarId));

@@ -784,6 +784,44 @@ function makeNewThread(title = 'New chat'): ChatThread {
   };
 }
 
+function buildThreadContentSignature(thread: ChatThread) {
+  const normalizedTitle = thread.title.trim().toLowerCase();
+  const normalizedMessages = thread.messages.map(message => ({
+    role: message.role,
+    content: message.content.trim().replace(/\s+/g, ' '),
+    imageCount: message.images?.length ?? 0,
+  }));
+  return JSON.stringify({ title: normalizedTitle, messages: normalizedMessages });
+}
+
+function dedupeEquivalentThreads(threads: ChatThread[]) {
+  const byId = new Map<string, ChatThread>();
+  for (const thread of threads) {
+    byId.set(thread.id, sanitizeThread(thread));
+  }
+
+  const byContent = new Map<string, ChatThread>();
+  for (const thread of byId.values()) {
+    const signature = buildThreadContentSignature(thread);
+    const existing = byContent.get(signature);
+    if (!existing) {
+      byContent.set(signature, thread);
+      continue;
+    }
+
+    const shouldReplace =
+      thread.updatedAt > existing.updatedAt ||
+      (thread.updatedAt === existing.updatedAt && thread.messages.length >= existing.messages.length);
+
+    if (shouldReplace) {
+      byContent.set(signature, thread);
+    }
+  }
+
+  const result = [...byContent.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+  return result.length > 0 ? result : [makeNewThread()];
+}
+
 function loadSavedThreads(userId: string): ChatThread[] {
   try {
     const saved = localStorage.getItem(chatStorage(userId));
@@ -823,20 +861,20 @@ function loadSavedThreads(userId: string): ChatThread[] {
             return { id, title, createdAt, updatedAt, messages };
           })
           .filter(Boolean) as ChatThread[];
-        if (threads.length > 0) return threads;
+        if (threads.length > 0) return dedupeEquivalentThreads(threads);
       }
     }
 
     const legacyMessages = loadLegacyMessages();
     if (legacyMessages.length > 0) {
       const now = Date.now();
-      return [{
+      return dedupeEquivalentThreads([{
         id: crypto.randomUUID(),
         title: makeChatTitle(legacyMessages),
         createdAt: legacyMessages[0]?.timestamp ?? now,
         updatedAt: legacyMessages[legacyMessages.length - 1]?.timestamp ?? now,
         messages: legacyMessages.map(stripAttachmentPayload),
-      }];
+      }]);
     }
   } catch { /* ignore */ }
 
@@ -845,7 +883,7 @@ function loadSavedThreads(userId: string): ChatThread[] {
 
 function saveThreads(userId: string, threads: ChatThread[]) {
   try {
-    const toSave = threads.map(sanitizeThread);
+    const toSave = dedupeEquivalentThreads(threads.map(sanitizeThread));
     localStorage.setItem(chatStorage(userId), JSON.stringify(toSave));
   } catch { /* storage full — ignore */ }
 }
@@ -879,7 +917,7 @@ function parseRemoteThreads(
     });
   }
 
-  return threadRows
+  return dedupeEquivalentThreads(threadRows
     .map((row): ChatThread => ({
       id: row.id,
       title: row.title || 'New chat',
@@ -887,7 +925,7 @@ function parseRemoteThreads(
       updatedAt: Date.parse(row.updated_at) || Date.now(),
       messages: (messagesByThread.get(row.id) ?? []).sort((a, b) => a.timestamp - b.timestamp),
     }))
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+    .sort((a, b) => b.updatedAt - a.updatedAt));
 }
 
 function mergeThreads(remoteThreads: ChatThread[], localThreads: ChatThread[]) {
@@ -908,8 +946,7 @@ function mergeThreads(remoteThreads: ChatThread[], localThreads: ChatThread[]) {
     if (shouldReplace) merged.set(normalized.id, normalized);
   }
 
-  const result = [...merged.values()].sort((a, b) => b.updatedAt - a.updatedAt);
-  return result.length > 0 ? result : [makeNewThread()];
+  return dedupeEquivalentThreads([...merged.values()].sort((a, b) => b.updatedAt - a.updatedAt));
 }
 
 async function loadRemoteThreads(userId: string): Promise<ChatThread[] | null> {
@@ -950,7 +987,7 @@ async function saveRemoteThreads(userId: string, threads: ChatThread[]): Promise
     const { supabase } = await import('../lib/supabase');
     if (!supabase) return false;
 
-    const sanitizedThreads = threads.map(sanitizeThread);
+    const sanitizedThreads = dedupeEquivalentThreads(threads.map(sanitizeThread));
     const threadRows = sanitizedThreads.map(thread => ({
       id: thread.id,
       user_id: userId,
@@ -1094,22 +1131,24 @@ export function useAI(userId: string) {
     let nextThreads = remoteThreads;
 
     if (remoteThreads.length === 0 && localThreads.length > 0) {
-      nextThreads = localThreads.map(sanitizeThread);
+      nextThreads = dedupeEquivalentThreads(localThreads.map(sanitizeThread));
       await saveRemoteThreads(userId, nextThreads);
-    } else if (localThreads.length > 0) {
+    } else if (!hasHydratedRemoteChats && localThreads.length > 0) {
       nextThreads = mergeThreads(remoteThreads, localThreads);
       const mergedSignature = serializeThreads(nextThreads);
       const remoteSignature = serializeThreads(remoteThreads);
       if (mergedSignature !== remoteSignature) {
         await saveRemoteThreads(userId, nextThreads);
       }
+    } else {
+      nextThreads = dedupeEquivalentThreads(remoteThreads);
     }
 
     remoteSyncSignatureRef.current = serializeThreads(nextThreads);
     setThreads(nextThreads);
     setActiveChatId(prev => nextThreads.some(thread => thread.id === prev) ? prev : nextThreads[0]?.id ?? makeNewThread().id);
     setHasHydratedRemoteChats(true);
-  }, [userId]);
+  }, [hasHydratedRemoteChats, userId]);
 
   useEffect(() => {
     void refreshRemoteChats();

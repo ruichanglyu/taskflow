@@ -466,9 +466,10 @@ export function AppShell({ user }: AppShellProps) {
     event: Parameters<typeof calendar.updateEvent>[1],
     calendarIdOverride?: Parameters<typeof calendar.updateEvent>[2],
     options?: BehaviorLearningActionOptions,
+    existingEventOverride?: Parameters<typeof learning.logCalendarUpdated>[0],
   ) => {
-    const existingEvent = calendar.events.find(item => item.id === eventId);
-    const ok = await calendar.updateEvent(eventId, event, calendarIdOverride);
+    const existingEvent = existingEventOverride ?? calendar.events.find(item => item.id === eventId);
+    const ok = await calendar.updateEvent(eventId, event, calendarIdOverride, existingEvent);
     if (ok && existingEvent) {
       const calendarId = calendarIdOverride || existingEvent.calendarId || calendar.selectedCalendarId;
       const calendarSummary = calendar.calendars.find(item => item.id === calendarId)?.summary ?? existingEvent.calendarSummary ?? null;
@@ -481,8 +482,9 @@ export function AppShell({ user }: AppShellProps) {
     eventId: string,
     calendarIdOverride?: Parameters<typeof calendar.deleteEvent>[1],
     options?: BehaviorLearningActionOptions,
+    existingEventOverride?: Parameters<typeof learning.logCalendarDeleted>[0],
   ) => {
-    const existingEvent = calendar.events.find(item => item.id === eventId);
+    const existingEvent = existingEventOverride ?? calendar.events.find(item => item.id === eventId);
     const ok = await calendar.deleteEvent(eventId, calendarIdOverride);
     if (ok && existingEvent) {
       learning.logCalendarDeleted(existingEvent, options);

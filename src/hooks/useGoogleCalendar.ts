@@ -396,8 +396,9 @@ export function useGoogleCalendar(userId: string) {
     eventId: string,
     event: Partial<NewGoogleCalendarEvent>,
     calendarIdOverride?: string,
+    existingEventOverride?: GoogleCalendarEvent,
   ): Promise<boolean> => {
-    const existingEvent = events.find(existing => existing.id === eventId);
+    const existingEvent = existingEventOverride ?? events.find(existing => existing.id === eventId);
     const targetCalendarId =
       calendarIdOverride ||
       existingEvent?.calendarId ||

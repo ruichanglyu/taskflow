@@ -319,7 +319,7 @@ function mapAppEventToRow(userId: string, event: AppBehaviorEvent): BehaviorLear
 
 async function upsertBehaviorSettings(userId: string, aiTestingMode: boolean) {
   if (!supabase) return;
-  await supabase.from('behavior_learning_settings').upsert(
+  const { error } = await supabase.from('behavior_learning_settings').upsert(
     {
       user_id: userId,
       ai_testing_mode: aiTestingMode,
@@ -327,6 +327,9 @@ async function upsertBehaviorSettings(userId: string, aiTestingMode: boolean) {
     },
     { onConflict: 'user_id' },
   );
+  if (error) {
+    console.warn('[BehaviorLearning] Failed to upsert settings', error);
+  }
 }
 
 function buildScoreMaps(events: BehaviorLearningEvent[]) {
@@ -589,9 +592,14 @@ export function useBehaviorLearning(userId: string) {
       return next;
     });
     if (supabase) {
-      void supabase
-        .from('behavior_learning_schedule_events')
-        .insert(mapEventToScheduleRow(userId, event));
+      void (async () => {
+        const { error } = await supabase
+          .from('behavior_learning_schedule_events')
+          .insert(mapEventToScheduleRow(userId, event));
+        if (error) {
+          console.warn('[BehaviorLearning] Failed to persist schedule event', error, event);
+        }
+      })();
     }
     broadcastBehaviorUpdate(userId);
   }, [userId]);
@@ -603,9 +611,14 @@ export function useBehaviorLearning(userId: string) {
       return next;
     });
     if (supabase) {
-      void supabase
-        .from('behavior_learning_app_events')
-        .insert(mapAppEventToRow(userId, event));
+      void (async () => {
+        const { error } = await supabase
+          .from('behavior_learning_app_events')
+          .insert(mapAppEventToRow(userId, event));
+        if (error) {
+          console.warn('[BehaviorLearning] Failed to persist app event', error, event);
+        }
+      })();
     }
     broadcastBehaviorUpdate(userId);
   }, [userId]);

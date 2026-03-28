@@ -75,6 +75,24 @@ function keyStorage(userId: string) { return `taskflow_ai_key_${userId}`; }
 function chatStorage(userId: string) { return `taskflow_ai_chats_${userId}`; }
 function activeChatStorage(userId: string) { return `taskflow_ai_active_chat_${userId}`; }
 
+interface RemoteChatThreadRow {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface RemoteChatMessageRow {
+  id: string;
+  thread_id: string;
+  user_id: string;
+  role: ChatMessage['role'];
+  content: string;
+  images: unknown;
+  created_at: string;
+}
+
 // --- API key: synced via Supabase, localStorage used as fast cache ---
 
 export async function getAPIKey(userId: string): Promise<string | null> {
@@ -738,6 +756,19 @@ function sanitizeThread(thread: ChatThread): ChatThread {
   };
 }
 
+function serializeThreads(threads: ChatThread[]) {
+  const normalized = threads
+    .map(thread => sanitizeThread(thread))
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map(thread => ({
+      ...thread,
+      messages: [...thread.messages]
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map(message => stripAttachmentPayload(message)),
+    }));
+  return JSON.stringify(normalized);
+}
+
 function makeNewThread(title = 'New chat'): ChatThread {
   const now = Date.now();
   return {
@@ -815,6 +846,186 @@ function saveThreads(userId: string, threads: ChatThread[]) {
   } catch { /* storage full — ignore */ }
 }
 
+function parseRemoteImages(images: unknown): ImageAttachment[] | undefined {
+  if (!Array.isArray(images)) return undefined;
+  const parsed = images
+    .filter(Boolean)
+    .map((img: any) => ({
+      base64: typeof img?.base64 === 'string' ? img.base64 : '',
+      mimeType: typeof img?.mimeType === 'string' ? img.mimeType : 'image/png',
+      preview: typeof img?.preview === 'string' ? img.preview : '',
+    }))
+    .filter((img: ImageAttachment) => img.base64 || img.preview || img.mimeType);
+  return parsed.length > 0 ? parsed : undefined;
+}
+
+function parseRemoteThreads(
+  threadRows: RemoteChatThreadRow[],
+  messageRows: RemoteChatMessageRow[],
+): ChatThread[] {
+  const messagesByThread = new Map<string, ChatMessage[]>();
+  for (const row of messageRows) {
+    if (!messagesByThread.has(row.thread_id)) messagesByThread.set(row.thread_id, []);
+    messagesByThread.get(row.thread_id)!.push({
+      id: row.id,
+      role: row.role,
+      content: row.content ?? '',
+      timestamp: Date.parse(row.created_at) || Date.now(),
+      images: parseRemoteImages(row.images),
+    });
+  }
+
+  return threadRows
+    .map((row): ChatThread => ({
+      id: row.id,
+      title: row.title || 'New chat',
+      createdAt: Date.parse(row.created_at) || Date.now(),
+      updatedAt: Date.parse(row.updated_at) || Date.now(),
+      messages: (messagesByThread.get(row.id) ?? []).sort((a, b) => a.timestamp - b.timestamp),
+    }))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+function mergeThreads(remoteThreads: ChatThread[], localThreads: ChatThread[]) {
+  const merged = new Map<string, ChatThread>();
+
+  for (const thread of [...remoteThreads, ...localThreads]) {
+    const normalized = sanitizeThread(thread);
+    const existing = merged.get(normalized.id);
+    if (!existing) {
+      merged.set(normalized.id, normalized);
+      continue;
+    }
+
+    const shouldReplace =
+      normalized.updatedAt > existing.updatedAt ||
+      (normalized.updatedAt === existing.updatedAt && normalized.messages.length > existing.messages.length);
+
+    if (shouldReplace) merged.set(normalized.id, normalized);
+  }
+
+  const result = [...merged.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+  return result.length > 0 ? result : [makeNewThread()];
+}
+
+async function loadRemoteThreads(userId: string): Promise<ChatThread[] | null> {
+  try {
+    const { supabase } = await import('../lib/supabase');
+    if (!supabase) return null;
+
+    const [threadResult, messageResult] = await Promise.all([
+      supabase
+        .from('ai_chat_threads')
+        .select('id,user_id,title,created_at,updated_at')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false }),
+      supabase
+        .from('ai_chat_messages')
+        .select('id,thread_id,user_id,role,content,images,created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true }),
+    ]);
+
+    if (threadResult.error || messageResult.error) {
+      console.warn('[AI] Failed to load remote chats', threadResult.error ?? messageResult.error);
+      return null;
+    }
+
+    return parseRemoteThreads(
+      (threadResult.data ?? []) as RemoteChatThreadRow[],
+      (messageResult.data ?? []) as RemoteChatMessageRow[],
+    );
+  } catch (error) {
+    console.warn('[AI] Remote chat load failed', error);
+    return null;
+  }
+}
+
+async function saveRemoteThreads(userId: string, threads: ChatThread[]): Promise<boolean> {
+  try {
+    const { supabase } = await import('../lib/supabase');
+    if (!supabase) return false;
+
+    const sanitizedThreads = threads.map(sanitizeThread);
+    const threadRows = sanitizedThreads.map(thread => ({
+      id: thread.id,
+      user_id: userId,
+      title: thread.title,
+      created_at: new Date(thread.createdAt).toISOString(),
+      updated_at: new Date(thread.updatedAt).toISOString(),
+    }));
+    const messageRows = sanitizedThreads.flatMap(thread =>
+      thread.messages.map(message => ({
+        id: message.id,
+        thread_id: thread.id,
+        user_id: userId,
+        role: message.role,
+        content: message.content,
+        images: (message.images ?? []).map(img => ({
+          base64: img.base64,
+          mimeType: img.mimeType,
+          preview: img.preview,
+        })),
+        created_at: new Date(message.timestamp).toISOString(),
+      })),
+    );
+
+    const existingThreadsResult = await supabase
+      .from('ai_chat_threads')
+      .select('id')
+      .eq('user_id', userId);
+
+    if (existingThreadsResult.error) {
+      console.warn('[AI] Failed to read remote thread ids', existingThreadsResult.error);
+      return false;
+    }
+
+    const existingIds = new Set((existingThreadsResult.data ?? []).map(row => row.id as string));
+    const nextIds = new Set(threadRows.map(row => row.id));
+    const deletedIds = [...existingIds].filter(id => !nextIds.has(id));
+
+    const upsertThreadsResult = await supabase.from('ai_chat_threads').upsert(threadRows);
+    if (upsertThreadsResult.error) {
+      console.warn('[AI] Failed to save remote threads', upsertThreadsResult.error);
+      return false;
+    }
+
+    if (deletedIds.length > 0) {
+      const deleteThreadsResult = await supabase
+        .from('ai_chat_threads')
+        .delete()
+        .eq('user_id', userId)
+        .in('id', deletedIds);
+      if (deleteThreadsResult.error) {
+        console.warn('[AI] Failed to delete removed remote threads', deleteThreadsResult.error);
+        return false;
+      }
+    }
+
+    const deleteMessagesResult = await supabase
+      .from('ai_chat_messages')
+      .delete()
+      .eq('user_id', userId);
+    if (deleteMessagesResult.error) {
+      console.warn('[AI] Failed to clear remote messages before save', deleteMessagesResult.error);
+      return false;
+    }
+
+    if (messageRows.length > 0) {
+      const insertMessagesResult = await supabase.from('ai_chat_messages').insert(messageRows);
+      if (insertMessagesResult.error) {
+        console.warn('[AI] Failed to save remote messages', insertMessagesResult.error);
+        return false;
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.warn('[AI] Remote chat save failed', error);
+    return false;
+  }
+}
+
 export function useAI(userId: string) {
   const initialStateRef = useRef<{ threads: ChatThread[]; activeChatId: string } | null>(null);
   if (!initialStateRef.current) {
@@ -836,9 +1047,11 @@ export function useAI(userId: string) {
   const [activeChatId, setActiveChatId] = useState<string>(() => initialStateRef.current?.activeChatId ?? initialStateRef.current?.threads[0]?.id ?? makeNewThread().id);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasHydratedRemoteChats, setHasHydratedRemoteChats] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const threadsRef = useRef<ChatThread[]>(threads);
   const activeChatIdRef = useRef(activeChatId);
+  const remoteSyncSignatureRef = useRef('');
 
   useEffect(() => {
     threadsRef.current = threads;
@@ -866,6 +1079,58 @@ export function useAI(userId: string) {
     [threads],
   );
 
+  const refreshRemoteChats = useCallback(async () => {
+    const remoteThreads = await loadRemoteThreads(userId);
+    if (remoteThreads === null) {
+      setHasHydratedRemoteChats(true);
+      return;
+    }
+
+    const localThreads = threadsRef.current;
+    let nextThreads = remoteThreads;
+
+    if (remoteThreads.length === 0 && localThreads.length > 0) {
+      nextThreads = localThreads.map(sanitizeThread);
+      await saveRemoteThreads(userId, nextThreads);
+    } else if (localThreads.length > 0) {
+      nextThreads = mergeThreads(remoteThreads, localThreads);
+      const mergedSignature = serializeThreads(nextThreads);
+      const remoteSignature = serializeThreads(remoteThreads);
+      if (mergedSignature !== remoteSignature) {
+        await saveRemoteThreads(userId, nextThreads);
+      }
+    }
+
+    remoteSyncSignatureRef.current = serializeThreads(nextThreads);
+    setThreads(nextThreads);
+    setActiveChatId(prev => nextThreads.some(thread => thread.id === prev) ? prev : nextThreads[0]?.id ?? makeNewThread().id);
+    setHasHydratedRemoteChats(true);
+  }, [userId]);
+
+  useEffect(() => {
+    void refreshRemoteChats();
+  }, [refreshRemoteChats]);
+
+  useEffect(() => {
+    const refreshOnVisibility = () => {
+      if (!document.hidden && !isStreaming) {
+        void refreshRemoteChats();
+      }
+    };
+    const refreshOnFocus = () => {
+      if (!isStreaming) {
+        void refreshRemoteChats();
+      }
+    };
+
+    document.addEventListener('visibilitychange', refreshOnVisibility);
+    window.addEventListener('focus', refreshOnFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', refreshOnVisibility);
+      window.removeEventListener('focus', refreshOnFocus);
+    };
+  }, [isStreaming, refreshRemoteChats]);
+
   // Persist threads to localStorage whenever they change
   useEffect(() => {
     if (!isStreaming) {
@@ -874,6 +1139,24 @@ export function useAI(userId: string) {
       localStorage.removeItem(LEGACY_CHAT_STORAGE);
     }
   }, [threads, activeChatId, isStreaming, userId]);
+
+  useEffect(() => {
+    if (!hasHydratedRemoteChats || isStreaming) return;
+    const nextSignature = serializeThreads(threads);
+    if (nextSignature === remoteSyncSignatureRef.current) return;
+
+    let cancelled = false;
+    void (async () => {
+      const saved = await saveRemoteThreads(userId, threads);
+      if (!cancelled && saved) {
+        remoteSyncSignatureRef.current = nextSignature;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasHydratedRemoteChats, isStreaming, threads, userId]);
 
   const updateThread = useCallback((threadId: string, updater: (thread: ChatThread) => ChatThread) => {
     setThreads(prev => prev.map(thread => thread.id === threadId ? updater(thread) : thread));

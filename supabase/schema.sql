@@ -720,3 +720,83 @@ create policy "Users can update their own user_settings"
 on public.user_settings for update to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+
+-- ============================================================
+-- AI chat sync (threads + messages)
+-- ============================================================
+
+create table if not exists public.ai_chat_threads (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.ai_chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null references public.ai_chat_threads(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  role text not null check (role in ('user', 'assistant', 'system')),
+  content text not null default '',
+  images jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists ai_chat_threads_user_id_idx
+  on public.ai_chat_threads(user_id);
+create index if not exists ai_chat_threads_user_updated_idx
+  on public.ai_chat_threads(user_id, updated_at desc);
+create index if not exists ai_chat_messages_thread_id_idx
+  on public.ai_chat_messages(thread_id);
+create index if not exists ai_chat_messages_user_id_idx
+  on public.ai_chat_messages(user_id);
+create index if not exists ai_chat_messages_user_created_idx
+  on public.ai_chat_messages(user_id, created_at asc);
+
+alter table public.ai_chat_threads enable row level security;
+alter table public.ai_chat_messages enable row level security;
+
+drop policy if exists "Users can read their own ai_chat_threads" on public.ai_chat_threads;
+drop policy if exists "Users can insert their own ai_chat_threads" on public.ai_chat_threads;
+drop policy if exists "Users can update their own ai_chat_threads" on public.ai_chat_threads;
+drop policy if exists "Users can delete their own ai_chat_threads" on public.ai_chat_threads;
+
+create policy "Users can read their own ai_chat_threads"
+on public.ai_chat_threads for select to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can insert their own ai_chat_threads"
+on public.ai_chat_threads for insert to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update their own ai_chat_threads"
+on public.ai_chat_threads for update to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can delete their own ai_chat_threads"
+on public.ai_chat_threads for delete to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "Users can read their own ai_chat_messages" on public.ai_chat_messages;
+drop policy if exists "Users can insert their own ai_chat_messages" on public.ai_chat_messages;
+drop policy if exists "Users can update their own ai_chat_messages" on public.ai_chat_messages;
+drop policy if exists "Users can delete their own ai_chat_messages" on public.ai_chat_messages;
+
+create policy "Users can read their own ai_chat_messages"
+on public.ai_chat_messages for select to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can insert their own ai_chat_messages"
+on public.ai_chat_messages for insert to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update their own ai_chat_messages"
+on public.ai_chat_messages for update to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can delete their own ai_chat_messages"
+on public.ai_chat_messages for delete to authenticated
+using (auth.uid() = user_id);

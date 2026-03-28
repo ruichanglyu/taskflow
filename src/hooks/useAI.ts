@@ -78,27 +78,32 @@ function activeChatStorage(userId: string) { return `taskflow_ai_active_chat_${u
 // --- API key: synced via Supabase, localStorage used as fast cache ---
 
 export async function getAPIKey(userId: string): Promise<string | null> {
-  // Fast path: check localStorage cache first
+  let cached: string | null = null;
   try {
-    const cached = localStorage.getItem(keyStorage(userId));
-    if (cached) return cached;
+    cached = localStorage.getItem(keyStorage(userId));
   } catch { /* ignore */ }
 
-  // Slow path: fetch from Supabase
+  // Prefer Supabase so changes on other devices win over stale local cache.
   try {
     const { supabase } = await import('../lib/supabase');
-    if (!supabase) return null;
+    if (!supabase) return cached;
     const { data, error } = await supabase
       .from('user_settings')
       .select('gemini_api_key')
       .eq('user_id', userId)
-      .single();
-    if (error || !data?.gemini_api_key) return null;
-    // Cache locally for fast reads
+      .maybeSingle();
+
+    if (error) return cached;
+
+    if (!data?.gemini_api_key) {
+      try { localStorage.removeItem(keyStorage(userId)); } catch { /* ignore */ }
+      return null;
+    }
+
     try { localStorage.setItem(keyStorage(userId), data.gemini_api_key); } catch { /* ignore */ }
     return data.gemini_api_key;
   } catch {
-    return null;
+    return cached;
   }
 }
 
@@ -175,7 +180,7 @@ export async function migrateLegacyAIData(userId: string) {
           .from('user_settings')
           .select('gemini_api_key')
           .eq('user_id', userId)
-          .single();
+          .maybeSingle();
         if (!data?.gemini_api_key) {
           await supabase
             .from('user_settings')
@@ -939,7 +944,7 @@ export function useAI(userId: string) {
     appData: Parameters<typeof buildSystemPrompt>[0],
     images?: ImageAttachment[],
   ) => {
-    const key = getAPIKeyCached(userId) ?? await getAPIKey(userId);
+    const key = await getAPIKey(userId);
     if (!key) {
       setError('Please add your Gemini API key first.');
       return;

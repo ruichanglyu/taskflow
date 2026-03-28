@@ -244,20 +244,39 @@ export function AIPanel({
   const [keyLoading, setKeyLoading] = useState(!getAPIKeyCached(userId));
   const [showKeyInput, setShowKeyInput] = useState(false);
 
-  // Load API key from Supabase on mount (if not already cached locally)
   useEffect(() => {
-    if (hasKey) { setKeyLoading(false); return; }
     let cancelled = false;
-    getAPIKey(userId).then(key => {
-      if (cancelled) return;
-      if (key) {
-        setApiKey(key);
-        setHasKey(true);
+    const syncKey = () => {
+      setKeyLoading(true);
+      void getAPIKey(userId).then(key => {
+        if (cancelled) return;
+        setApiKey(key ?? '');
+        setHasKey(!!key);
+        setKeyLoading(false);
+      });
+    };
+
+    syncKey();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncKey();
       }
-      setKeyLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [userId, hasKey]);
+    };
+
+    const handleFocus = () => {
+      syncKey();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [userId]);
   const [importedBlocks, setImportedBlocks] = useState<Set<string>>(new Set());
   const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([]);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);

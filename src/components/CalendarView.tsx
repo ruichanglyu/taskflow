@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { CalendarDays, Check, ChevronDown, ExternalLink, List, LayoutGrid, Pencil, Plus, RefreshCcw, Trash2, Unplug } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { GoogleCalendarEvent } from '../lib/googleCalendar';
 import { CreateEventModal } from './CreateEventModal';
 import { CalendarGrid } from './CalendarGrid';
@@ -7,6 +8,10 @@ import { cn } from '../utils/cn';
 import type { GoogleCalendarController } from '../hooks/useGoogleCalendar';
 
 type CalendarViewMode = 'month' | 'week' | 'list';
+
+function parseCalendarViewMode(value: string | null): CalendarViewMode {
+  return value === 'week' || value === 'list' || value === 'month' ? value : 'month';
+}
 
 function formatDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -826,7 +831,11 @@ function WeekCalendarGrid({
 }
 
 export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
-  const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const viewMode = useMemo<CalendarViewMode>(
+    () => parseCalendarViewMode(searchParams.get('view')),
+    [searchParams],
+  );
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<GoogleCalendarEvent | null>(null);
   const [createDate, setCreateDate] = useState<string | undefined>(undefined);
@@ -899,6 +908,12 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
   const handleToday = () => {
     setSelectedDate(todayStr);
     setViewDate(todayStr);
+  };
+
+  const handleSetViewMode = (nextView: CalendarViewMode) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('view', nextView);
+    setSearchParams(nextParams);
   };
 
   const handleCreateFromDate = (date: string) => {
@@ -996,7 +1011,7 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
             <div className="flex overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)]">
               <button
                 type="button"
-                onClick={() => setViewMode('month')}
+                onClick={() => handleSetViewMode('month')}
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors',
                   viewMode === 'month'
@@ -1008,7 +1023,7 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
               </button>
               <button
                 type="button"
-                onClick={() => setViewMode('week')}
+                onClick={() => handleSetViewMode('week')}
                 className={cn(
                   'flex items-center gap-1.5 border-l border-[var(--border-soft)] px-3 py-2.5 text-xs font-medium transition-colors',
                   viewMode === 'week'
@@ -1020,7 +1035,7 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
               </button>
               <button
                 type="button"
-                onClick={() => setViewMode('list')}
+                onClick={() => handleSetViewMode('list')}
                 className={cn(
                   'flex items-center gap-1.5 border-l border-[var(--border-soft)] px-3 py-2.5 text-xs font-medium transition-colors',
                   viewMode === 'list'

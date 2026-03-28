@@ -724,7 +724,11 @@ export function AIPanel({
     const calendarRange = buildCalendarLookupRange(collectCalendarRangeRows(block));
     if (calendarRange && getCalendarEventsForRange) {
       try {
-        const remoteEvents = await getCalendarEventsForRange(calendarRange);
+        const lookupCalendarIds = collectCalendarLookupIds(block.rows, calendarCalendars, selectedCalendarId);
+        const remoteEvents = await getCalendarEventsForRange(
+          calendarRange,
+          lookupCalendarIds.length > 0 ? lookupCalendarIds : undefined,
+        );
         workingCalendarEvents = mergeCalendarEventsByIdentity(calendarEvents, remoteEvents);
       } catch (error) {
         console.warn('[AI] Failed to prefetch calendar range for AI action', error);
@@ -2347,6 +2351,23 @@ function buildCalendarLookupRange(rows: ParsedImportRow[]) {
     timeMin: rangeStart.toISOString(),
     timeMax: rangeEnd.toISOString(),
   };
+}
+
+function collectCalendarLookupIds(
+  rows: ParsedImportRow[],
+  calendars: GoogleCalendarListItem[],
+  selectedCalendarId: string,
+) {
+  const resolvedIds = rows.flatMap(row => [row.calendar, row.newCalendar])
+    .filter((value): value is string => Boolean(value?.trim()))
+    .map(name => calendars.find(item => normalizeCalendarCandidate(item.summary) === normalizeCalendarCandidate(name))?.id)
+    .filter((value): value is string => Boolean(value));
+
+  if (resolvedIds.length > 0) {
+    return Array.from(new Set(resolvedIds));
+  }
+
+  return selectedCalendarId ? [selectedCalendarId] : [];
 }
 
 function matchTaskCandidates<T extends { title: string }>(tasks: T[], rawTitle: string): T[] {

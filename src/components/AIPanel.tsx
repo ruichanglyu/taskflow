@@ -2279,6 +2279,7 @@ function ActionBundleCard({
   const [actionError, setActionError] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, number>>({});
   const frozenDeleteGroupsRef = useRef<{ label: string; resolvedTitle: string; valid: boolean }[] | null>(null);
+  const frozenCalendarGroupsRef = useRef<{ creates: { label: string; valid: boolean }[]; updates: { label: string; valid: boolean; reason: string }[]; deletes: { label: string; valid: boolean; reason: string }[] } | null>(null);
 
   const isValidImportBlock = useCallback((block: unknown): block is ImportBlock => {
     return !!block && typeof block === 'object' && typeof (block as ImportBlock).type === 'string' && Array.isArray((block as ImportBlock).rows);
@@ -2459,8 +2460,9 @@ function ActionBundleCard({
       return;
     }
 
-    // Snapshot delete groups before applying so the preview doesn't re-evaluate after deletion
+    // Snapshot delete/calendar groups before applying so the preview doesn't re-evaluate after deletion
     frozenDeleteGroupsRef.current = deleteGroups;
+    frozenCalendarGroupsRef.current = calendarGroups;
 
     // Flip to "Applied" immediately — imports run in background
     setOptimisticDone(true);
@@ -2613,21 +2615,21 @@ function ActionBundleCard({
             <ActionSection
               label="Create events"
               tone="default"
-              items={calendarGroups.creates.map(group => group.valid ? group.label : `${group.label} · incomplete`)}
+              items={(frozenCalendarGroupsRef.current ?? calendarGroups).creates.map(group => group.valid ? group.label : `${group.label} · incomplete`)}
             />
           )}
           {summary.calendarUpdates > 0 && (
             <ActionSection
               label="Update events"
               tone="success"
-              items={calendarGroups.updates.map(group => group.valid ? group.label : `${group.label} · ${group.reason}`)}
+              items={(frozenCalendarGroupsRef.current ?? calendarGroups).updates.map(group => group.valid ? group.label : `${group.label} · ${group.reason}`)}
             />
           )}
           {summary.calendarDeletes > 0 && (
             <ActionSection
               label="Delete events"
               tone="warning"
-              items={calendarGroups.deletes.map(group => group.valid ? group.label : `${group.label} · ${group.reason}`)}
+              items={(frozenCalendarGroupsRef.current ?? calendarGroups).deletes.map(group => group.valid ? group.label : `${group.label} · ${group.reason}`)}
             />
           )}
           {summary.links > 0 && (

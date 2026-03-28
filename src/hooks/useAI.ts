@@ -183,25 +183,36 @@ function buildSystemPrompt(data: {
     ? data.calendarCalendars.map(calendar => `- ${calendar.summary}${calendar.id === data.selectedCalendarId ? ' (active)' : ''}`).join('\n')
     : '(not connected)';
 
-  const upcomingCalendarSummary = data.calendarEvents.length > 0
-    ? data.calendarEvents
-        .slice(0, 40)
-        .map(event => {
-          const startDt = event.start?.dateTime ? new Date(event.start.dateTime) : null;
-          const endDt = event.end?.dateTime ? new Date(event.end.dateTime) : null;
-          const fmt = (d: Date) => d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-          const timeFmt = (d: Date) => d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' });
-          const timeRange = startDt && endDt
-            ? `${fmt(startDt)} – ${timeFmt(endDt)}`
-            : startDt
-              ? fmt(startDt)
-              : event.start?.date
-                ? `${event.start.date} (all day)`
-                : 'unknown';
-          return `- ${event.summary || 'Untitled event'} — ${timeRange}${event.calendarSummary ? ` [${event.calendarSummary}]` : ''}`;
-        })
-        .join('\n')
-    : '(none loaded)';
+  // Group calendar events by day so the AI can clearly see busy/free time per day
+  let upcomingCalendarSummary = '(none loaded)';
+  if (data.calendarEvents.length > 0) {
+    const timeFmt = (d: Date) => d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const dayMap = new Map<string, { summary: string; start: string; end: string; calendarSummary?: string }[]>();
+    for (const event of data.calendarEvents.slice(0, 60)) {
+      const startDt = event.start?.dateTime ? new Date(event.start.dateTime) : null;
+      const endDt = event.end?.dateTime ? new Date(event.end.dateTime) : null;
+      const dateKey = startDt
+        ? startDt.toISOString().split('T')[0]
+        : event.start?.date ?? 'unknown';
+      if (!dayMap.has(dateKey)) dayMap.set(dateKey, []);
+      dayMap.get(dateKey)!.push({
+        summary: event.summary || 'Untitled event',
+        start: startDt ? timeFmt(startDt) : 'all day',
+        end: endDt ? timeFmt(endDt) : '',
+        calendarSummary: event.calendarSummary,
+      });
+    }
+    upcomingCalendarSummary = [...dayMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, events]) => {
+        const sorted = events.sort((a, b) => a.start.localeCompare(b.start));
+        const lines = sorted.map(e =>
+          `  ${e.start}${e.end ? ` – ${e.end}` : ''}: ${e.summary}${e.calendarSummary ? ` [${e.calendarSummary}]` : ''}`
+        );
+        return `${date}:\n${lines.join('\n')}`;
+      })
+      .join('\n');
+  }
 
   return `You are a personal AI assistant inside TaskFlow, a student life management app. Today is ${today}.
 
@@ -339,14 +350,14 @@ LINKING RULES:
 - Never claim a calendar event was created, updated, or deleted unless you emitted the matching calendar import block.
 - For calendar update/delete, do not guess. If you are not sure which event is meant, ask a follow-up instead of emitting the block.
 
-SCHEDULING RULES (CRITICAL — read before creating calendar events):
-- ALWAYS check the LOADED CALENDAR EVENTS above before scheduling anything. You MUST avoid time conflicts with existing events.
-- When the user asks you to "block out time" or "schedule study blocks", look at each day's existing events and only schedule in genuinely free time slots.
-- Never schedule over classes, labs, recitations, exams, or any other existing events.
-- If a day is too packed to fit the requested duration, skip that day and tell the user.
-- Prefer scheduling study blocks at consistent times across days when possible, but conflict avoidance is the #1 priority.
-- If the user doesn't specify a time, pick a free slot that makes sense (not too early, not too late). Prefer gaps between existing events.
-- When explaining what you scheduled, briefly mention why you chose those times (e.g. "I put it after your MATH 3012 class since that slot was free").
+SCHEDULING RULES (CRITICAL — you MUST follow these when creating calendar events):
+- The LOADED CALENDAR EVENTS section above is grouped by day with start AND end times for every event. Study it carefully before scheduling.
+- For EACH DAY you want to schedule on, look at that day's events and find a gap where the user is FREE. A gap means no event overlaps with your proposed time.
+- An event occupies the ENTIRE window from its start time to its end time. For example, "3:30 PM – 4:45 PM: MATH 3012 K" means the user is BUSY from 3:30 PM to 4:45 PM. Do NOT schedule anything that overlaps with that window even partially.
+- Different days have different schedules. Do NOT pick the same time for every day. Check each day individually and pick the best free slot for that specific day.
+- Reasonable scheduling hours are 8:00 AM to 10:00 PM. Prefer daytime gaps when available.
+- If a day has no gap large enough for the requested duration, skip that day and tell the user why.
+- When explaining what you scheduled, briefly mention per-day reasoning (e.g. "Monday at 2 PM since you're free between EAS 1600 and MATH 3012").
 
 STRICT RESPONSE RULES FOR NORMAL CHAT:
 - Use plain sentences or short paragraphs.

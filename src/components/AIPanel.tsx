@@ -195,6 +195,7 @@ interface AIPanelProps {
   calendarEvents: GoogleCalendarEvent[];
   calendarCalendars: GoogleCalendarListItem[];
   selectedCalendarId: string;
+  getCalendarEventsForRange?: (range: { timeMin?: string; timeMax?: string }, calendarIds?: string[]) => Promise<GoogleCalendarEvent[]>;
   aiLearningEnabled: boolean;
   onAiLearningEnabledChange: (enabled: boolean) => void;
   scoreStudySlot: (dateKey: string, startMinutes: number, durationMinutes: number) => number;
@@ -218,7 +219,7 @@ interface AIPanelProps {
 export function AIPanel({
   open, onClose, userId,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
-  calendarEvents, calendarCalendars, selectedCalendarId, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot,
+  calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot,
   onAddTask, onUpdateTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
   onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
   habits, onAddHabit, onToggleHabit, onDeleteHabit,
@@ -718,7 +719,17 @@ export function AIPanel({
       ...tasks,
       ...recentAiTasksRef.current.filter(recent => !tasks.some(task => task.id === recent.id)),
     ];
-    const workingCalendarEvents: GoogleCalendarEvent[] = [...calendarEvents];
+    let workingCalendarEvents: GoogleCalendarEvent[] = [...calendarEvents];
+
+    const calendarRange = buildCalendarLookupRange(collectCalendarRangeRows(block));
+    if (calendarRange && getCalendarEventsForRange) {
+      try {
+        const remoteEvents = await getCalendarEventsForRange(calendarRange);
+        workingCalendarEvents = mergeCalendarEventsByIdentity(calendarEvents, remoteEvents);
+      } catch (error) {
+        console.warn('[AI] Failed to prefetch calendar range for AI action', error);
+      }
+    }
 
     // Resolve course name → projectId, create if needed
     const resolveProject = async (courseName?: string): Promise<string | null> => {
@@ -861,7 +872,7 @@ export function AIPanel({
       let skipped = 0;
 
       for (const row of block.rows) {
-        const matches = resolvePreferredCalendarCandidates(calendarEvents, calendarCalendars, row);
+        const matches = resolvePreferredCalendarCandidates(workingCalendarEvents, calendarCalendars, row);
         const payload = buildCalendarEventPayload(row, 'update');
 
         if (matches.length !== 1 || !payload) {
@@ -891,7 +902,7 @@ export function AIPanel({
       let skipped = 0;
 
       for (const row of block.rows) {
-        const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, selectedCalendarId, row);
+        const matches = resolveCalendarDeleteCandidates(workingCalendarEvents, calendarCalendars, selectedCalendarId, row);
         if (matches.length === 0) {
           skipped++;
           continue;
@@ -902,6 +913,7 @@ export function AIPanel({
           const ok = await onDeleteCalendarEvent(match.id, match.calendarId, aiLearningOptions);
           if (ok) {
             deleted++;
+            workingCalendarEvents = workingCalendarEvents.filter(event => !(event.id === match.id && event.calendarId === match.calendarId));
           } else {
             allDeleted = false;
           }
@@ -2215,6 +2227,51 @@ function buildSyntheticCalendarEvent(
     calendarId,
     calendarSummary,
     calendarColor,
+  };
+}
+
+function mergeCalendarEventsByIdentity(...groups: GoogleCalendarEvent[][]) {
+  const merged = new Map<string, GoogleCalendarEvent>();
+
+  for (const group of groups) {
+    for (const event of group) {
+      const key = `${event.calendarId || ''}:${event.id || ''}:${getEventDateKey(event) || ''}:${normalizeDeleteCandidate(event.summary || '')}:${getEventStartKey(event) || ''}`;
+      if (!merged.has(key)) {
+        merged.set(key, event);
+      }
+    }
+  }
+
+  return [...merged.values()].sort((a, b) => {
+    const aTime = a.start?.dateTime || a.start?.date || '';
+    const bTime = b.start?.dateTime || b.start?.date || '';
+    return aTime.localeCompare(bTime);
+  });
+}
+
+function collectCalendarRangeRows(block: ImportBlock) {
+  if (!['calendar-create', 'calendar-update', 'calendar-delete'].includes(block.type)) {
+    return [] as ParsedImportRow[];
+  }
+  return block.rows;
+}
+
+function buildCalendarLookupRange(rows: ParsedImportRow[]) {
+  const dates = rows.flatMap(row => [row.dueDate, row.newDate]).filter((value): value is string => Boolean(value));
+  if (dates.length === 0) return null;
+
+  const sorted = [...dates].sort();
+  const minDate = sorted[0];
+  const maxDate = sorted[sorted.length - 1];
+  const rangeStart = new Date(`${minDate}T00:00:00`);
+  const rangeEnd = new Date(`${maxDate}T00:00:00`);
+  rangeEnd.setDate(rangeEnd.getDate() + 1);
+  rangeStart.setHours(0, 0, 0, 0);
+  rangeEnd.setHours(0, 0, 0, 0);
+
+  return {
+    timeMin: rangeStart.toISOString(),
+    timeMax: rangeEnd.toISOString(),
   };
 }
 

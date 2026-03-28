@@ -750,6 +750,7 @@ export function AppShell({ user }: AppShellProps) {
         calendarEvents={calendar.events}
         calendarCalendars={calendar.calendars}
         selectedCalendarId={calendar.selectedCalendarId}
+        getCalendarEventsForRange={calendar.getEventsForRange}
         onAddTask={handleAddTask}
         onUpdateTask={handleUpdateTask}
         onAddDeadline={handleAddDeadline}

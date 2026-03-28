@@ -470,6 +470,47 @@ export function useGoogleCalendar(userId: string) {
     }
   }, [accessToken, events, selectedCalendarId]);
 
+  const getEventsForRange = useCallback(async (
+    range: { timeMin?: string; timeMax?: string },
+    calendarIds?: string[],
+  ): Promise<GoogleCalendarEvent[]> => {
+    if (!accessToken) return [];
+
+    const requestedIds = calendarIds && calendarIds.length > 0
+      ? calendarIds
+      : visibleCalendarIdsRef.current.length > 0
+        ? visibleCalendarIdsRef.current
+        : selectedCalendarId
+          ? [selectedCalendarId]
+          : calendars.find(calendar => calendar.primary)?.id
+            ? [calendars.find(calendar => calendar.primary)!.id]
+            : calendars[0]?.id
+              ? [calendars[0].id]
+              : [];
+
+    const validIds = requestedIds.filter(id => calendars.some(calendar => calendar.id === id));
+    if (validIds.length === 0) return [];
+
+    const calendarLookup = new Map(calendars.map(calendar => [calendar.id, calendar]));
+    const eventGroups = await Promise.all(
+      validIds.map(async calendarId => {
+        const calendarMeta = calendarLookup.get(calendarId);
+        return fetchGoogleCalendarEvents(accessToken, calendarId, {
+          summary: calendarMeta?.summary ?? '',
+          backgroundColor: calendarMeta?.backgroundColor,
+        }, range);
+      }),
+    );
+
+    return eventGroups
+      .flat()
+      .sort((a, b) => {
+        const aTime = a.start?.dateTime || a.start?.date || '';
+        const bTime = b.start?.dateTime || b.start?.date || '';
+        return aTime.localeCompare(bTime);
+      });
+  }, [accessToken, calendars, selectedCalendarId]);
+
   return {
     isConfigured: isGoogleCalendarConfigured,
     isConnected: Boolean(accessToken),
@@ -489,6 +530,7 @@ export function useGoogleCalendar(userId: string) {
     createEvent,
     updateEvent,
     deleteEvent,
+    getEventsForRange,
   };
 }
 

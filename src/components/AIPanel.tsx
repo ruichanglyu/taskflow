@@ -312,8 +312,6 @@ export function AIPanel({
     source: 'ai',
     learn: aiLearningEnabled,
   }), [aiLearningEnabled]);
-  const testingModeEnabled = !aiLearningEnabled;
-
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = messagesScrollRef.current;
     if (!el) return;
@@ -1632,29 +1630,6 @@ export function AIPanel({
                   style={{ height: 'auto' }}
                 />
                 <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onAiLearningEnabledChange(!aiLearningEnabled)}
-                    aria-pressed={testingModeEnabled}
-                    className={cn(
-                      'relative h-[22px] w-[40px] shrink-0 rounded-full transition-colors',
-                      testingModeEnabled
-                        ? 'bg-amber-400'
-                        : 'bg-[var(--text-faint)]/30'
-                    )}
-                    title={
-                      testingModeEnabled
-                        ? 'Testing mode is on. AI-created actions will not count toward behavior learning.'
-                        : 'Testing mode is off. AI-created actions can count toward behavior learning.'
-                    }
-                  >
-                    <span
-                      className={cn(
-                        'absolute top-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform',
-                        testingModeEnabled ? 'translate-x-[18px]' : 'translate-x-0'
-                      )}
-                    />
-                  </button>
                   {isDictating ? (
                     <button
                       onClick={handleToggleDictation}

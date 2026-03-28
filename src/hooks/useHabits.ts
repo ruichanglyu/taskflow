@@ -82,21 +82,27 @@ export function useHabits(userId: string | null) {
   }, [loadHabits]);
 
   const addHabit = useCallback(async (title: string, frequency: 'daily' | 'weekly' = 'daily') => {
-    if (!userId || !supabase) return;
+    if (!userId || !supabase) return false;
+    setError(null);
     const { error: err } = await supabase.from('habits').insert({
       user_id: userId,
       title: title.trim(),
       frequency,
       position: habits.length,
     });
-    if (err) setError(err.message);
-    else await loadHabits();
+    if (err) {
+      setError(err.message);
+      return false;
+    }
+    await loadHabits();
+    return true;
   }, [userId, habits.length, loadHabits]);
 
   const toggleToday = useCallback(async (habitId: string) => {
-    if (!userId || !supabase) return;
+    if (!userId || !supabase) return false;
+    setError(null);
     const habit = habits.find(h => h.id === habitId);
-    if (!habit) return;
+    if (!habit) return false;
 
     // Optimistic update
     setHabits(prev => prev.map(h =>
@@ -106,27 +112,44 @@ export function useHabits(userId: string | null) {
     ));
 
     if (habit.doneToday) {
-      await supabase
+      const { error: deleteError } = await supabase
         .from('habit_completions')
         .delete()
         .eq('habit_id', habitId)
         .eq('user_id', userId)
         .eq('completed_date', today);
+      if (deleteError) {
+        setError(deleteError.message);
+        await loadHabits();
+        return false;
+      }
     } else {
-      await supabase.from('habit_completions').upsert({
+      const { error: upsertError } = await supabase.from('habit_completions').upsert({
         habit_id: habitId,
         user_id: userId,
         completed_date: today,
       });
+      if (upsertError) {
+        setError(upsertError.message);
+        await loadHabits();
+        return false;
+      }
     }
     // Reload to sync streak accurately
     await loadHabits();
+    return true;
   }, [userId, habits, today, loadHabits]);
 
   const deleteHabit = useCallback(async (habitId: string) => {
-    if (!userId || !supabase) return;
-    await supabase.from('habits').delete().eq('id', habitId).eq('user_id', userId);
+    if (!userId || !supabase) return false;
+    setError(null);
+    const { error: deleteError } = await supabase.from('habits').delete().eq('id', habitId).eq('user_id', userId);
+    if (deleteError) {
+      setError(deleteError.message);
+      return false;
+    }
     setHabits(prev => prev.filter(h => h.id !== habitId));
+    return true;
   }, [userId]);
 
   const clearError = useCallback(() => setError(null), []);

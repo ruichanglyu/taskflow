@@ -4,10 +4,21 @@ import type { GoogleCalendarEvent, NewGoogleCalendarEvent } from '../lib/googleC
 type LearningSource = 'manual' | 'ai';
 type LearningAction = 'create' | 'reschedule' | 'delete';
 type TaskStatusLike = 'todo' | 'in-progress' | 'done' | 'not-started' | 'missed';
+type AppBehaviorEntity = 'task' | 'deadline' | 'project' | 'habit' | 'deadline-link' | 'calendar';
 
 export interface BehaviorLearningActionOptions {
   source?: LearningSource;
   learn?: boolean;
+}
+
+interface AppBehaviorEvent {
+  id: string;
+  source: LearningSource;
+  entity: AppBehaviorEntity;
+  action: string;
+  title: string;
+  detail: string | null;
+  createdAt: string;
 }
 
 interface BehaviorLearningEvent {
@@ -39,6 +50,7 @@ interface TimedBehaviorSnapshot {
 }
 
 const STORAGE_PREFIX = 'taskflow_behavior_learning_events';
+const APP_STORAGE_PREFIX = 'taskflow_behavior_learning_app_events';
 const AI_TESTING_PREFIX = 'taskflow_behavior_learning_ai_testing';
 const BEHAVIOR_EVENT_NAME = 'taskflow-behavior-learning-updated';
 
@@ -48,6 +60,10 @@ function eventsStorageKey(userId: string) {
 
 function aiTestingStorageKey(userId: string) {
   return `${AI_TESTING_PREFIX}:${userId}`;
+}
+
+function appEventsStorageKey(userId: string) {
+  return `${APP_STORAGE_PREFIX}:${userId}`;
 }
 
 function formatDateKey(date: Date) {
@@ -139,6 +155,24 @@ function loadEventsFromStorage(userId: string): BehaviorLearningEvent[] {
 function saveEventsToStorage(userId: string, events: BehaviorLearningEvent[]) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(eventsStorageKey(userId), JSON.stringify(events.slice(-250)));
+}
+
+function loadAppEventsFromStorage(userId: string): AppBehaviorEvent[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const saved = localStorage.getItem(appEventsStorageKey(userId));
+    if (!saved) return [];
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveAppEventsToStorage(userId: string, events: AppBehaviorEvent[]) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(appEventsStorageKey(userId), JSON.stringify(events.slice(-500)));
 }
 
 function loadAiTestingMode(userId: string) {
@@ -270,6 +304,7 @@ function shouldLearn(options?: BehaviorLearningActionOptions) {
 
 export function useBehaviorLearning(userId: string) {
   const [events, setEvents] = useState<BehaviorLearningEvent[]>(() => loadEventsFromStorage(userId));
+  const [appEvents, setAppEvents] = useState<AppBehaviorEvent[]>(() => loadAppEventsFromStorage(userId));
   const [aiTestingMode, setAiTestingModeState] = useState<boolean>(() => loadAiTestingMode(userId));
 
   useEffect(() => {
@@ -277,6 +312,7 @@ export function useBehaviorLearning(userId: string) {
       const detail = (event as CustomEvent<{ userId?: string }>).detail;
       if (!detail?.userId || detail.userId !== userId) return;
       setEvents(loadEventsFromStorage(userId));
+      setAppEvents(loadAppEventsFromStorage(userId));
       setAiTestingModeState(loadAiTestingMode(userId));
     };
 
@@ -293,11 +329,39 @@ export function useBehaviorLearning(userId: string) {
     broadcastBehaviorUpdate(userId);
   }, [userId]);
 
+  const persistAppEvent = useCallback((event: AppBehaviorEvent) => {
+    setAppEvents(previous => {
+      const next = [...previous, event].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(-500);
+      saveAppEventsToStorage(userId, next);
+      return next;
+    });
+    broadcastBehaviorUpdate(userId);
+  }, [userId]);
+
   const setAiTestingMode = useCallback((value: boolean) => {
     setAiTestingModeState(value);
     saveAiTestingMode(userId, value);
     broadcastBehaviorUpdate(userId);
   }, [userId]);
+
+  const recordAppAction = useCallback((
+    entity: AppBehaviorEntity,
+    action: string,
+    title: string,
+    options?: BehaviorLearningActionOptions,
+    detail?: string | null,
+  ) => {
+    if (!shouldLearn(options)) return;
+    persistAppEvent({
+      id: crypto.randomUUID(),
+      source: options?.source ?? 'manual',
+      entity,
+      action,
+      title,
+      detail: detail ?? null,
+      createdAt: new Date().toISOString(),
+    });
+  }, [persistAppEvent]);
 
   const recordCalendarCreate = useCallback((
     payload: NewGoogleCalendarEvent,
@@ -425,8 +489,16 @@ export function useBehaviorLearning(userId: string) {
     status?: TaskStatusLike;
     options?: BehaviorLearningActionOptions;
   }) => {
-    // Task learning is intentionally deferred. We only teach study-block scheduling in v1.
-  }, []);
+    recordAppAction(
+      'task',
+      'create',
+      _.title,
+      _.options,
+      [_.projectId ? `project:${_.projectId}` : null, _.dueDate ? `due:${_.dueDate}` : null, _.status ? `status:${_.status}` : null]
+        .filter(Boolean)
+        .join(' · ') || null,
+    );
+  }, [recordAppAction]);
 
   const logTaskUpdated = useCallback((_: {
     title: string;
@@ -435,20 +507,47 @@ export function useBehaviorLearning(userId: string) {
     status?: TaskStatusLike;
     options?: BehaviorLearningActionOptions;
   }) => {
-    // Task learning is intentionally deferred. We only teach study-block scheduling in v1.
-  }, []);
+    recordAppAction(
+      'task',
+      'update',
+      _.title,
+      _.options,
+      [_.projectId ? `project:${_.projectId}` : null, _.dueDate ? `due:${_.dueDate}` : null, _.status ? `status:${_.status}` : null]
+        .filter(Boolean)
+        .join(' · ') || null,
+    );
+  }, [recordAppAction]);
+
+  const logTaskDeleted = useCallback((params: {
+    title: string;
+    projectId: string | null;
+    dueDate: string | null;
+    status?: TaskStatusLike;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'task',
+      'delete',
+      params.title,
+      params.options,
+      [params.projectId ? `project:${params.projectId}` : null, params.dueDate ? `due:${params.dueDate}` : null, params.status ? `status:${params.status}` : null]
+        .filter(Boolean)
+        .join(' · ') || null,
+    );
+  }, [recordAppAction]);
 
   const logCalendarCreated = useCallback((
     payload: NewGoogleCalendarEvent,
     calendarSummary?: string | null,
     options?: BehaviorLearningActionOptions,
   ) => {
+    recordAppAction('calendar', 'create', payload.summary, options, calendarSummary ?? null);
     if (!shouldLearn(options)) return;
     recordCalendarCreate(payload, {
       source: options?.source ?? 'manual',
       calendarSummary,
     });
-  }, [recordCalendarCreate]);
+  }, [recordAppAction, recordCalendarCreate]);
 
   const logCalendarUpdated = useCallback((
     previousEvent: GoogleCalendarEvent,
@@ -456,6 +555,13 @@ export function useBehaviorLearning(userId: string) {
     calendarSummary?: string | null,
     options?: BehaviorLearningActionOptions,
   ) => {
+    recordAppAction(
+      'calendar',
+      'update',
+      payload.summary ?? previousEvent.summary ?? 'Untitled event',
+      options,
+      calendarSummary ?? previousEvent.calendarSummary ?? null,
+    );
     if (!shouldLearn(options)) return;
 
     const mergedPayload: NewGoogleCalendarEvent = {
@@ -479,15 +585,123 @@ export function useBehaviorLearning(userId: string) {
       calendarId: previousEvent.calendarId,
       calendarSummary: calendarSummary ?? previousEvent.calendarSummary,
     });
-  }, [recordCalendarUpdate]);
+  }, [recordAppAction, recordCalendarUpdate]);
 
   const logCalendarDeleted = useCallback((
     event: GoogleCalendarEvent,
     options?: BehaviorLearningActionOptions,
   ) => {
+    recordAppAction('calendar', 'delete', event.summary ?? 'Untitled event', options, event.calendarSummary ?? null);
     if (!shouldLearn(options)) return;
     recordCalendarDelete(event, { source: options?.source ?? 'manual' });
-  }, [recordCalendarDelete]);
+  }, [recordAppAction, recordCalendarDelete]);
+
+  const logDeadlineCreated = useCallback((params: {
+    title: string;
+    projectId: string | null;
+    dueDate: string;
+    dueTime: string | null;
+    type: string;
+    status?: string;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'deadline',
+      'create',
+      params.title,
+      params.options,
+      [params.projectId ? `project:${params.projectId}` : null, `date:${params.dueDate}`, params.dueTime ? `time:${params.dueTime}` : null, `type:${params.type}`, params.status ? `status:${params.status}` : null]
+      .filter(Boolean)
+        .join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logDeadlineUpdated = useCallback((params: {
+    title: string;
+    projectId: string | null;
+    dueDate: string;
+    dueTime: string | null;
+    type: string;
+    status?: string;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'deadline',
+      'update',
+      params.title,
+      params.options,
+      [params.projectId ? `project:${params.projectId}` : null, `date:${params.dueDate}`, params.dueTime ? `time:${params.dueTime}` : null, `type:${params.type}`, params.status ? `status:${params.status}` : null]
+        .filter(Boolean)
+        .join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logDeadlineDeleted = useCallback((params: {
+    title: string;
+    projectId: string | null;
+    dueDate: string;
+    dueTime: string | null;
+    type?: string;
+    status?: string;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'deadline',
+      'delete',
+      params.title,
+      params.options,
+      [params.projectId ? `project:${params.projectId}` : null, `date:${params.dueDate}`, params.dueTime ? `time:${params.dueTime}` : null, params.type ? `type:${params.type}` : null, params.status ? `status:${params.status}` : null]
+        .filter(Boolean)
+        .join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logProjectCreated = useCallback((params: {
+    name: string;
+    description?: string;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction('project', 'create', params.name, params.options, params.description?.trim() || null);
+  }, [recordAppAction]);
+
+  const logProjectDeleted = useCallback((params: {
+    name: string;
+    description?: string;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction('project', 'delete', params.name, params.options, params.description?.trim() || null);
+  }, [recordAppAction]);
+
+  const logDeadlineLinked = useCallback((params: {
+    deadlineTitle: string;
+    taskTitle: string;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction('deadline-link', 'create', params.deadlineTitle, params.options, `task:${params.taskTitle}`);
+  }, [recordAppAction]);
+
+  const logHabitCreated = useCallback((params: {
+    title: string;
+    frequency: 'daily' | 'weekly';
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction('habit', 'create', params.title, params.options, `frequency:${params.frequency}`);
+  }, [recordAppAction]);
+
+  const logHabitToggled = useCallback((params: {
+    title: string;
+    completed: boolean;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction('habit', params.completed ? 'complete' : 'uncomplete', params.title, params.options, null);
+  }, [recordAppAction]);
+
+  const logHabitDeleted = useCallback((params: {
+    title: string;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction('habit', 'delete', params.title, params.options, null);
+  }, [recordAppAction]);
 
   return {
     aiTestingMode,
@@ -495,14 +709,25 @@ export function useBehaviorLearning(userId: string) {
     setAiTestingMode,
     setAiLearningEnabled,
     behaviorEvents: events,
+    appBehaviorEvents: appEvents,
     getPreferredStudyStartMinutes,
     preferenceSummary,
     scoreStudySlot,
     logTaskCreated,
     logTaskUpdated,
+    logTaskDeleted,
     logCalendarCreated,
     logCalendarUpdated,
     logCalendarDeleted,
+    logDeadlineCreated,
+    logDeadlineUpdated,
+    logDeadlineDeleted,
+    logProjectCreated,
+    logProjectDeleted,
+    logDeadlineLinked,
+    logHabitCreated,
+    logHabitToggled,
+    logHabitDeleted,
     recordCalendarCreate,
     recordCalendarUpdate,
     recordCalendarDelete,

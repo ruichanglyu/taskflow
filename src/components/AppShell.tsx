@@ -179,34 +179,72 @@ export function AppShell({ user }: AppShellProps) {
     }
   }, [location.pathname, navigate]);
 
-  const handleAddDeadline = useCallback(async (...args: Parameters<typeof deadlineStore.addDeadline>) => {
-    const ok = await deadlineStore.addDeadline(...args);
+  const handleAddDeadline = useCallback(async (...args: [...Parameters<typeof deadlineStore.addDeadline>, BehaviorLearningActionOptions?]) => {
+    const lastArg = args.at(-1);
+    const options = isBehaviorLearningActionOptions(lastArg) ? lastArg : { source: 'manual', learn: true };
+    const baseArgs = (isBehaviorLearningActionOptions(lastArg) ? args.slice(0, -1) : args) as Parameters<typeof deadlineStore.addDeadline>;
+    const ok = await deadlineStore.addDeadline(...baseArgs);
     if (ok) {
       pushToast('success', 'Deadline added', 'Your deadline was added to the tracker.');
+      const [title, projectId, type, dueDate, dueTime, , status] = baseArgs;
+      learning.logDeadlineCreated({
+        title,
+        projectId,
+        dueDate,
+        dueTime,
+        type,
+        status,
+        options,
+      });
     } else {
       pushToast('error', 'Could not add deadline', deadlineStore.error ?? 'Please try again.');
     }
     return ok;
-  }, [deadlineStore, pushToast]);
+  }, [deadlineStore, learning, pushToast]);
 
   const handleUpdateDeadline = useCallback(async (...args: Parameters<typeof deadlineStore.updateDeadline>) => {
+    const [id, updates] = args;
+    const currentDeadline = deadlineStore.deadlines.find(item => item.id === id);
     const ok = await deadlineStore.updateDeadline(...args);
     if (ok) {
       pushToast('success', 'Deadline updated');
+      if (currentDeadline) {
+        learning.logDeadlineUpdated({
+          title: updates.title ?? currentDeadline.title,
+          projectId: updates.projectId ?? currentDeadline.projectId,
+          dueDate: updates.dueDate ?? currentDeadline.dueDate,
+          dueTime: updates.dueTime ?? currentDeadline.dueTime,
+          type: updates.type ?? currentDeadline.type,
+          status: updates.status ?? currentDeadline.status,
+          options: { source: 'manual', learn: true },
+        });
+      }
     } else {
       pushToast('error', 'Could not update deadline', deadlineStore.error ?? 'Please try again.');
     }
     return ok;
-  }, [deadlineStore, pushToast]);
+  }, [deadlineStore, learning, pushToast]);
 
-  const handleDeleteDeadline = useCallback(async (id: string) => {
+  const handleDeleteDeadline = useCallback(async (id: string, _options?: BehaviorLearningActionOptions) => {
+    const currentDeadline = deadlineStore.deadlines.find(item => item.id === id);
     await deadlineStore.deleteDeadline(id);
     if (!deadlineStore.error) {
       pushToast('success', 'Deadline deleted');
+      if (currentDeadline) {
+        learning.logDeadlineDeleted({
+          title: currentDeadline.title,
+          projectId: currentDeadline.projectId,
+          dueDate: currentDeadline.dueDate,
+          dueTime: currentDeadline.dueTime,
+          type: currentDeadline.type,
+          status: currentDeadline.status,
+          options: { source: 'manual', learn: true },
+        });
+      }
     } else {
       pushToast('error', 'Could not delete deadline', deadlineStore.error);
     }
-  }, [deadlineStore, pushToast]);
+  }, [deadlineStore, learning, pushToast]);
 
   const handleDeleteAllDeadlines = useCallback(async () => {
     const ok = await deadlineStore.deleteAllDeadlines();
@@ -218,15 +256,28 @@ export function AppShell({ user }: AppShellProps) {
     return ok;
   }, [deadlineStore, pushToast]);
 
-  const handleLinkTask = useCallback(async (...args: Parameters<typeof deadlineStore.linkTask>) => {
-    const ok = await deadlineStore.linkTask(...args);
+  const handleLinkTask = useCallback(async (...args: [...Parameters<typeof deadlineStore.linkTask>, BehaviorLearningActionOptions?]) => {
+    const lastArg = args.at(-1);
+    const options = isBehaviorLearningActionOptions(lastArg) ? lastArg : { source: 'manual', learn: true };
+    const baseArgs = (isBehaviorLearningActionOptions(lastArg) ? args.slice(0, -1) : args) as Parameters<typeof deadlineStore.linkTask>;
+    const [deadlineId, taskId] = baseArgs;
+    const ok = await deadlineStore.linkTask(...baseArgs);
     if (ok) {
       pushToast('success', 'Task linked', 'This deadline is now connected to a task.');
+      const deadline = deadlineStore.deadlines.find(item => item.id === deadlineId);
+      const task = store.tasks.find(item => item.id === taskId);
+      if (deadline && task) {
+        learning.logDeadlineLinked({
+          deadlineTitle: deadline.title,
+          taskTitle: task.title,
+          options,
+        });
+      }
     } else {
       pushToast('error', 'Could not link task', deadlineStore.error ?? 'Please try again.');
     }
     return ok;
-  }, [deadlineStore, pushToast]);
+  }, [deadlineStore, learning, pushToast, store.tasks]);
 
   const handleUnlinkTask = useCallback(async (...args: Parameters<typeof deadlineStore.unlinkTask>) => {
     await deadlineStore.unlinkTask(...args);
@@ -296,34 +347,105 @@ export function AppShell({ user }: AppShellProps) {
     }
   }, [learning, store]);
 
-  const handleDeleteTask = useCallback(async (id: string) => {
+  const handleDeleteTask = useCallback(async (id: string, options: BehaviorLearningActionOptions = { source: 'manual', learn: true }) => {
+    const currentTask = store.tasks.find(task => task.id === id);
     const ok = await store.deleteTask(id);
     if (ok) {
       pushToast('success', 'Task deleted');
+      if (currentTask) {
+        learning.logTaskDeleted({
+          title: currentTask.title,
+          projectId: currentTask.projectId,
+          dueDate: currentTask.dueDate,
+          status: currentTask.status,
+          options,
+        });
+      }
     } else {
       pushToast('error', 'Could not delete task', store.error ?? 'Please try again.');
     }
     return ok;
-  }, [store, pushToast]);
+  }, [learning, store, pushToast]);
 
-  const handleAddProject = useCallback(async (...args: Parameters<typeof store.addProject>) => {
-    const projectId = await store.addProject(...args);
+  const handleAddProject = useCallback(async (...args: [...Parameters<typeof store.addProject>, BehaviorLearningActionOptions?]) => {
+    const lastArg = args.at(-1);
+    const options = isBehaviorLearningActionOptions(lastArg) ? lastArg : { source: 'manual', learn: true };
+    const baseArgs = (isBehaviorLearningActionOptions(lastArg) ? args.slice(0, -1) : args) as Parameters<typeof store.addProject>;
+    const projectId = await store.addProject(...baseArgs);
     if (projectId) {
       pushToast('success', 'Course created');
+      const [name, description] = baseArgs;
+      learning.logProjectCreated({ name, description, options });
     } else {
       pushToast('error', 'Could not create course', store.error ?? 'Please try again.');
     }
     return projectId;
-  }, [store, pushToast]);
+  }, [learning, store, pushToast]);
 
-  const handleDeleteProject = useCallback(async (id: string) => {
+  const handleAddSubtask = useCallback(async (
+    taskId: string,
+    title: string,
+    _options?: BehaviorLearningActionOptions,
+  ) => {
+    return store.addSubtask(taskId, title);
+  }, [store]);
+
+  const handleDeleteProject = useCallback(async (id: string, options?: BehaviorLearningActionOptions) => {
+    const currentProject = store.projects.find(item => item.id === id);
     await store.deleteProject(id);
     if (!store.error) {
       pushToast('success', 'Course deleted');
+      if (currentProject) {
+        learning.logProjectDeleted({
+          name: currentProject.name,
+          description: currentProject.description,
+          options,
+        });
+      }
     } else {
       pushToast('error', 'Could not delete course', store.error);
     }
-  }, [store, pushToast]);
+  }, [learning, store, pushToast]);
+
+  const handleAddHabit = useCallback(async (
+    title: string,
+    frequency: 'daily' | 'weekly' = 'daily',
+    options: BehaviorLearningActionOptions = { source: 'manual', learn: true },
+  ) => {
+    const ok = await habits.addHabit(title, frequency);
+    if (ok) {
+      learning.logHabitCreated({ title, frequency, options });
+    }
+  }, [habits, learning]);
+
+  const handleToggleHabit = useCallback(async (
+    id: string,
+    options: BehaviorLearningActionOptions = { source: 'manual', learn: true },
+  ) => {
+    const currentHabit = habits.habits.find(item => item.id === id);
+    const ok = await habits.toggleToday(id);
+    if (currentHabit && ok) {
+      learning.logHabitToggled({
+        title: currentHabit.title,
+        completed: !currentHabit.doneToday,
+        options,
+      });
+    }
+  }, [habits, learning]);
+
+  const handleDeleteHabit = useCallback(async (
+    id: string,
+    options: BehaviorLearningActionOptions = { source: 'manual', learn: true },
+  ) => {
+    const currentHabit = habits.habits.find(item => item.id === id);
+    const ok = await habits.deleteHabit(id);
+    if (currentHabit && ok) {
+      learning.logHabitDeleted({
+        title: currentHabit.title,
+        options,
+      });
+    }
+  }, [habits, learning]);
 
   const handleCreateCalendarEvent = useCallback(async (
     event: Parameters<typeof calendar.createEvent>[0],
@@ -501,7 +623,7 @@ export function AppShell({ user }: AppShellProps) {
               onUpdateStatus={handleUpdateTaskStatus}
               onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteTask}
-              onAddSubtask={store.addSubtask}
+              onAddSubtask={handleAddSubtask}
               onToggleSubtask={store.toggleSubtask}
               onDeleteSubtask={store.deleteSubtask}
               onAddComment={store.addComment}
@@ -606,9 +728,9 @@ export function AppShell({ user }: AppShellProps) {
         <HabitsPanel
           habits={habits.habits}
           isLoading={habits.isLoading}
-          onToggle={habits.toggleToday}
-          onAdd={habits.addHabit}
-          onDelete={habits.deleteHabit}
+          onToggle={handleToggleHabit}
+          onAdd={handleAddHabit}
+          onDelete={handleDeleteHabit}
           onClose={() => setHabitsOpen(false)}
           anchorRef={habitsButtonRef}
         />
@@ -630,9 +752,9 @@ export function AppShell({ user }: AppShellProps) {
         selectedCalendarId={calendar.selectedCalendarId}
         onAddTask={handleAddTask}
         onUpdateTask={handleUpdateTask}
-        onAddDeadline={deadlineStore.addDeadline}
+        onAddDeadline={handleAddDeadline}
         onAddProject={handleAddProject}
-        onAddSubtask={store.addSubtask}
+        onAddSubtask={handleAddSubtask}
         onDeleteTask={handleDeleteTask}
         onLinkTask={handleLinkTask}
         onCreateCalendarEvent={handleCreateCalendarEvent}
@@ -642,9 +764,9 @@ export function AppShell({ user }: AppShellProps) {
         onAiLearningEnabledChange={learning.setAiLearningEnabled}
         scoreStudySlot={learning.scoreStudySlot}
         habits={habits.habits}
-        onAddHabit={habits.addHabit}
-        onToggleHabit={habits.toggleToday}
-        onDeleteHabit={habits.deleteHabit}
+        onAddHabit={handleAddHabit}
+        onToggleHabit={handleToggleHabit}
+        onDeleteHabit={handleDeleteHabit}
       />
 
       <div className="pointer-events-none fixed right-4 top-20 z-[80] flex w-full max-w-sm flex-col gap-2 sm:right-6">

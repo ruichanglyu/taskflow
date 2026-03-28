@@ -201,18 +201,18 @@ interface AIPanelProps {
   // Callbacks for imports
   onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence, status?: TaskStatus, options?: BehaviorLearningActionOptions) => Promise<string | null>;
   onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence; status?: TaskStatus }, options?: BehaviorLearningActionOptions) => Promise<boolean>;
-  onAddDeadline: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus) => Promise<boolean>;
-  onAddProject: (name: string, description: string) => Promise<string | null>;
+  onAddDeadline: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus, options?: BehaviorLearningActionOptions) => Promise<boolean>;
+  onAddProject: (name: string, description: string, options?: BehaviorLearningActionOptions) => Promise<string | null>;
   onAddSubtask: (taskId: string, title: string) => Promise<boolean>;
-  onDeleteTask: (taskId: string) => Promise<boolean>;
-  onLinkTask: (deadlineId: string, taskId: string) => Promise<boolean>;
+  onDeleteTask: (taskId: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
+  onLinkTask: (deadlineId: string, taskId: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onCreateCalendarEvent: (event: NewGoogleCalendarEvent, calendarId?: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onUpdateCalendarEvent: (eventId: string, event: Partial<NewGoogleCalendarEvent>, calendarId?: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onDeleteCalendarEvent: (eventId: string, calendarId?: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   habits: Habit[];
-  onAddHabit: (title: string, frequency?: 'daily' | 'weekly') => Promise<void>;
-  onToggleHabit: (id: string) => Promise<void>;
-  onDeleteHabit: (id: string) => Promise<void>;
+  onAddHabit: (title: string, frequency?: 'daily' | 'weekly', options?: BehaviorLearningActionOptions) => Promise<void>;
+  onToggleHabit: (id: string, options?: BehaviorLearningActionOptions) => Promise<void>;
+  onDeleteHabit: (id: string, options?: BehaviorLearningActionOptions) => Promise<void>;
 }
 
 export function AIPanel({
@@ -697,7 +697,7 @@ export function AIPanel({
         return existing.id;
       }
 
-      const newId = await onAddProject(courseName.trim(), '');
+      const newId = await onAddProject(courseName.trim(), '', aiLearningOptions);
       projectCache.set(normalized, newId);
       return newId;
     };
@@ -715,7 +715,7 @@ export function AIPanel({
           continue;
         }
 
-        const ok = await onDeleteTask(matches[0].id);
+        const ok = await onDeleteTask(matches[0].id, aiLearningOptions);
         if (ok) {
           imported++;
         } else {
@@ -911,7 +911,7 @@ export function AIPanel({
           continue;
         }
 
-        const ok = await onLinkTask(deadlineMatches[0].id, taskMatches[0].id);
+        const ok = await onLinkTask(deadlineMatches[0].id, taskMatches[0].id, aiLearningOptions);
         if (ok) linked++;
         else skipped++;
       }
@@ -997,20 +997,21 @@ export function AIPanel({
           row.dueTime ?? null,
           row.notes ?? '',
           status,
+          aiLearningOptions,
         );
         if (ok) imported++;
       }
     } else if (block.type === 'habits-create') {
       for (const row of block.rows) {
         const freq = (row.frequency === 'weekly' ? 'weekly' : 'daily') as 'daily' | 'weekly';
-        await onAddHabit(row.title, freq);
+        await onAddHabit(row.title, freq, aiLearningOptions);
         imported++;
       }
     } else if (block.type === 'habits-complete') {
       for (const row of block.rows) {
         const habit = habits.find(h => h.title.toLowerCase() === row.title.toLowerCase());
         if (habit && !habit.doneToday) {
-          await onToggleHabit(habit.id);
+          await onToggleHabit(habit.id, aiLearningOptions);
           imported++;
         }
       }
@@ -1018,7 +1019,7 @@ export function AIPanel({
       for (const row of block.rows) {
         const habit = habits.find(h => h.title.toLowerCase() === row.title.toLowerCase());
         if (habit) {
-          await onDeleteHabit(habit.id);
+          await onDeleteHabit(habit.id, aiLearningOptions);
           imported++;
         }
       }
@@ -1274,7 +1275,7 @@ export function AIPanel({
                     <div className="min-w-0">
                       <p className="text-[11px] font-medium text-[var(--text-primary)]">Testing mode</p>
                       <p className="text-[10px] leading-tight text-[var(--text-faint)]">
-                        Don&apos;t learn from AI-created tasks and study blocks yet
+                        Don&apos;t learn from AI-created tasks, deadlines, habits, or calendar actions yet
                       </p>
                     </div>
                     <button

@@ -177,7 +177,7 @@ export async function fetchGoogleCalendarEvents(
   calendarMeta?: Pick<GoogleCalendarListItem, 'summary' | 'backgroundColor'>,
   range?: { timeMin?: string; timeMax?: string }
 ) {
-  const params = new URLSearchParams({
+  const baseParams = new URLSearchParams({
     singleEvents: 'true',
     orderBy: 'startTime',
     maxResults: '250',
@@ -185,15 +185,28 @@ export async function fetchGoogleCalendarEvents(
   });
 
   if (range?.timeMax) {
-    params.set('timeMax', range.timeMax);
+    baseParams.set('timeMax', range.timeMax);
   }
 
-  const data = await googleFetch<{ items?: GoogleCalendarEvent[] }>(
-    `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
-    accessToken
-  );
+  const items: GoogleCalendarEvent[] = [];
+  let pageToken: string | undefined;
 
-  return (data.items ?? []).map(event => ({
+  do {
+    const params = new URLSearchParams(baseParams);
+    if (pageToken) {
+      params.set('pageToken', pageToken);
+    }
+
+    const data = await googleFetch<{ items?: GoogleCalendarEvent[]; nextPageToken?: string }>(
+      `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
+      accessToken
+    );
+
+    items.push(...(data.items ?? []));
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  return items.map(event => ({
     ...event,
     calendarId,
     calendarSummary: calendarMeta?.summary,

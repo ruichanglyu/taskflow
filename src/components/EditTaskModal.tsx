@@ -21,7 +21,6 @@ export function EditTaskModal({ task, projects, onSave, onAddSubtask, onToggleSu
   const [priority, setPriority] = useState<Priority>(task.priority);
   const [projectId, setProjectId] = useState<string>(task.projectId ?? '');
   const [dueDate, setDueDate] = useState(task.dueDate ? task.dueDate.slice(0, 10) : '');
-  const [recurrence, setRecurrence] = useState<Recurrence>(task.recurrence);
   const [isSaving, setIsSaving] = useState(false);
   const [newSubtask, setNewSubtask] = useState('');
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
@@ -39,7 +38,7 @@ export function EditTaskModal({ task, projects, onSave, onAddSubtask, onToggleSu
         priority,
         projectId: projectId || null,
         dueDate: dueDate || null,
-        recurrence,
+        recurrence: 'none',
       });
     } finally {
       setIsSaving(false);
@@ -110,33 +109,18 @@ export function EditTaskModal({ task, projects, onSave, onAddSubtask, onToggleSu
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Course</label>
-              <select
-                value={projectId}
-                onChange={e => setProjectId(e.target.value)}
-                className="w-full cursor-pointer appearance-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
-              >
-                <option value="">No Course</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Repeat</label>
-              <select
-                value={recurrence}
-                onChange={e => setRecurrence(e.target.value as Recurrence)}
-                className="w-full cursor-pointer appearance-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
-              >
-                <option value="none">No Repeat</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
-            </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Course</label>
+            <select
+              value={projectId}
+              onChange={e => setProjectId(e.target.value)}
+              className="w-full cursor-pointer appearance-none rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+            >
+              <option value="">No Course</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
           </div>
           {/* Subtasks */}
           <div>

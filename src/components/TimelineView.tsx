@@ -219,9 +219,6 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
                           {task.subtasks.filter(s => s.done).length}/{task.subtasks.length} subtasks
                         </span>
                       )}
-                      {task.recurrence !== 'none' && (
-                        <span className="text-[10px] text-indigo-400">⟳ {task.recurrence}</span>
-                      )}
                     </div>
                   </div>
                   <div ref={gridRef} className="flex flex-1 min-w-0 relative" style={{ height: 48 }}>

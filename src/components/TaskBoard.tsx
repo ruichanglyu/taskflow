@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, ChevronDown, Search, Filter, Pencil, Repeat, MessageSquare, Target, ListTodo, Clock3, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, Search, Filter, Pencil, MessageSquare, Target, ListTodo, Clock3, CheckCircle2, AlertCircle } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Task, Project, Deadline, TaskStatus, Priority, Recurrence } from '../types';
 import { cn } from '../utils/cn';
@@ -142,12 +142,6 @@ function TaskCard({
         {dueLabel && (
           <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded-full', isOverdue ? 'bg-red-500/10 text-red-400' : 'bg-[var(--surface-muted)] text-[var(--text-faint)]')}>
             {dueLabel}
-          </span>
-        )}
-
-        {task.recurrence !== 'none' && (
-          <span className="flex items-center gap-0.5 rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-400">
-            <Repeat size={9} /> {task.recurrence}
           </span>
         )}
 

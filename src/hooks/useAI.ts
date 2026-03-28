@@ -463,7 +463,7 @@ FIELD RULES:
 - Calendar update: title, calendar, date, start, then any \`new ...\` fields to change
 - Calendar delete: title, calendar, date, start
 - Course names should match existing courses when possible
-- For study blocks, do NOT use a generic title like "Study Block" by itself. Include the course and purpose in the title, for example: "Study Block - MATH 3012 Exam 3 Prep" or "Study Block - CS 1332 Demo 2 Prep".
+- For study blocks, do NOT use a generic title like "Study Block" by itself. Use course-first titles without the redundant "Study Block -" prefix, for example: "MATH 3012 Exam 3 Prep" or "CS 1332 Demo 2 Prep".
 
 LINKING RULES:
 - Never say a task is linked just because the task title or course name looks similar to a deadline.

@@ -840,18 +840,38 @@ export function AIPanel({
           continue;
         }
 
-        const ok = await onCreateCalendarEvent(resolved.payload, targetCalendarId, aiLearningOptions);
+        const replacementMatch = isStudyBlockAutoScheduleTarget(row, targetCalendar?.summary ?? row.calendar)
+          ? findStudyBlockReplacementCandidate(
+            workingCalendarEvents,
+            calendarCalendars,
+            targetCalendarId,
+            row,
+            resolved.payload,
+          )
+          : null;
+
+        const ok = replacementMatch
+          ? await onUpdateCalendarEvent(replacementMatch.id, resolved.payload, targetCalendarId, aiLearningOptions)
+          : await onCreateCalendarEvent(resolved.payload, targetCalendarId, aiLearningOptions);
+
         if (ok) {
           created++;
           if (resolved.adjusted) adjusted++;
-          workingCalendarEvents.push(
-            buildSyntheticCalendarEvent(
-              resolved.payload,
-              targetCalendarId,
-              targetCalendar?.summary,
-              targetCalendar?.backgroundColor,
-            ),
+          const nextSyntheticEvent = buildSyntheticCalendarEvent(
+            resolved.payload,
+            targetCalendarId,
+            targetCalendar?.summary,
+            targetCalendar?.backgroundColor,
           );
+          if (replacementMatch) {
+            workingCalendarEvents = workingCalendarEvents.map(event =>
+              event.id === replacementMatch.id && event.calendarId === replacementMatch.calendarId
+                ? { ...nextSyntheticEvent, id: replacementMatch.id }
+                : event
+            );
+          } else {
+            workingCalendarEvents.push(nextSyntheticEvent);
+          }
         } else {
           skipped++;
         }
@@ -1984,14 +2004,16 @@ function buildCalendarSummary(row: ParsedImportRow, rawSummary?: string) {
   if (!/^study block\b/i.test(summary)) return summary;
 
   const context = extractStudyBlockContext(row) || normalizeStudyBlockContext(summary);
-  return context ? `Study Block - ${context}` : summary;
+  return context || summary;
 }
 
 function extractStudyBlockContext(row: ParsedImportRow) {
+  const normalizedCourse = normalizeStudyBlockContext(row.course ?? '');
+  const contextualSummary = normalizeStudyBlockContext(row.title);
   const candidates = [
     row.description,
     row.notes,
-    row.course,
+    contextualSummary,
     row.calendar,
   ]
     .map(value => (value ?? '').trim())
@@ -1999,10 +2021,14 @@ function extractStudyBlockContext(row: ParsedImportRow) {
 
   for (const candidate of candidates) {
     const cleaned = normalizeStudyBlockContext(candidate);
-    if (cleaned) return cleaned;
+    if (!cleaned) continue;
+    if (normalizedCourse && !cleaned.toLowerCase().includes(normalizedCourse.toLowerCase())) {
+      return `${normalizedCourse} ${cleaned}`.replace(/\s+/g, ' ').trim();
+    }
+    return cleaned;
   }
 
-  return '';
+  return normalizedCourse;
 }
 
 function normalizeStudyBlockContext(value: string) {
@@ -2070,6 +2096,38 @@ function isStudyBlockAutoScheduleTarget(row: ParsedImportRow, calendarSummary?: 
     normalizedCalendar.includes('study blocks') ||
     normalizedCalendar.includes('exam prep')
   );
+}
+
+function findStudyBlockReplacementCandidate(
+  events: GoogleCalendarEvent[],
+  calendars: GoogleCalendarListItem[],
+  calendarId: string,
+  row: ParsedImportRow,
+  payload: NewGoogleCalendarEvent,
+) {
+  const payloadDateKey = 'date' in payload.start ? payload.start.date : payload.start.dateTime?.slice(0, 10);
+  if (!payloadDateKey) return null;
+
+  const targetContext =
+    normalizeStudyBlockContext(payload.summary) ||
+    normalizeStudyBlockContext(row.title) ||
+    extractStudyBlockContext(row);
+  if (!targetContext) return null;
+
+  const matches = events.filter(event => {
+    if (event.calendarId !== calendarId) return false;
+    if (getEventDateKey(event) !== payloadDateKey) return false;
+
+    const eventCalendarSummary = event.calendarSummary || getCalendarSummaryById(calendars, event.calendarId);
+    if (!isStudyBlockAutoScheduleTarget({ ...row, calendar: eventCalendarSummary || row.calendar }, eventCalendarSummary)) {
+      return false;
+    }
+
+    const eventContext = normalizeStudyBlockContext(event.summary || '');
+    return eventContext === targetContext;
+  });
+
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function findFreeSlotForDuration(

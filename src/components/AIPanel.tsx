@@ -1736,6 +1736,12 @@ function buildLocalDateTimeString(dateKey: string, timeKey: string) {
   return `${dateKey}T${timeKey}:00${sign}${offsetHours}:${offsetMins}`;
 }
 
+function minutesToTime(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
 function getEventDateKey(event: GoogleCalendarEvent) {
   if (event.start?.date) return event.start.date;
   if (event.start?.dateTime) {
@@ -2021,6 +2027,40 @@ function maybeResolveCalendarCreateConflict(
     return { payload, adjusted: false };
   }
 
+  const nextSlot = findFreeSlotForDuration(
+    events,
+    timedDetails.dateKey,
+    timedDetails.durationMinutes,
+    timedDetails.startMinutes,
+  );
+
+  if (isStudyBlockAutoScheduleTarget(row, calendarSummary)) {
+    if (!nextSlot) {
+      return { payload: null, adjusted: false };
+    }
+
+    if (
+      nextSlot.startMinutes === timedDetails.startMinutes &&
+      nextSlot.endMinutes === timedDetails.endMinutes
+    ) {
+      return { payload, adjusted: false };
+    }
+
+    const adjustedPayload: NewGoogleCalendarEvent = {
+      ...payload,
+      start: {
+        dateTime: buildLocalDateTimeString(timedDetails.dateKey, minutesToTime(nextSlot.startMinutes)),
+        ...(timedDetails.timeZone ? { timeZone: timedDetails.timeZone } : {}),
+      },
+      end: {
+        dateTime: buildLocalDateTimeString(timedDetails.dateKey, minutesToTime(nextSlot.endMinutes)),
+        ...(timedDetails.timeZone ? { timeZone: timedDetails.timeZone } : {}),
+      },
+    };
+
+    return { payload: adjustedPayload, adjusted: true };
+  }
+
   const hasConflict = events.some(event => {
     const busy = getTimedEventDetails(event);
     if (!busy || busy.dateKey !== timedDetails.dateKey) return false;
@@ -2031,34 +2071,7 @@ function maybeResolveCalendarCreateConflict(
     return { payload, adjusted: false };
   }
 
-  if (!isStudyBlockAutoScheduleTarget(row, calendarSummary)) {
-    return { payload: null, adjusted: false };
-  }
-
-  const nextSlot = findFreeSlotForDuration(
-    events,
-    timedDetails.dateKey,
-    timedDetails.durationMinutes,
-    timedDetails.startMinutes,
-  );
-
-  if (!nextSlot) {
-    return { payload: null, adjusted: false };
-  }
-
-  const adjustedPayload: NewGoogleCalendarEvent = {
-    ...payload,
-    start: {
-      dateTime: buildLocalDateTimeString(timedDetails.dateKey, minutesToTime(nextSlot.startMinutes)),
-      ...(timedDetails.timeZone ? { timeZone: timedDetails.timeZone } : {}),
-    },
-    end: {
-      dateTime: buildLocalDateTimeString(timedDetails.dateKey, minutesToTime(nextSlot.endMinutes)),
-      ...(timedDetails.timeZone ? { timeZone: timedDetails.timeZone } : {}),
-    },
-  };
-
-  return { payload: adjustedPayload, adjusted: true };
+  return { payload: null, adjusted: false };
 }
 
 function buildSyntheticCalendarEvent(
@@ -2079,7 +2092,6 @@ function buildSyntheticCalendarEvent(
     calendarColor,
   };
 }
-
 
 function matchTaskCandidates<T extends { title: string }>(tasks: T[], rawTitle: string): T[] {
   const normalizedTitle = normalizeDeleteCandidate(rawTitle);

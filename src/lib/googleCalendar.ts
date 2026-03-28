@@ -180,7 +180,7 @@ export async function fetchGoogleCalendarEvents(
   const params = new URLSearchParams({
     singleEvents: 'true',
     orderBy: 'startTime',
-    maxResults: '50',
+    maxResults: '250',
     timeMin: range?.timeMin || new Date().toISOString(),
   });
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, ChevronDown, Search, Filter, Pencil, MessageSquare, Target, ListTodo, Clock3, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Search, Filter, Pencil, MessageSquare, Target, ListTodo, Clock3, CheckCircle2, AlertCircle } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Task, Project, Deadline, TaskStatus, Priority, Recurrence } from '../types';
 import { cn } from '../utils/cn';
@@ -23,7 +23,7 @@ interface TaskBoardProps {
   onOpenDeadline?: (deadlineId: string) => void;
 }
 
-const statusColumns: { status: TaskStatus; label: string; color: string; dotColor: string }[] = [
+const statusColumns: { status: TaskStatus; label: string; dotColor: string }[] = [
   { status: 'todo', label: 'To Do', color: 'border-[var(--border-strong)]', dotColor: 'bg-[var(--text-faint)]' },
   { status: 'in-progress', label: 'In Progress', color: 'border-blue-600', dotColor: 'bg-blue-400' },
   { status: 'done', label: 'Done', color: 'border-emerald-600', dotColor: 'bg-emerald-400' },
@@ -39,7 +39,6 @@ function TaskCard({
   task,
   projects,
   deadline,
-  onUpdateStatus,
   onEdit,
   onDelete,
   onOpenDeadline,
@@ -47,12 +46,10 @@ function TaskCard({
   task: Task;
   projects: Project[];
   deadline?: Deadline;
-  onUpdateStatus: (id: string, status: TaskStatus) => void;
   onEdit: (task: Task) => void;
   onDelete: (id: string) => void;
   onOpenDeadline?: (deadlineId: string) => void;
 }) {
-  const [showMenu, setShowMenu] = useState(false);
   const project = projects.find(p => p.id === task.projectId);
 
   const dueLabel = task.dueDate
@@ -65,45 +62,21 @@ function TaskCard({
     <div className="group rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm transition-all hover:border-[var(--border-strong)] hover:shadow-lg">
       <div className="flex items-start justify-between gap-2">
         <h4 className="text-sm font-medium leading-snug text-[var(--text-primary)]">{task.title}</h4>
-        <div className="relative flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5">
           <button
             onClick={() => onEdit(task)}
             className="p-1 text-[var(--text-faint)] opacity-100 transition-opacity hover:text-[var(--text-secondary)] md:opacity-0 md:group-hover:opacity-100"
+            title="Edit task"
           >
             <Pencil size={13} />
           </button>
           <button
-            onClick={() => setShowMenu(!showMenu)}
-            className="p-1 text-[var(--text-faint)] opacity-100 transition-opacity hover:text-[var(--text-secondary)] md:opacity-0 md:group-hover:opacity-100"
+            onClick={() => onDelete(task.id)}
+            className="p-1 text-[var(--text-faint)] opacity-100 transition-opacity hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
+            title="Delete task"
           >
-            <ChevronDown size={14} />
+            <Trash2 size={13} />
           </button>
-          {showMenu && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 top-6 z-20 w-36 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] py-1 shadow-xl">
-                {statusColumns.map(col => (
-                  <button
-                    key={col.status}
-                    onClick={() => { onUpdateStatus(task.id, col.status); setShowMenu(false); }}
-                    className={cn(
-                      'w-full text-left px-3 py-1.5 text-xs transition-colors',
-                      task.status === col.status ? 'text-[var(--accent)] bg-[var(--accent-soft)]' : 'text-[var(--text-secondary)] hover:bg-[var(--surface-strong)]'
-                    )}
-                  >
-                    {col.label}
-                  </button>
-                ))}
-                <hr className="my-1 border-[var(--border-soft)]" />
-                <button
-                  onClick={() => { onDelete(task.id); setShowMenu(false); }}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-red-400 hover:bg-[var(--surface-muted)]"
-                >
-                  <Trash2 size={12} /> Delete
-                </button>
-              </div>
-            </>
-          )}
         </div>
       </div>
 
@@ -328,7 +301,6 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
                                 task={task}
                                 projects={projects}
                                 deadline={deadlines.find(d => d.linkedTaskIds.includes(task.id))}
-                                onUpdateStatus={onUpdateStatus}
                                 onEdit={setEditingTask}
                                 onDelete={onDeleteTask}
                                 onOpenDeadline={onOpenDeadline}

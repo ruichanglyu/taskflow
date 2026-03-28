@@ -2049,6 +2049,21 @@ function normalizeStudyBlockContext(value: string) {
   return cleaned;
 }
 
+function buildStudyBlockMatchKeys(value: string) {
+  const normalized = normalizeStudyBlockContext(value);
+  if (!normalized) return [] as string[];
+
+  const strippedCourse = normalized
+    .replace(/^[A-Za-z]{2,6}\s*\d{3,4}[A-Za-z]?\s+/i, '')
+    .trim();
+
+  return Array.from(new Set(
+    [normalized, strippedCourse]
+      .map(entry => entry.trim().toLowerCase())
+      .filter(Boolean)
+  ));
+}
+
 function getTimedPayloadDetails(payload: NewGoogleCalendarEvent) {
   if (!('dateTime' in payload.start) || !('dateTime' in payload.end)) return null;
 
@@ -2113,6 +2128,7 @@ function findStudyBlockReplacementCandidate(
     normalizeStudyBlockContext(row.title) ||
     extractStudyBlockContext(row);
   if (!targetContext) return null;
+  const targetKeys = buildStudyBlockMatchKeys(targetContext);
 
   const matches = events.filter(event => {
     if (event.calendarId !== calendarId) return false;
@@ -2123,8 +2139,8 @@ function findStudyBlockReplacementCandidate(
       return false;
     }
 
-    const eventContext = normalizeStudyBlockContext(event.summary || '');
-    return eventContext === targetContext;
+    const eventKeys = buildStudyBlockMatchKeys(event.summary || '');
+    return targetKeys.some(key => eventKeys.includes(key));
   });
 
   return matches.length === 1 ? matches[0] : null;

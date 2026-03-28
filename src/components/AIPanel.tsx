@@ -2158,7 +2158,7 @@ function findFreeSlotForDuration(
   scoreStudySlot?: (dateKey: string, startMinutes: number, durationMinutes: number) => number,
 ) {
   const DAY_START = 8 * 60;
-  const DAY_END = 22 * 60;
+  const DAY_END = 23 * 60 + 59;
 
   const mergedBusy = events
     .map(getTimedEventDetails)
@@ -2843,7 +2843,6 @@ function ActionBundleCard({
       if (block.type === 'subtasks') counts.subtasks += block.rows.length;
       if (block.type === 'deadline-links') counts.links += block.rows.length;
       if (block.type === 'delete-tasks') counts.deletes += block.rows.length;
-      if (block.type === 'calendar-create') counts.calendarCreates += block.rows.length;
       if (block.type === 'calendar-update') counts.calendarUpdates += block.rows.length;
       if (block.type === 'calendar-delete') counts.calendarDeletes += block.rows.length;
       if (block.type === 'habits-create') counts.habitsCreate += block.rows.length;
@@ -2851,8 +2850,26 @@ function ActionBundleCard({
       if (block.type === 'habits-delete') counts.habitsDelete += block.rows.length;
     }
 
+    const createLikeCalendarRows = safeBlocks
+      .filter(block => block.type === 'calendar-create')
+      .flatMap(block => block.rows);
+
+    for (const row of createLikeCalendarRows) {
+      const targetCalendar = resolveCalendarTarget(row.calendar, calendarCalendars, selectedCalendarId);
+      const replacementMatch = isStudyBlockAutoScheduleTarget(row, targetCalendar?.summary ?? row.calendar)
+        ? findStudyBlockReplacementCandidate(
+            calendarEvents,
+            calendarCalendars,
+            selectedCalendarId,
+            row,
+          )
+        : null;
+      if (replacementMatch) counts.calendarUpdates += 1;
+      else counts.calendarCreates += 1;
+    }
+
     return counts;
-  }, [safeBlocks]);
+  }, [calendarCalendars, calendarEvents, safeBlocks, selectedCalendarId]);
 
   const previewTasks = useMemo(() => (
     [
@@ -2921,10 +2938,22 @@ function ActionBundleCard({
   const calendarGroups = useMemo(() => {
     const creates = safeBlocks
       .filter(block => block.type === 'calendar-create')
-      .flatMap(block => block.rows.map(row => ({
-        label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${row.dueDate ? ` · ${row.dueDate}` : ''}`,
-        valid: Boolean(buildCalendarEventPayload(row, 'create')),
-      })));
+      .flatMap(block => block.rows.map(row => {
+        const targetCalendar = resolveCalendarTarget(row.calendar, calendarCalendars, selectedCalendarId);
+        const replacementMatch = isStudyBlockAutoScheduleTarget(row, targetCalendar?.summary ?? row.calendar)
+          ? findStudyBlockReplacementCandidate(
+              calendarEvents,
+              calendarCalendars,
+              selectedCalendarId,
+              row,
+            )
+          : null;
+        return {
+          label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${row.dueDate ? ` · ${row.dueDate}` : ''}`,
+          valid: Boolean(buildCalendarEventPayload(row, 'create')),
+          mode: replacementMatch ? 'update' as const : 'create' as const,
+        };
+      }));
 
     const updates = safeBlocks
       .filter(block => block.type === 'calendar-update')
@@ -3125,14 +3154,22 @@ function ActionBundleCard({
             <ActionSection
               label="Create events"
               tone="default"
-              items={(frozenCalendarGroupsRef.current ?? calendarGroups).creates.map(group => group.valid ? group.label : `${group.label} · incomplete`)}
+              items={(frozenCalendarGroupsRef.current ?? calendarGroups).creates
+                .filter(group => group.mode === 'create')
+                .map(group => group.valid ? group.label : `${group.label} · incomplete`)}
             />
           )}
           {summary.calendarUpdates > 0 && (
             <ActionSection
               label="Update events"
               tone="success"
-              items={(frozenCalendarGroupsRef.current ?? calendarGroups).updates.map(group => group.valid ? group.label : `${group.label} · ${group.reason}`)}
+              items={[
+                ...(frozenCalendarGroupsRef.current ?? calendarGroups).creates
+                  .filter(group => group.mode === 'update')
+                  .map(group => group.valid ? group.label : `${group.label} · incomplete`),
+                ...(frozenCalendarGroupsRef.current ?? calendarGroups).updates
+                  .map(group => group.valid ? group.label : `${group.label} · ${group.reason}`),
+              ]}
             />
           )}
           {summary.calendarDeletes > 0 && (

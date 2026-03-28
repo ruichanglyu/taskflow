@@ -311,7 +311,7 @@ function buildSystemPrompt(data: {
     };
 
     const DAY_START = 8 * 60;  // 8:00 AM
-    const DAY_END = 22 * 60;   // 10:00 PM
+    const DAY_END = 23 * 60 + 59;   // 11:59 PM
     const MIN_GAP = 30;        // minimum 30min to be useful
 
     upcomingCalendarSummary = [...dayMap.entries()]

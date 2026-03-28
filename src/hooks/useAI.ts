@@ -286,7 +286,7 @@ function buildSystemPrompt(data: {
 
     // Collect timed events by day
     const dayMap = new Map<string, { summary: string; startMin: number; endMin: number; calendarSummary?: string }[]>();
-    for (const event of data.calendarEvents.slice(0, 60)) {
+    for (const event of data.calendarEvents) {
       const startDt = event.start?.dateTime ? new Date(event.start.dateTime) : null;
       const endDt = event.end?.dateTime ? new Date(event.end.dateTime) : null;
       if (!startDt) continue; // skip all-day events for free slot calc

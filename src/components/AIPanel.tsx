@@ -2894,13 +2894,15 @@ function ActionBundleCard({
       .flatMap(block => block.rows);
 
     for (const row of createLikeCalendarRows) {
+      const payload = buildCalendarEventPayload(row, 'create');
       const targetCalendar = resolveCalendarTarget(row.calendar, calendarCalendars, selectedCalendarId);
-      const replacementMatch = isStudyBlockAutoScheduleTarget(row, targetCalendar?.summary ?? row.calendar)
+      const replacementMatch = payload && isStudyBlockAutoScheduleTarget(row, targetCalendar?.summary ?? row.calendar)
         ? findStudyBlockReplacementCandidate(
             calendarEvents,
             calendarCalendars,
             selectedCalendarId,
             row,
+            payload,
           )
         : null;
       if (replacementMatch) counts.calendarUpdates += 1;
@@ -2978,18 +2980,20 @@ function ActionBundleCard({
     const creates = safeBlocks
       .filter(block => block.type === 'calendar-create')
       .flatMap(block => block.rows.map(row => {
+        const payload = buildCalendarEventPayload(row, 'create');
         const targetCalendar = resolveCalendarTarget(row.calendar, calendarCalendars, selectedCalendarId);
-        const replacementMatch = isStudyBlockAutoScheduleTarget(row, targetCalendar?.summary ?? row.calendar)
+        const replacementMatch = payload && isStudyBlockAutoScheduleTarget(row, targetCalendar?.summary ?? row.calendar)
           ? findStudyBlockReplacementCandidate(
               calendarEvents,
               calendarCalendars,
               selectedCalendarId,
               row,
+              payload,
             )
           : null;
         return {
           label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${row.dueDate ? ` · ${row.dueDate}` : ''}`,
-          valid: Boolean(buildCalendarEventPayload(row, 'create')),
+          valid: Boolean(payload),
           mode: replacementMatch ? 'update' as const : 'create' as const,
         };
       }));

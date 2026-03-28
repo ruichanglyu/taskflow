@@ -540,6 +540,10 @@ export function AppShell({ user }: AppShellProps) {
         onCreateCalendarEvent={calendar.createEvent}
         onUpdateCalendarEvent={calendar.updateEvent}
         onDeleteCalendarEvent={calendar.deleteEvent}
+        habits={habits.habits}
+        onAddHabit={habits.addHabit}
+        onToggleHabit={habits.toggleToday}
+        onDeleteHabit={habits.deleteHabit}
       />
 
       <div className="pointer-events-none fixed right-4 top-20 z-[80] flex w-full max-w-sm flex-col gap-2 sm:right-6">

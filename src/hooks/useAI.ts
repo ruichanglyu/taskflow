@@ -25,7 +25,7 @@ export interface ChatThread {
 }
 
 export interface ImportBlock {
-  type: 'tasks' | 'deadlines' | 'subtasks' | 'delete-tasks' | 'update-tasks' | 'deadline-links' | 'calendar-create' | 'calendar-update' | 'calendar-delete';
+  type: 'tasks' | 'deadlines' | 'subtasks' | 'delete-tasks' | 'update-tasks' | 'deadline-links' | 'calendar-create' | 'calendar-update' | 'calendar-delete' | 'habits-create' | 'habits-complete' | 'habits-delete';
   raw: string;
   rows: ParsedImportRow[];
   imported?: boolean;
@@ -47,6 +47,8 @@ export interface ParsedImportRow {
   notes?: string;
   // Deadline links
   taskTitle?: string;
+  // Habits
+  frequency?: string;
   // Calendar
   calendar?: string;
   startTime?: string;
@@ -127,6 +129,7 @@ function buildSystemPrompt(data: {
   calendarEvents: GoogleCalendarEvent[];
   calendarCalendars: GoogleCalendarListItem[];
   selectedCalendarId?: string;
+  habits?: { id: string; title: string; frequency: string; doneToday: boolean; streak: number }[];
 }): string {
   const today = new Date().toISOString().split('T')[0];
 
@@ -219,8 +222,13 @@ ${calendarsSummary}
 LOADED CALENDAR EVENTS:
 ${upcomingCalendarSummary}
 
+ROUTINES (daily/weekly habits):
+${data.habits && data.habits.length > 0
+  ? data.habits.map(h => `- ${h.title} (${h.frequency}) [${h.doneToday ? 'done today' : 'not done today'}]${h.streak > 1 ? ` 🔥${h.streak} day streak` : ''}`).join('\n')
+  : '(none)'}
+
 CAPABILITIES:
-You can have normal conversations AND help create/import data. When the user asks you to create tasks, deadlines, calendar events, or workout plans, output them in special import blocks.
+You can have normal conversations AND help create/import data. When the user asks you to create tasks, deadlines, calendar events, routines, or workout plans, output them in special import blocks.
 
 IMPORT BLOCK FORMAT:
 To create tasks, output a fenced code block with language "import:tasks":
@@ -285,6 +293,26 @@ Study Block | calendar: Study Blocks | date: 2026-03-29 | start: 7:00 PM
 \`\`\`
 For update/delete, include calendar, date, and start time whenever possible so the app can find a unique event safely.
 
+To create new routines, output a fenced code block with language "import:habits-create":
+\`\`\`import:habits-create
+Drink water | frequency: daily
+Weekly review | frequency: weekly
+\`\`\`
+Each line is a routine title with optional frequency (daily/weekly, defaults to daily).
+
+To mark a routine as done for today, output a fenced code block with language "import:habits-complete":
+\`\`\`import:habits-complete
+Drink water
+Morning workout
+\`\`\`
+Each line must be the EXACT title of an existing routine.
+
+To delete a routine permanently, output a fenced code block with language "import:habits-delete":
+\`\`\`import:habits-delete
+Drink water
+\`\`\`
+Each line must be the EXACT title of an existing routine. Only delete when the user explicitly asks to remove it.
+
 FIELD RULES:
 - Tasks: title (required), course, due (YYYY-MM-DD), priority (low/medium/high), description, status (todo/in-progress/done), recurrence (none/daily/weekly/monthly)
 - Deadlines: title (required), course, date (YYYY-MM-DD required), time (HH:MM AM/PM), type (assignment/exam/quiz/lab/project/other), notes, status (not-started/in-progress/done/missed)
@@ -333,7 +361,7 @@ Be concise, helpful, and friendly. Use the user's actual data to answer question
 /** Parse import blocks from AI response */
 export function parseImportBlocks(content: string): ImportBlock[] {
   const blocks: ImportBlock[] = [];
-  const regex = /```import:(tasks|deadlines|delete-tasks|update-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|subtasks:([^\n]*))\n([\s\S]*?)```/g;
+  const regex = /```import:(tasks|deadlines|delete-tasks|update-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|habits-create|habits-complete|habits-delete|subtasks:([^\n]*))\n([\s\S]*?)```/g;
   let match;
 
   while ((match = regex.exec(content)) !== null) {
@@ -369,6 +397,7 @@ export function parseImportBlocks(content: string): ImportBlock[] {
           case 'status': row.status = val.toLowerCase(); break;
           case 'recurrence':
           case 'repeat': row.recurrence = val.toLowerCase(); break;
+          case 'frequency': row.frequency = val.toLowerCase(); break;
           case 'type': row.type = val.toLowerCase(); break;
           case 'time': row.dueTime = val; break;
           case 'notes': row.notes = val; break;

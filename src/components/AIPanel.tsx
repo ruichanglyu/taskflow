@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, Component, type Reac
 import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen, Mic, MicOff } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow, type ImageAttachment, type ChatThread } from '../hooks/useAI';
+import type { Habit } from '../hooks/useHabits';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus, TaskStatus } from '../types';
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
@@ -204,6 +205,10 @@ interface AIPanelProps {
   onCreateCalendarEvent: (event: NewGoogleCalendarEvent, calendarId?: string) => Promise<boolean>;
   onUpdateCalendarEvent: (eventId: string, event: Partial<NewGoogleCalendarEvent>, calendarId?: string) => Promise<boolean>;
   onDeleteCalendarEvent: (eventId: string, calendarId?: string) => Promise<boolean>;
+  habits: Habit[];
+  onAddHabit: (title: string, frequency?: 'daily' | 'weekly') => Promise<void>;
+  onToggleHabit: (id: string) => Promise<void>;
+  onDeleteHabit: (id: string) => Promise<void>;
 }
 
 export function AIPanel({
@@ -212,6 +217,7 @@ export function AIPanel({
   calendarEvents, calendarCalendars, selectedCalendarId,
   onAddTask, onUpdateTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
   onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
+  habits, onAddHabit, onToggleHabit, onDeleteHabit,
 }: AIPanelProps) {
   const {
     threads,
@@ -456,8 +462,9 @@ export function AIPanel({
       calendarEvents,
       calendarCalendars,
       selectedCalendarId,
+      habits,
     }, images);
-  }, [input, pendingImages, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises, calendarEvents, calendarCalendars, selectedCalendarId]);
+  }, [input, pendingImages, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises, calendarEvents, calendarCalendars, selectedCalendarId, habits]);
 
   const appendImageFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return false;
@@ -952,6 +959,28 @@ export function AIPanel({
           status,
         );
         if (ok) imported++;
+      }
+    } else if (block.type === 'habits-create') {
+      for (const row of block.rows) {
+        const freq = (row.frequency === 'weekly' ? 'weekly' : 'daily') as 'daily' | 'weekly';
+        await onAddHabit(row.title, freq);
+        imported++;
+      }
+    } else if (block.type === 'habits-complete') {
+      for (const row of block.rows) {
+        const habit = habits.find(h => h.title.toLowerCase() === row.title.toLowerCase());
+        if (habit && !habit.doneToday) {
+          await onToggleHabit(habit.id);
+          imported++;
+        }
+      }
+    } else if (block.type === 'habits-delete') {
+      for (const row of block.rows) {
+        const habit = habits.find(h => h.title.toLowerCase() === row.title.toLowerCase());
+        if (habit) {
+          await onDeleteHabit(habit.id);
+          imported++;
+        }
       }
     }
 
@@ -2179,7 +2208,7 @@ function renderContentWithBlocks(content: string, importBlocks: ImportBlock[]): 
   const segments: Segment[] = [];
 
   // Find all fenced code blocks
-  const blockRegex = /```(import:(?:tasks|deadlines|delete-tasks|update-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|subtasks:[^\n]*)|csv)\n([\s\S]*?)```/g;
+  const blockRegex = /```(import:(?:tasks|deadlines|delete-tasks|update-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|habits-create|habits-complete|habits-delete|subtasks:[^\n]*)|csv)\n([\s\S]*?)```/g;
   let match;
   let lastIndex = 0;
 
@@ -2291,6 +2320,9 @@ function ActionBundleCard({
       calendarCreates: 0,
       calendarUpdates: 0,
       calendarDeletes: 0,
+      habitsCreate: 0,
+      habitsComplete: 0,
+      habitsDelete: 0,
     };
 
     for (const block of safeBlocks) {
@@ -2303,6 +2335,9 @@ function ActionBundleCard({
       if (block.type === 'calendar-create') counts.calendarCreates += block.rows.length;
       if (block.type === 'calendar-update') counts.calendarUpdates += block.rows.length;
       if (block.type === 'calendar-delete') counts.calendarDeletes += block.rows.length;
+      if (block.type === 'habits-create') counts.habitsCreate += block.rows.length;
+      if (block.type === 'habits-complete') counts.habitsComplete += block.rows.length;
+      if (block.type === 'habits-delete') counts.habitsDelete += block.rows.length;
     }
 
     return counts;
@@ -2480,7 +2515,10 @@ function ActionBundleCard({
                   summary.calendarDeletes ? `${summary.calendarDeletes} event delete${summary.calendarDeletes === 1 ? '' : 's'}` : null,
                   summary.subtasks ? `${summary.subtasks} subtask${summary.subtasks === 1 ? '' : 's'}` : null,
                   summary.links ? `${summary.links} link${summary.links === 1 ? '' : 's'}` : null,
-                  summary.deletes ? `${summary.deletes} delete${summary.deletes === 1 ? '' : 's'}` : null]
+                  summary.deletes ? `${summary.deletes} delete${summary.deletes === 1 ? '' : 's'}` : null,
+                  summary.habitsCreate ? `${summary.habitsCreate} routine${summary.habitsCreate === 1 ? '' : 's'}` : null,
+                  summary.habitsComplete ? `${summary.habitsComplete} routine${summary.habitsComplete === 1 ? '' : 's'} done` : null,
+                  summary.habitsDelete ? `${summary.habitsDelete} routine delete${summary.habitsDelete === 1 ? '' : 's'}` : null]
                   .filter(Boolean)
                   .join(' · ')}
               </p>
@@ -2604,6 +2642,27 @@ function ActionBundleCard({
               label="Deletes"
               tone="warning"
               items={(frozenDeleteGroupsRef.current ?? deleteGroups).map(group => group.valid ? group.resolvedTitle : `${group.label} · ambiguous`)}
+            />
+          )}
+          {summary.habitsCreate > 0 && (
+            <ActionSection
+              label="New routines"
+              tone="default"
+              items={safeBlocks.filter(b => b.type === 'habits-create').flatMap(b => b.rows.map(r => `${r.title}${r.frequency && r.frequency !== 'daily' ? ` · ${r.frequency}` : ''}`))}
+            />
+          )}
+          {summary.habitsComplete > 0 && (
+            <ActionSection
+              label="Mark routines done"
+              tone="success"
+              items={safeBlocks.filter(b => b.type === 'habits-complete').flatMap(b => b.rows.map(r => r.title))}
+            />
+          )}
+          {summary.habitsDelete > 0 && (
+            <ActionSection
+              label="Delete routines"
+              tone="warning"
+              items={safeBlocks.filter(b => b.type === 'habits-delete').flatMap(b => b.rows.map(r => r.title))}
             />
           )}
         </div>

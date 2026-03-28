@@ -765,6 +765,7 @@ export function AppShell({ user }: AppShellProps) {
         onDeleteCalendarEvent={handleDeleteCalendarEvent}
         aiLearningEnabled={learning.aiLearningEnabled}
         onAiLearningEnabledChange={learning.setAiLearningEnabled}
+        onSeedLearningProfile={learning.seedLearningProfile}
         scoreStudySlot={learning.scoreStudySlot}
         habits={habits.habits}
         onAddHabit={handleAddHabit}

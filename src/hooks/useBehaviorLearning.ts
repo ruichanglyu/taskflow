@@ -6,6 +6,7 @@ type LearningSource = 'manual' | 'ai';
 type LearningAction = 'create' | 'reschedule' | 'delete';
 type TaskStatusLike = 'todo' | 'in-progress' | 'done' | 'not-started' | 'missed';
 type AppBehaviorEntity = 'task' | 'deadline' | 'project' | 'habit' | 'deadline-link' | 'calendar';
+export type BehaviorLearningSeedPreset = 'afternoon' | 'evening' | 'night';
 
 export interface BehaviorLearningActionOptions {
   source?: LearningSource;
@@ -440,6 +441,113 @@ function shouldLearn(options?: BehaviorLearningActionOptions) {
   return options?.learn !== false;
 }
 
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function createSeedEvent(
+  createdAt: Date,
+  dateKey: string,
+  weekday: number,
+  startMinutes: number,
+  durationMinutes: number,
+  title: string,
+  action: LearningAction,
+  previousStartMinutes?: number | null,
+): BehaviorLearningEvent {
+  return {
+    id: crypto.randomUUID(),
+    source: 'manual',
+    action,
+    title,
+    calendarId: 'seeded-exam-prep',
+    calendarSummary: 'Exam Prep',
+    dateKey,
+    weekday,
+    startMinutes,
+    durationMinutes,
+    previousDateKey: action === 'reschedule' ? dateKey : action === 'delete' ? dateKey : null,
+    previousWeekday: action === 'reschedule' ? weekday : action === 'delete' ? weekday : null,
+    previousStartMinutes: action === 'reschedule' ? previousStartMinutes ?? null : action === 'delete' ? startMinutes : null,
+    previousDurationMinutes: action === 'reschedule' ? durationMinutes : action === 'delete' ? durationMinutes : null,
+    countsForLearning: true,
+    createdAt: createdAt.toISOString(),
+  };
+}
+
+function buildSeedEvents(preset: BehaviorLearningSeedPreset) {
+  const titleMap: Record<BehaviorLearningSeedPreset, string> = {
+    afternoon: 'Seeded afternoon study preference',
+    evening: 'Seeded evening study preference',
+    night: 'Seeded night study preference',
+  };
+
+  const profile = {
+    afternoon: {
+      preferred: [960, 1005, 1050],
+      avoided: [495, 540, 825],
+      rescheduleTarget: 1005,
+    },
+    evening: {
+      preferred: [1005, 1050, 1185, 1200],
+      avoided: [495, 540, 825],
+      rescheduleTarget: 1185,
+    },
+    night: {
+      preferred: [1185, 1200, 1275],
+      avoided: [540, 825, 960],
+      rescheduleTarget: 1200,
+    },
+  }[preset];
+
+  const events: BehaviorLearningEvent[] = [];
+  const now = new Date();
+  const durationMinutes = 90;
+  const title = titleMap[preset];
+
+  for (let week = 8; week >= 1; week -= 1) {
+    const base = addDays(now, -week * 7);
+
+    profile.preferred.forEach((minute, index) => {
+      const date = addDays(base, [1, 3, 5, 6][index % 4]);
+      const createdAt = new Date(date);
+      createdAt.setHours(12, index * 3, 0, 0);
+      events.push(
+        createSeedEvent(createdAt, formatDateKey(date), date.getDay(), minute, durationMinutes, title, 'create'),
+      );
+    });
+
+    profile.avoided.forEach((minute, index) => {
+      const date = addDays(base, [2, 4, 0][index % 3]);
+      const createdAt = new Date(date);
+      createdAt.setHours(13, index * 5, 0, 0);
+      events.push(
+        createSeedEvent(createdAt, formatDateKey(date), date.getDay(), minute, durationMinutes, title, 'delete'),
+      );
+    });
+
+    const rescheduleDate = addDays(base, 2);
+    const rescheduleCreatedAt = new Date(rescheduleDate);
+    rescheduleCreatedAt.setHours(14, 30, 0, 0);
+    events.push(
+      createSeedEvent(
+        rescheduleCreatedAt,
+        formatDateKey(rescheduleDate),
+        rescheduleDate.getDay(),
+        profile.rescheduleTarget,
+        durationMinutes,
+        title,
+        'reschedule',
+        825,
+      ),
+    );
+  }
+
+  return events.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
 export function useBehaviorLearning(userId: string) {
   const [events, setEvents] = useState<BehaviorLearningEvent[]>(() => loadEventsFromStorage(userId));
   const [appEvents, setAppEvents] = useState<AppBehaviorEvent[]>(() => loadAppEventsFromStorage(userId));
@@ -629,6 +737,65 @@ export function useBehaviorLearning(userId: string) {
     if (supabase) {
       void upsertBehaviorSettings(userId, value);
     }
+    broadcastBehaviorUpdate(userId);
+  }, [userId]);
+
+  const seedLearningProfile = useCallback((preset: BehaviorLearningSeedPreset) => {
+    const seededEvents = buildSeedEvents(preset);
+    if (seededEvents.length === 0) return;
+
+    setEvents(previous => {
+      const next = [...previous, ...seededEvents]
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .slice(-250);
+      saveEventsToStorage(userId, next);
+      return next;
+    });
+
+    setAppEvents(previous => {
+      const nextEvent: AppBehaviorEvent = {
+        id: crypto.randomUUID(),
+        source: 'manual',
+        entity: 'calendar',
+        action: 'seed-profile',
+        title: `Seeded ${preset} learning profile`,
+        detail: 'Synthetic behavior-learning events only. No calendar events were created.',
+        countsForLearning: false,
+        createdAt: new Date().toISOString(),
+      };
+      const next = [...previous, nextEvent]
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .slice(-500);
+      saveAppEventsToStorage(userId, next);
+      return next;
+    });
+
+    if (supabase) {
+      const scheduleRows = seededEvents.map((event) => mapEventToScheduleRow(userId, event));
+      void (async () => {
+        const [{ error: scheduleError }, { error: appError }] = await Promise.all([
+          supabase.from('behavior_learning_schedule_events').insert(scheduleRows),
+          supabase.from('behavior_learning_app_events').insert({
+            id: crypto.randomUUID(),
+            user_id: userId,
+            source: 'manual',
+            entity: 'calendar',
+            action: 'seed-profile',
+            title: `Seeded ${preset} learning profile`,
+            detail: 'Synthetic behavior-learning events only. No calendar events were created.',
+            counts_for_learning: false,
+            created_at: new Date().toISOString(),
+          }),
+        ]);
+        if (scheduleError) {
+          console.warn('[BehaviorLearning] Failed to seed schedule events', scheduleError, preset);
+        }
+        if (appError) {
+          console.warn('[BehaviorLearning] Failed to log seeded profile', appError, preset);
+        }
+      })();
+    }
+
     broadcastBehaviorUpdate(userId);
   }, [userId]);
 
@@ -1025,5 +1192,6 @@ export function useBehaviorLearning(userId: string) {
     recordCalendarCreate,
     recordCalendarUpdate,
     recordCalendarDelete,
+    seedLearningProfile,
   };
 }

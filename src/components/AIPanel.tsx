@@ -203,7 +203,7 @@ interface AIPanelProps {
   onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence; status?: TaskStatus }, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onAddDeadline: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onAddProject: (name: string, description: string, options?: BehaviorLearningActionOptions) => Promise<string | null>;
-  onAddSubtask: (taskId: string, title: string) => Promise<boolean>;
+  onAddSubtask: (taskId: string, title: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onDeleteTask: (taskId: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onLinkTask: (deadlineId: string, taskId: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onCreateCalendarEvent: (event: NewGoogleCalendarEvent, calendarId?: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
@@ -940,7 +940,7 @@ export function AIPanel({
         );
       } else {
         const subtaskResults = await Promise.all(
-          block.rows.map(row => onAddSubtask(parentTask.id, row.title))
+          block.rows.map(row => onAddSubtask(parentTask.id, row.title, aiLearningOptions))
         );
         imported += subtaskResults.filter(Boolean).length;
       }
@@ -1268,40 +1268,6 @@ export function AIPanel({
               </div>
             )}
 
-            {!chatSidebarCollapsed && (
-              <div className="px-2 pb-1.5">
-                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-medium text-[var(--text-primary)]">Testing mode</p>
-                      <p className="text-[10px] leading-tight text-[var(--text-faint)]">
-                        Don&apos;t learn from AI-created tasks, deadlines, habits, or calendar actions yet
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => onAiLearningEnabledChange(!aiLearningEnabled)}
-                      aria-pressed={testingModeEnabled}
-                      className={cn(
-                        'relative h-6 w-11 shrink-0 rounded-full border transition-colors',
-                        testingModeEnabled
-                          ? 'border-amber-300/40 bg-amber-400/25'
-                          : 'border-[var(--border-soft)] bg-[var(--surface-muted)]'
-                      )}
-                      title={testingModeEnabled ? 'Testing mode is on' : 'AI learning is on'}
-                    >
-                      <span
-                        className={cn(
-                          'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
-                          testingModeEnabled ? 'translate-x-[20px]' : 'translate-x-0.5'
-                        )}
-                      />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Divider */}
             <div className="mx-2 border-t border-[var(--border-soft)]" />
 
@@ -1589,6 +1555,29 @@ export function AIPanel({
                   style={{ height: 'auto' }}
                 />
                 <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onAiLearningEnabledChange(!aiLearningEnabled)}
+                    aria-pressed={testingModeEnabled}
+                    className={cn(
+                      'relative h-[24px] w-[42px] shrink-0 rounded-full border transition-colors',
+                      testingModeEnabled
+                        ? 'border-amber-300/40 bg-amber-400/25'
+                        : 'border-[var(--border-soft)] bg-[var(--surface-muted)]'
+                    )}
+                    title={
+                      testingModeEnabled
+                        ? 'Testing mode is on. AI-created actions will not count toward behavior learning.'
+                        : 'Testing mode is off. AI-created actions can count toward behavior learning.'
+                    }
+                  >
+                    <span
+                      className={cn(
+                        'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
+                        testingModeEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'
+                      )}
+                    />
+                  </button>
                   {isDictating ? (
                     <button
                       onClick={handleToggleDictation}

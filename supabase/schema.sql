@@ -514,6 +514,47 @@ create policy "Users can insert their own workout_set_logs" on public.workout_se
 create policy "Users can update their own workout_set_logs" on public.workout_set_logs for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "Users can delete their own workout_set_logs" on public.workout_set_logs for delete to authenticated using (auth.uid() = user_id);
 
+-- Habits (recurring daily/weekly routines)
+create table if not exists public.habits (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  frequency text not null default 'daily' check (frequency in ('daily', 'weekly')),
+  position int not null default 0,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.habit_completions (
+  id uuid primary key default gen_random_uuid(),
+  habit_id uuid not null references public.habits(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  completed_date date not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  unique (habit_id, completed_date)
+);
+
+create index if not exists habits_user_id_idx on public.habits(user_id);
+create index if not exists habit_completions_habit_id_idx on public.habit_completions(habit_id);
+create index if not exists habit_completions_user_id_idx on public.habit_completions(user_id);
+
+alter table public.habits enable row level security;
+drop policy if exists "Users can read their own habits" on public.habits;
+drop policy if exists "Users can insert their own habits" on public.habits;
+drop policy if exists "Users can update their own habits" on public.habits;
+drop policy if exists "Users can delete their own habits" on public.habits;
+create policy "Users can read their own habits" on public.habits for select to authenticated using (auth.uid() = user_id);
+create policy "Users can insert their own habits" on public.habits for insert to authenticated with check (auth.uid() = user_id);
+create policy "Users can update their own habits" on public.habits for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Users can delete their own habits" on public.habits for delete to authenticated using (auth.uid() = user_id);
+
+alter table public.habit_completions enable row level security;
+drop policy if exists "Users can read their own habit_completions" on public.habit_completions;
+drop policy if exists "Users can insert their own habit_completions" on public.habit_completions;
+drop policy if exists "Users can delete their own habit_completions" on public.habit_completions;
+create policy "Users can read their own habit_completions" on public.habit_completions for select to authenticated using (auth.uid() = user_id);
+create policy "Users can insert their own habit_completions" on public.habit_completions for insert to authenticated with check (auth.uid() = user_id);
+create policy "Users can delete their own habit_completions" on public.habit_completions for delete to authenticated using (auth.uid() = user_id);
+
 -- Storage bucket for profile avatars
 insert into storage.buckets (id, name, public) values ('avatars', 'avatars', true) on conflict do nothing;
 drop policy if exists "Users can upload their avatar" on storage.objects;

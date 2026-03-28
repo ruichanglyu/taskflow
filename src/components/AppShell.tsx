@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { LogOut, Menu, Search, CheckCircle2, AlertCircle, X, Sparkles } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { LogOut, Menu, Search, CheckCircle2, AlertCircle, X, Sparkles, CheckCheck } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { View } from '../types';
@@ -22,7 +22,9 @@ import { supabase } from '../lib/supabase';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import { ProfileModal } from './ProfileModal';
 import { AIPanel } from './AIPanel';
+import { HabitsPanel } from './HabitsPanel';
 import { migrateLegacyAIData } from '../hooks/useAI';
+import { useHabits } from '../hooks/useHabits';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 
 interface AppShellProps {
@@ -67,6 +69,8 @@ export function AppShell({ user }: AppShellProps) {
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [habitsOpen, setHabitsOpen] = useState(false);
+  const habitsButtonRef = useRef<HTMLButtonElement>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   // Migrate legacy AI data (global keys/chats) to this user on first load
   useState(() => { migrateLegacyAIData(user.id); });
@@ -76,6 +80,7 @@ export function AppShell({ user }: AppShellProps) {
   const gym = useGym(user.id);
   const calendar = useGoogleCalendar(user.id);
   const { requestPermission } = useNotifications(store.tasks);
+  const habits = useHabits(user.id);
   const searchParams = new URLSearchParams(location.search);
   const projectFocusId = searchParams.get('project');
   const deadlineCourseFilterId = searchParams.get('course');
@@ -310,13 +315,17 @@ export function AppShell({ user }: AppShellProps) {
           </button>
 
           <div className="flex-1" />
-          <div className="hidden items-center gap-2 rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 shadow-sm sm:flex">
-            <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-            <span className="text-xs text-[var(--text-muted)]">
-              {store.tasks.filter(task => task.status !== 'done').length} active tasks
-            </span>
-          </div>
           <div className="flex items-center gap-3">
+            <button
+              ref={habitsButtonRef}
+              onClick={() => setHabitsOpen(prev => !prev)}
+              className={`flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:border-[var(--border-strong)] hover:shadow-md ${habitsOpen ? 'border-[var(--border-strong)]' : ''}`}
+              style={{ color: 'var(--text-secondary)' }}
+              title="Routines"
+            >
+              <CheckCheck size={16} />
+              <span className="hidden sm:inline text-xs font-medium">Routines</span>
+            </button>
             <button
               onClick={() => setAiOpen(true)}
               className="flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:border-[var(--accent)] hover:shadow-md"
@@ -494,6 +503,18 @@ export function AppShell({ user }: AppShellProps) {
         projects={store.projects}
         onUserUpdated={handleUserUpdated}
       />
+
+      {habitsOpen && (
+        <HabitsPanel
+          habits={habits.habits}
+          isLoading={habits.isLoading}
+          onToggle={habits.toggleToday}
+          onAdd={habits.addHabit}
+          onDelete={habits.deleteHabit}
+          onClose={() => setHabitsOpen(false)}
+          anchorRef={habitsButtonRef}
+        />
+      )}
 
       <AIPanel
         open={aiOpen}

@@ -9,11 +9,12 @@ interface DashboardProps {
   deadlines?: Deadline[];
 }
 
-function SummaryPill({ label, value }: { label: string; value: string }) {
+function SummaryPill({ label, value, pulse }: { label: string; value: string; pulse?: boolean }) {
   return (
-    <div className="rounded-full border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs text-[var(--text-secondary)] shadow-sm">
+    <div className="flex items-center gap-1.5 rounded-full border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs text-[var(--text-secondary)] shadow-sm">
+      {pulse && <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />}
       <span className="font-medium text-[var(--text-primary)]">{value}</span>
-      <span className="ml-1.5 text-[var(--text-faint)]">{label}</span>
+      <span className="text-[var(--text-faint)]">{label}</span>
     </div>
   );
 }
@@ -122,7 +123,7 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <SummaryPill label="active tasks" value={`${activeTasksCount}`} />
+            <SummaryPill label="active tasks" value={`${activeTasksCount}`} pulse />
             <SummaryPill label="upcoming deadlines" value={`${upcomingDeadlinesCount}`} />
             <SummaryPill label="courses" value={`${projects.length}`} />
           </div>

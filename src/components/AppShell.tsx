@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { LogOut, Menu, Search, CheckCircle2, AlertCircle, X, Sparkles, CheckCheck } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -26,6 +26,7 @@ import { HabitsPanel } from './HabitsPanel';
 import { migrateLegacyAIData } from '../hooks/useAI';
 import { useHabits } from '../hooks/useHabits';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
+import { useBehaviorLearning, type BehaviorLearningActionOptions } from '../hooks/useBehaviorLearning';
 
 interface AppShellProps {
   user: User;
@@ -38,6 +39,10 @@ interface Toast {
   tone: ToastTone;
   title: string;
   message?: string;
+}
+
+function isBehaviorLearningActionOptions(value: unknown): value is BehaviorLearningActionOptions {
+  return Boolean(value) && typeof value === 'object' && ('source' in (value as object) || 'learn' in (value as object));
 }
 
 const VIEW_PATHS: Record<View, string> = {
@@ -79,6 +84,7 @@ export function AppShell({ user }: AppShellProps) {
   const canvasStore = useCanvas(user.id, store.projects);
   const gym = useGym(user.id);
   const calendar = useGoogleCalendar(user.id);
+  const learning = useBehaviorLearning(user.id);
   const { requestPermission } = useNotifications(store.tasks);
   const habits = useHabits(user.id);
   const searchParams = new URLSearchParams(location.search);
@@ -231,25 +237,64 @@ export function AppShell({ user }: AppShellProps) {
     }
   }, [deadlineStore, pushToast]);
 
-  const handleAddTask = useCallback(async (...args: Parameters<typeof store.addTask>) => {
-    const taskId = await store.addTask(...args);
+  const handleAddTask = useCallback(async (...args: [...Parameters<typeof store.addTask>, BehaviorLearningActionOptions?]) => {
+    const lastArg = args.at(-1);
+    const options = isBehaviorLearningActionOptions(lastArg) ? lastArg : undefined;
+    const baseArgs = (options ? args.slice(0, -1) : args) as Parameters<typeof store.addTask>;
+    const taskId = await store.addTask(...baseArgs);
     if (taskId) {
       pushToast('success', 'Task created');
+      const [title, , , projectId, dueDate, , status] = baseArgs;
+      learning.logTaskCreated({
+        title,
+        projectId,
+        dueDate,
+        status,
+        options,
+      });
     } else {
       pushToast('error', 'Could not create task', store.error ?? 'Please try again.');
     }
     return taskId;
-  }, [store, pushToast]);
+  }, [learning, store, pushToast]);
 
-  const handleUpdateTask = useCallback(async (...args: Parameters<typeof store.updateTask>) => {
-    const ok = await store.updateTask(...args);
+  const handleUpdateTask = useCallback(async (...args: [...Parameters<typeof store.updateTask>, BehaviorLearningActionOptions?]) => {
+    const lastArg = args.at(-1);
+    const options = isBehaviorLearningActionOptions(lastArg) ? lastArg : undefined;
+    const baseArgs = (options ? args.slice(0, -1) : args) as Parameters<typeof store.updateTask>;
+    const [taskId, updates] = baseArgs;
+    const currentTask = store.tasks.find(task => task.id === taskId);
+    const ok = await store.updateTask(...baseArgs);
     if (ok) {
       pushToast('success', 'Task updated');
+      if (currentTask) {
+        learning.logTaskUpdated({
+          title: updates.title ?? currentTask.title,
+          projectId: updates.projectId ?? currentTask.projectId,
+          dueDate: updates.dueDate ?? currentTask.dueDate,
+          status: updates.status ?? currentTask.status,
+          options,
+        });
+      }
     } else {
       pushToast('error', 'Could not update task', store.error ?? 'Please try again.');
     }
     return ok;
-  }, [store, pushToast]);
+  }, [learning, store, pushToast]);
+
+  const handleUpdateTaskStatus = useCallback(async (id: string, status: Parameters<typeof store.updateTaskStatus>[1]) => {
+    const currentTask = store.tasks.find(task => task.id === id);
+    await store.updateTaskStatus(id, status);
+    if (!store.error && currentTask) {
+      learning.logTaskUpdated({
+        title: currentTask.title,
+        projectId: currentTask.projectId,
+        dueDate: currentTask.dueDate,
+        status,
+        options: { source: 'manual', learn: true },
+      });
+    }
+  }, [learning, store]);
 
   const handleDeleteTask = useCallback(async (id: string) => {
     const ok = await store.deleteTask(id);
@@ -279,6 +324,59 @@ export function AppShell({ user }: AppShellProps) {
       pushToast('error', 'Could not delete course', store.error);
     }
   }, [store, pushToast]);
+
+  const handleCreateCalendarEvent = useCallback(async (
+    event: Parameters<typeof calendar.createEvent>[0],
+    calendarIdOverride?: Parameters<typeof calendar.createEvent>[1],
+    options?: BehaviorLearningActionOptions,
+  ) => {
+    const ok = await calendar.createEvent(event, calendarIdOverride);
+    if (ok) {
+      const calendarId = calendarIdOverride || calendar.selectedCalendarId;
+      const calendarSummary = calendar.calendars.find(item => item.id === calendarId)?.summary ?? null;
+      learning.logCalendarCreated(event, calendarSummary, options);
+    }
+    return ok;
+  }, [calendar, learning]);
+
+  const handleUpdateCalendarEvent = useCallback(async (
+    eventId: string,
+    event: Parameters<typeof calendar.updateEvent>[1],
+    calendarIdOverride?: Parameters<typeof calendar.updateEvent>[2],
+    options?: BehaviorLearningActionOptions,
+  ) => {
+    const existingEvent = calendar.events.find(item => item.id === eventId);
+    const ok = await calendar.updateEvent(eventId, event, calendarIdOverride);
+    if (ok && existingEvent) {
+      const calendarId = calendarIdOverride || existingEvent.calendarId || calendar.selectedCalendarId;
+      const calendarSummary = calendar.calendars.find(item => item.id === calendarId)?.summary ?? existingEvent.calendarSummary ?? null;
+      learning.logCalendarUpdated(existingEvent, event, calendarSummary, options);
+    }
+    return ok;
+  }, [calendar, learning]);
+
+  const handleDeleteCalendarEvent = useCallback(async (
+    eventId: string,
+    calendarIdOverride?: Parameters<typeof calendar.deleteEvent>[1],
+    options?: BehaviorLearningActionOptions,
+  ) => {
+    const existingEvent = calendar.events.find(item => item.id === eventId);
+    const ok = await calendar.deleteEvent(eventId, calendarIdOverride);
+    if (ok && existingEvent) {
+      learning.logCalendarDeleted(existingEvent, options);
+    }
+    return ok;
+  }, [calendar, learning]);
+
+  const calendarController = useMemo(() => ({
+    ...calendar,
+    createEvent: (event: Parameters<typeof calendar.createEvent>[0], calendarIdOverride?: Parameters<typeof calendar.createEvent>[1]) =>
+      handleCreateCalendarEvent(event, calendarIdOverride, { source: 'manual', learn: true }),
+    updateEvent: (eventId: string, event: Parameters<typeof calendar.updateEvent>[1], calendarIdOverride?: Parameters<typeof calendar.updateEvent>[2]) =>
+      handleUpdateCalendarEvent(eventId, event, calendarIdOverride, { source: 'manual', learn: true }),
+    deleteEvent: (eventId: string, calendarIdOverride?: Parameters<typeof calendar.deleteEvent>[1]) =>
+      handleDeleteCalendarEvent(eventId, calendarIdOverride, { source: 'manual', learn: true }),
+  }), [calendar, handleCreateCalendarEvent, handleDeleteCalendarEvent, handleUpdateCalendarEvent]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text-primary)]">
@@ -400,7 +498,7 @@ export function AppShell({ user }: AppShellProps) {
               deadlines={deadlineStore.deadlines}
               initialProjectFilter={currentView === 'tasks' ? taskProjectFilterId : 'all'}
               onAddTask={handleAddTask}
-              onUpdateStatus={store.updateTaskStatus}
+              onUpdateStatus={handleUpdateTaskStatus}
               onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteTask}
               onAddSubtask={store.addSubtask}
@@ -424,7 +522,7 @@ export function AppShell({ user }: AppShellProps) {
             />
           )}
           {currentView === 'calendar' && (
-            <CalendarView calendar={calendar} deadlines={deadlineStore.deadlines} />
+            <CalendarView userId={user.id} calendar={calendarController} deadlines={deadlineStore.deadlines} />
           )}
           {currentView === 'timeline' && (
             <TimelineView
@@ -530,16 +628,19 @@ export function AppShell({ user }: AppShellProps) {
         calendarEvents={calendar.events}
         calendarCalendars={calendar.calendars}
         selectedCalendarId={calendar.selectedCalendarId}
-        onAddTask={store.addTask}
-        onUpdateTask={store.updateTask}
+        onAddTask={handleAddTask}
+        onUpdateTask={handleUpdateTask}
         onAddDeadline={deadlineStore.addDeadline}
-        onAddProject={store.addProject}
+        onAddProject={handleAddProject}
         onAddSubtask={store.addSubtask}
         onDeleteTask={handleDeleteTask}
         onLinkTask={handleLinkTask}
-        onCreateCalendarEvent={calendar.createEvent}
-        onUpdateCalendarEvent={calendar.updateEvent}
-        onDeleteCalendarEvent={calendar.deleteEvent}
+        onCreateCalendarEvent={handleCreateCalendarEvent}
+        onUpdateCalendarEvent={handleUpdateCalendarEvent}
+        onDeleteCalendarEvent={handleDeleteCalendarEvent}
+        aiLearningEnabled={learning.aiLearningEnabled}
+        onAiLearningEnabledChange={learning.setAiLearningEnabled}
+        scoreStudySlot={learning.scoreStudySlot}
         habits={habits.habits}
         onAddHabit={habits.addHabit}
         onToggleHabit={habits.toggleToday}

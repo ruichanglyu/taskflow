@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Component, type ReactNode } from 'react';
-import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen, Mic, MicOff } from 'lucide-react';
+import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen, Mic, MicOff, FlaskConical } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow, type ImageAttachment, type ChatThread } from '../hooks/useAI';
+import type { BehaviorLearningActionOptions } from '../hooks/useBehaviorLearning';
 import type { Habit } from '../hooks/useHabits';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus, TaskStatus } from '../types';
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
 import type { GoogleCalendarEvent, GoogleCalendarListItem, NewGoogleCalendarEvent } from '../lib/googleCalendar';
+import { useBehaviorLearning } from '../hooks/useBehaviorLearning';
 
 /* Error boundary — prevents the entire app from crashing if AI panel rendering fails */
 class AIPanelErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
@@ -194,17 +196,20 @@ interface AIPanelProps {
   calendarEvents: GoogleCalendarEvent[];
   calendarCalendars: GoogleCalendarListItem[];
   selectedCalendarId: string;
+  aiLearningEnabled: boolean;
+  onAiLearningEnabledChange: (enabled: boolean) => void;
+  scoreStudySlot: (dateKey: string, startMinutes: number, durationMinutes: number) => number;
   // Callbacks for imports
-  onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence, status?: TaskStatus) => Promise<string | null>;
-  onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence; status?: TaskStatus }) => Promise<boolean>;
+  onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence, status?: TaskStatus, options?: BehaviorLearningActionOptions) => Promise<string | null>;
+  onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence; status?: TaskStatus }, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onAddDeadline: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus) => Promise<boolean>;
   onAddProject: (name: string, description: string) => Promise<string | null>;
   onAddSubtask: (taskId: string, title: string) => Promise<boolean>;
   onDeleteTask: (taskId: string) => Promise<boolean>;
   onLinkTask: (deadlineId: string, taskId: string) => Promise<boolean>;
-  onCreateCalendarEvent: (event: NewGoogleCalendarEvent, calendarId?: string) => Promise<boolean>;
-  onUpdateCalendarEvent: (eventId: string, event: Partial<NewGoogleCalendarEvent>, calendarId?: string) => Promise<boolean>;
-  onDeleteCalendarEvent: (eventId: string, calendarId?: string) => Promise<boolean>;
+  onCreateCalendarEvent: (event: NewGoogleCalendarEvent, calendarId?: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
+  onUpdateCalendarEvent: (eventId: string, event: Partial<NewGoogleCalendarEvent>, calendarId?: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
+  onDeleteCalendarEvent: (eventId: string, calendarId?: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   habits: Habit[];
   onAddHabit: (title: string, frequency?: 'daily' | 'weekly') => Promise<void>;
   onToggleHabit: (id: string) => Promise<void>;
@@ -214,11 +219,12 @@ interface AIPanelProps {
 export function AIPanel({
   open, onClose, userId,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
-  calendarEvents, calendarCalendars, selectedCalendarId,
+  calendarEvents, calendarCalendars, selectedCalendarId, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot,
   onAddTask, onUpdateTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
   onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
   habits, onAddHabit, onToggleHabit, onDeleteHabit,
 }: AIPanelProps) {
+  const behaviorLearning = useBehaviorLearning(userId);
   const {
     threads,
     currentChat,
@@ -268,6 +274,11 @@ export function AIPanel({
   const [speechSupported, setSpeechSupported] = useState(false);
   const [isComposerDragActive, setIsComposerDragActive] = useState(false);
   const [dictationSeconds, setDictationSeconds] = useState(0);
+  const aiLearningOptions = useMemo<BehaviorLearningActionOptions>(() => ({
+    source: 'ai',
+    learn: aiLearningEnabled,
+  }), [aiLearningEnabled]);
+  const testingModeEnabled = !aiLearningEnabled;
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = messagesScrollRef.current;
@@ -743,7 +754,7 @@ export function AIPanel({
           const projectId = await resolveProject(row.course);
           updates.projectId = projectId;
         }
-        const ok = await onUpdateTask(matches[0].id, updates);
+        const ok = await onUpdateTask(matches[0].id, updates, aiLearningOptions);
         if (ok) imported++;
         else skipped++;
       }
@@ -778,13 +789,14 @@ export function AIPanel({
           rawPayload,
           workingCalendarEvents,
           targetCalendar?.summary ?? row.calendar,
+          scoreStudySlot,
         );
         if (!resolved.payload) {
           skipped++;
           continue;
         }
 
-        const ok = await onCreateCalendarEvent(resolved.payload, targetCalendarId);
+        const ok = await onCreateCalendarEvent(resolved.payload, targetCalendarId, aiLearningOptions);
         if (ok) {
           created++;
           if (resolved.adjusted) adjusted++;
@@ -828,7 +840,7 @@ export function AIPanel({
           ? calendarCalendars.find(item => normalizeCalendarCandidate(item.summary) === normalizeCalendarCandidate(row.newCalendar || ''))?.id
           : matches[0].calendarId;
 
-        const ok = await onUpdateCalendarEvent(matches[0].id, payload, targetCalendarId);
+        const ok = await onUpdateCalendarEvent(matches[0].id, payload, targetCalendarId, aiLearningOptions);
         if (ok) updated++;
         else skipped++;
       }
@@ -854,7 +866,7 @@ export function AIPanel({
 
         let allDeleted = true;
         for (const match of matches) {
-          const ok = await onDeleteCalendarEvent(match.id, match.calendarId);
+          const ok = await onDeleteCalendarEvent(match.id, match.calendarId, aiLearningOptions);
           if (ok) {
             deleted++;
           } else {
@@ -948,7 +960,7 @@ export function AIPanel({
 
       const taskResults = await Promise.all(
         resolvedRows.map(({ row, projectId, priority, recurrence, status }) =>
-          onAddTask(row.title, row.description ?? '', priority, projectId, row.dueDate ?? null, recurrence, status)
+          onAddTask(row.title, row.description ?? '', priority, projectId, row.dueDate ?? null, recurrence, status, aiLearningOptions)
             .then(result => ({ result, row, projectId, priority, recurrence, status }))
         )
       );
@@ -1254,6 +1266,40 @@ export function AIPanel({
                   placeholder="Search chats..."
                   className="w-full rounded-md border border-[var(--border-soft)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
                 />
+              </div>
+            )}
+
+            {!chatSidebarCollapsed && (
+              <div className="px-2 pb-1.5">
+                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium text-[var(--text-primary)]">Testing mode</p>
+                      <p className="text-[10px] leading-tight text-[var(--text-faint)]">
+                        Don&apos;t learn from AI-created tasks and study blocks yet
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onAiLearningEnabledChange(!aiLearningEnabled)}
+                      aria-pressed={testingModeEnabled}
+                      className={cn(
+                        'relative h-6 w-11 shrink-0 rounded-full border transition-colors',
+                        testingModeEnabled
+                          ? 'border-amber-300/40 bg-amber-400/25'
+                          : 'border-[var(--border-soft)] bg-[var(--surface-muted)]'
+                      )}
+                      title={testingModeEnabled ? 'Testing mode is on' : 'AI learning is on'}
+                    >
+                      <span
+                        className={cn(
+                          'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
+                          testingModeEnabled ? 'translate-x-[20px]' : 'translate-x-0.5'
+                        )}
+                      />
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1949,6 +1995,7 @@ function findFreeSlotForDuration(
   dateKey: string,
   durationMinutes: number,
   preferredStartMinutes: number,
+  scoreStudySlot?: (dateKey: string, startMinutes: number, durationMinutes: number) => number,
 ) {
   const DAY_START = 8 * 60;
   const DAY_END = 22 * 60;
@@ -1985,34 +2032,40 @@ function findFreeSlotForDuration(
     gaps.push({ start: cursor, end: DAY_END });
   }
 
-  const preferredGap = gaps.find(gap =>
-    preferredStartMinutes >= gap.start &&
-    preferredStartMinutes + durationMinutes <= gap.end,
-  );
-  if (preferredGap) {
-    return {
-      startMinutes: preferredStartMinutes,
-      endMinutes: preferredStartMinutes + durationMinutes,
-    };
+  const step = 15;
+  const candidates: Array<{ startMinutes: number; endMinutes: number; score: number; distance: number }> = [];
+
+  for (const gap of gaps) {
+    if (gap.end - gap.start < durationMinutes) continue;
+
+    const gapStart = Math.max(gap.start, DAY_START);
+    const gapEnd = Math.min(gap.end, DAY_END);
+    let start = gapStart;
+    while (start + durationMinutes <= gapEnd) {
+      const preferenceScore = scoreStudySlot?.(dateKey, start, durationMinutes) ?? 0;
+      const distance = Math.abs(start - preferredStartMinutes);
+      const proximityBonus = Math.max(0, 1 - distance / 240);
+      candidates.push({
+        startMinutes: start,
+        endMinutes: start + durationMinutes,
+        score: preferenceScore + proximityBonus,
+        distance,
+      });
+      start += step;
+    }
   }
 
-  const laterGap = gaps.find(gap =>
-    gap.end - Math.max(gap.start, preferredStartMinutes) >= durationMinutes,
-  );
-  if (laterGap) {
-    const nextStart = Math.max(laterGap.start, preferredStartMinutes);
-    return {
-      startMinutes: nextStart,
-      endMinutes: nextStart + durationMinutes,
-    };
-  }
+  if (candidates.length === 0) return null;
 
-  const earliestGap = gaps.find(gap => gap.end - gap.start >= durationMinutes);
-  if (!earliestGap) return null;
+  candidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (a.distance !== b.distance) return a.distance - b.distance;
+    return a.startMinutes - b.startMinutes;
+  });
 
   return {
-    startMinutes: earliestGap.start,
-    endMinutes: earliestGap.start + durationMinutes,
+    startMinutes: candidates[0].startMinutes,
+    endMinutes: candidates[0].endMinutes,
   };
 }
 
@@ -2021,6 +2074,7 @@ function maybeResolveCalendarCreateConflict(
   payload: NewGoogleCalendarEvent,
   events: GoogleCalendarEvent[],
   calendarSummary?: string,
+  scoreStudySlot?: (dateKey: string, startMinutes: number, durationMinutes: number) => number,
 ) {
   const timedDetails = getTimedPayloadDetails(payload);
   if (!timedDetails) {
@@ -2032,6 +2086,7 @@ function maybeResolveCalendarCreateConflict(
     timedDetails.dateKey,
     timedDetails.durationMinutes,
     timedDetails.startMinutes,
+    scoreStudySlot,
   );
 
   if (isStudyBlockAutoScheduleTarget(row, calendarSummary)) {

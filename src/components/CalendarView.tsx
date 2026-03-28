@@ -892,14 +892,11 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
   const month = viewAnchor.getMonth();
   const weekStart = useMemo(() => startOfWeek(viewAnchor), [viewAnchor]);
   const visibleRange = useMemo(() => {
-    const AI_PREFETCH_DAYS = 60;
-
     if (viewMode === 'week') {
       const rangeStart = new Date(weekStart);
       rangeStart.setHours(0, 0, 0, 0);
       const rangeEnd = addDays(rangeStart, 7);
       rangeEnd.setHours(0, 0, 0, 0);
-      rangeEnd.setDate(rangeEnd.getDate() + AI_PREFETCH_DAYS);
       return {
         timeMin: rangeStart.toISOString(),
         timeMax: rangeEnd.toISOString(),
@@ -911,7 +908,6 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
       const rangeEnd = endOfMonthGrid(year, month);
       rangeStart.setHours(0, 0, 0, 0);
       rangeEnd.setHours(0, 0, 0, 0);
-      rangeEnd.setDate(rangeEnd.getDate() + AI_PREFETCH_DAYS);
       return {
         timeMin: rangeStart.toISOString(),
         timeMax: rangeEnd.toISOString(),

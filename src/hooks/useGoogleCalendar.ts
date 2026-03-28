@@ -20,16 +20,37 @@ function getStorageKey(userId: string, suffix: string) {
   return `${STORAGE_KEY_PREFIX}:${userId}:${suffix}`;
 }
 
+const CALENDAR_HISTORY_BUFFER_DAYS = 365;
+const CALENDAR_FUTURE_BUFFER_DAYS = 365;
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function expandCalendarRange(range: { timeMin?: string; timeMax?: string }) {
+  const now = new Date();
+  const anchorStart = range.timeMin ? new Date(range.timeMin) : now;
+  const anchorEnd = range.timeMax ? new Date(range.timeMax) : now;
+
+  const expandedStart = addDays(anchorStart, -CALENDAR_HISTORY_BUFFER_DAYS);
+  const expandedEnd = addDays(anchorEnd, CALENDAR_FUTURE_BUFFER_DAYS);
+  expandedStart.setHours(0, 0, 0, 0);
+  expandedEnd.setHours(0, 0, 0, 0);
+
+  return {
+    timeMin: expandedStart.toISOString(),
+    timeMax: expandedEnd.toISOString(),
+  };
+}
+
 function getDefaultCalendarRange() {
   const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  end.setHours(0, 0, 0, 0);
-  return {
-    timeMin: start.toISOString(),
-    timeMax: end.toISOString(),
-  };
+  return expandCalendarRange({
+    timeMin: now.toISOString(),
+    timeMax: now.toISOString(),
+  });
 }
 
 export function useGoogleCalendar(userId: string) {
@@ -300,11 +321,12 @@ export function useGoogleCalendar(userId: string) {
   }, [accessToken, loadCalendarData]);
 
   const setVisibleRange = useCallback((range: { timeMin?: string; timeMax?: string }) => {
+    const expandedRange = expandCalendarRange(range);
     setEventRange(current => {
-      if (current.timeMin === range.timeMin && current.timeMax === range.timeMax) {
+      if (current.timeMin === expandedRange.timeMin && current.timeMax === expandedRange.timeMax) {
         return current;
       }
-      return range;
+      return expandedRange;
     });
   }, []);
 

@@ -322,7 +322,7 @@ If the user asks you to both create a task and link it to a deadline, you MUST o
 
 To create calendar events, output a fenced code block with language "import:calendar-create":
 \`\`\`import:calendar-create
-Study Block | calendar: Study Blocks | date: 2026-03-29 | start: 7:00 PM | end: 9:00 PM | description: Review exam 3 topics
+Study Block - CS 1332 Demo 2 Prep | calendar: Exam Prep | course: CS 1332 | date: 2026-03-29 | start: 7:00 PM | end: 9:00 PM | description: Demo 2 prep
 Office Hours | calendar: Personal | date: 2026-03-30 | start: 1:30 PM | end: 2:15 PM | location: Skiles 268
 \`\`\`
 
@@ -367,6 +367,7 @@ FIELD RULES:
 - Calendar update: title, calendar, date, start, then any \`new ...\` fields to change
 - Calendar delete: title, calendar, date, start
 - Course names should match existing courses when possible
+- For study blocks, do NOT use a generic title like "Study Block" by itself. Include the course and purpose in the title, for example: "Study Block - MATH 3012 Exam 3 Prep" or "Study Block - CS 1332 Demo 2 Prep".
 
 LINKING RULES:
 - Never say a task is linked just because the task title or course name looks similar to a deadline.

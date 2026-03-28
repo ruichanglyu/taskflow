@@ -1898,7 +1898,8 @@ function buildCalendarEventPayload(row: ImportBlock['rows'][number], mode: 'crea
       ? parseFlag(row.newAllDay)
       : parseFlag(row.allDay)
     : parseFlag(row.allDay);
-  const summary = mode === 'update' ? (row.newTitle || row.title) : row.title;
+  const rawSummary = mode === 'update' ? (row.newTitle || row.title) : row.title;
+  const summary = buildCalendarSummary(row, rawSummary);
   const description = mode === 'update' ? (row.newDescription ?? row.description) : row.description;
   const location = mode === 'update' ? (row.newLocation ?? row.location) : row.location;
 
@@ -1927,6 +1928,53 @@ function buildCalendarEventPayload(row: ImportBlock['rows'][number], mode: 'crea
     start: { dateTime: buildLocalDateTimeString(date, startKey), timeZone },
     end: { dateTime: buildLocalDateTimeString(date, endKey), timeZone },
   } satisfies NewGoogleCalendarEvent;
+}
+
+function buildCalendarSummary(row: ParsedImportRow, rawSummary?: string) {
+  const summary = (rawSummary ?? '').trim();
+  if (!summary) return '';
+
+  const normalized = normalizeDeleteCandidate(summary);
+  if (normalized !== 'study block') return summary;
+
+  const context = extractStudyBlockContext(row);
+  return context ? `Study Block - ${context}` : summary;
+}
+
+function extractStudyBlockContext(row: ParsedImportRow) {
+  const candidates = [
+    row.description,
+    row.notes,
+    row.course,
+    row.calendar,
+  ]
+    .map(value => (value ?? '').trim())
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    const cleaned = normalizeStudyBlockContext(candidate);
+    if (cleaned) return cleaned;
+  }
+
+  return '';
+}
+
+function normalizeStudyBlockContext(value: string) {
+  let cleaned = value
+    .replace(/^(study|studying|study block|prep|prepping|prepare|preparing)\s+(for\s+)?/i, '')
+    .replace(/^(review|reviewing)\s+/i, '')
+    .replace(/\b(on|under|in)\s+(the\s+)?(study blocks?|exam prep|personal|primary)\b/gi, '')
+    .replace(/\b(calendar|class)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  cleaned = cleaned.replace(/^[-:()\s]+|[-:()\s]+$/g, '').trim();
+  if (!cleaned) return '';
+
+  const lowered = cleaned.toLowerCase();
+  if (['study blocks', 'exam prep', 'personal', 'primary'].includes(lowered)) return '';
+
+  return cleaned;
 }
 
 function getTimedPayloadDetails(payload: NewGoogleCalendarEvent) {

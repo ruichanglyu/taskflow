@@ -1807,6 +1807,25 @@ function getCalendarSummaryById(calendars: GoogleCalendarListItem[], calendarId?
   return calendars.find(calendar => calendar.id === calendarId)?.summary ?? '';
 }
 
+function resolveCalendarTarget(
+  rawCalendar: string | undefined,
+  calendars: GoogleCalendarListItem[],
+  selectedCalendarId: string,
+) {
+  const normalizedCalendar = normalizeCalendarCandidate(rawCalendar ?? '');
+  if (normalizedCalendar) {
+    const matched = calendars.find(calendar => normalizeCalendarCandidate(calendar.summary) === normalizedCalendar);
+    if (matched) return matched;
+  }
+
+  if (selectedCalendarId) {
+    const selected = calendars.find(calendar => calendar.id === selectedCalendarId);
+    if (selected) return selected;
+  }
+
+  return calendars[0] ?? null;
+}
+
 function parseClockTime(value?: string) {
   if (!value) return null;
   const trimmed = value.trim();

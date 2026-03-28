@@ -183,33 +183,63 @@ function buildSystemPrompt(data: {
     ? data.calendarCalendars.map(calendar => `- ${calendar.summary}${calendar.id === data.selectedCalendarId ? ' (active)' : ''}`).join('\n')
     : '(not connected)';
 
-  // Group calendar events by day so the AI can clearly see busy/free time per day
+  // Group calendar events by day and compute free slots so the AI can schedule without conflicts
   let upcomingCalendarSummary = '(none loaded)';
   if (data.calendarEvents.length > 0) {
     const timeFmt = (d: Date) => d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' });
-    const dayMap = new Map<string, { summary: string; start: string; end: string; calendarSummary?: string }[]>();
+
+    // Collect timed events by day
+    const dayMap = new Map<string, { summary: string; startMin: number; endMin: number; calendarSummary?: string }[]>();
     for (const event of data.calendarEvents.slice(0, 60)) {
       const startDt = event.start?.dateTime ? new Date(event.start.dateTime) : null;
       const endDt = event.end?.dateTime ? new Date(event.end.dateTime) : null;
-      const dateKey = startDt
-        ? startDt.toISOString().split('T')[0]
-        : event.start?.date ?? 'unknown';
+      if (!startDt) continue; // skip all-day events for free slot calc
+      const dateKey = startDt.toISOString().split('T')[0];
       if (!dayMap.has(dateKey)) dayMap.set(dateKey, []);
+      const startMin = startDt.getHours() * 60 + startDt.getMinutes();
+      const endMin = endDt ? endDt.getHours() * 60 + endDt.getMinutes() : startMin + 60;
       dayMap.get(dateKey)!.push({
         summary: event.summary || 'Untitled event',
-        start: startDt ? timeFmt(startDt) : 'all day',
-        end: endDt ? timeFmt(endDt) : '',
+        startMin,
+        endMin,
         calendarSummary: event.calendarSummary,
       });
     }
+
+    const minToTime = (m: number) => {
+      const h = Math.floor(m / 60);
+      const mm = m % 60;
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return `${h12}:${mm.toString().padStart(2, '0')} ${ampm}`;
+    };
+
+    const DAY_START = 8 * 60;  // 8:00 AM
+    const DAY_END = 22 * 60;   // 10:00 PM
+    const MIN_GAP = 30;        // minimum 30min to be useful
+
     upcomingCalendarSummary = [...dayMap.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, events]) => {
-        const sorted = events.sort((a, b) => a.start.localeCompare(b.start));
-        const lines = sorted.map(e =>
-          `  ${e.start}${e.end ? ` – ${e.end}` : ''}: ${e.summary}${e.calendarSummary ? ` [${e.calendarSummary}]` : ''}`
+        const sorted = events.sort((a, b) => a.startMin - b.startMin);
+        const busyLines = sorted.map(e =>
+          `  BUSY ${minToTime(e.startMin)} – ${minToTime(e.endMin)}: ${e.summary}${e.calendarSummary ? ` [${e.calendarSummary}]` : ''}`
         );
-        return `${date}:\n${lines.join('\n')}`;
+
+        // Compute free slots
+        const freeSlots: string[] = [];
+        let cursor = DAY_START;
+        for (const e of sorted) {
+          if (e.startMin > cursor + MIN_GAP) {
+            freeSlots.push(`  FREE ${minToTime(cursor)} – ${minToTime(e.startMin)} (${e.startMin - cursor} min)`);
+          }
+          cursor = Math.max(cursor, e.endMin);
+        }
+        if (DAY_END > cursor + MIN_GAP) {
+          freeSlots.push(`  FREE ${minToTime(cursor)} – ${minToTime(DAY_END)} (${DAY_END - cursor} min)`);
+        }
+
+        return `${date}:\n${busyLines.join('\n')}\n${freeSlots.join('\n')}`;
       })
       .join('\n');
   }
@@ -351,13 +381,11 @@ LINKING RULES:
 - For calendar update/delete, do not guess. If you are not sure which event is meant, ask a follow-up instead of emitting the block.
 
 SCHEDULING RULES (CRITICAL — you MUST follow these when creating calendar events):
-- The LOADED CALENDAR EVENTS section above is grouped by day with start AND end times for every event. Study it carefully before scheduling.
-- For EACH DAY you want to schedule on, look at that day's events and find a gap where the user is FREE. A gap means no event overlaps with your proposed time.
-- An event occupies the ENTIRE window from its start time to its end time. For example, "3:30 PM – 4:45 PM: MATH 3012 K" means the user is BUSY from 3:30 PM to 4:45 PM. Do NOT schedule anything that overlaps with that window even partially.
-- Different days have different schedules. Do NOT pick the same time for every day. Check each day individually and pick the best free slot for that specific day.
-- Reasonable scheduling hours are 8:00 AM to 10:00 PM. Prefer daytime gaps when available.
-- If a day has no gap large enough for the requested duration, skip that day and tell the user why.
-- When explaining what you scheduled, briefly mention per-day reasoning (e.g. "Monday at 2 PM since you're free between EAS 1600 and MATH 3012").
+- The LOADED CALENDAR EVENTS section above shows each day's BUSY times and FREE slots with durations.
+- You MUST ONLY schedule new events during FREE slots. NEVER schedule during BUSY times.
+- For each day, pick a FREE slot that is long enough for the requested duration. Different days will have different free times — use different times per day.
+- If no FREE slot on a day is long enough, skip that day and tell the user.
+- When explaining, mention which free slot you used per day (e.g. "Saturday at 2 PM in your free window between EAS 1600 and MATH 3012").
 
 STRICT RESPONSE RULES FOR NORMAL CHAT:
 - Use plain sentences or short paragraphs.

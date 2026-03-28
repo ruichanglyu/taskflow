@@ -2249,6 +2249,7 @@ function ActionBundleCard({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, number>>({});
+  const frozenDeleteGroupsRef = useRef<{ label: string; resolvedTitle: string; valid: boolean }[] | null>(null);
 
   const isValidImportBlock = useCallback((block: unknown): block is ImportBlock => {
     return !!block && typeof block === 'object' && typeof (block as ImportBlock).type === 'string' && Array.isArray((block as ImportBlock).rows);
@@ -2423,6 +2424,9 @@ function ActionBundleCard({
       return;
     }
 
+    // Snapshot delete groups before applying so the preview doesn't re-evaluate after deletion
+    frozenDeleteGroupsRef.current = deleteGroups;
+
     // Flip to "Applied" immediately — imports run in background
     setOptimisticDone(true);
     setActionError(null);
@@ -2449,8 +2453,8 @@ function ActionBundleCard({
   const primaryLabel = allDone
     ? 'Applied'
     : hasDeletes
-      ? (confirmDelete ? 'Approve actions' : 'Review actions')
-      : 'Add';
+      ? (confirmDelete ? 'Approve actions' : 'Review deletes')
+      : 'Apply';
 
   return (
     <div className="rounded-xl border border-[var(--accent)]/28 bg-[var(--accent-soft)]/25 p-2.5">
@@ -2465,7 +2469,7 @@ function ActionBundleCard({
             </div>
             <div>
               <p className="text-sm font-medium text-[var(--text-primary)]">
-                {allDone ? `Applied ${resultSummary} changes` : 'Ready to apply'}
+                {allDone ? `Applied ${resultSummary} changes` : 'Suggested changes'}
               </p>
               <p className="text-[11px] text-[var(--text-faint)]">
                 {[summary.tasks ? `${summary.tasks} task${summary.tasks === 1 ? '' : 's'}` : null,
@@ -2484,47 +2488,34 @@ function ActionBundleCard({
           </div>
         </div>
         {!allDone && (
-          <button
-            onClick={handleApply}
-            className={cn(
-              'rounded-lg px-3 py-1.5 text-xs font-medium transition',
-              hasDeletes && confirmDelete
-                ? 'bg-rose-500 text-white'
-                : 'text-[var(--accent-contrast)]',
+          <div className="flex shrink-0 items-center gap-2">
+            {confirmDelete && (
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-[var(--text-secondary)] hover:bg-[var(--surface)]"
+              >
+                Cancel
+              </button>
             )}
-            style={hasDeletes && confirmDelete ? undefined : { backgroundColor: 'var(--accent-strong)' }}
-          >
-            {primaryLabel}
-          </button>
+            <button
+              onClick={handleApply}
+              disabled={applying}
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-60',
+                confirmDelete
+                  ? 'bg-rose-500 text-white'
+                  : 'text-[var(--accent-contrast)]',
+              )}
+              style={confirmDelete ? undefined : { backgroundColor: 'var(--accent-strong)' }}
+            >
+              {applying ? 'Applying…' : primaryLabel}
+            </button>
+          </div>
         )}
       </div>
 
       {actionError && (
         <p className="mt-3 text-[11px] font-medium text-rose-300">{actionError}</p>
-      )}
-
-      {hasDeletes && confirmDelete && !allDone && (
-        <div className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-3">
-          <p className="text-xs font-medium text-rose-300">Approve delete actions</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-rose-200/85">
-            This response includes deletions. We’ll only delete uniquely matched items and skip anything ambiguous.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              onClick={() => setConfirmDelete(false)}
-              className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-[var(--text-secondary)]"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleApply}
-              disabled={applying}
-              className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
-            >
-              {applying ? 'Applying...' : 'Approve actions'}
-            </button>
-          </div>
-        </div>
       )}
 
       <button
@@ -2612,7 +2603,7 @@ function ActionBundleCard({
             <ActionSection
               label="Deletes"
               tone="warning"
-              items={deleteGroups.map(group => group.valid ? group.resolvedTitle : `${group.label} · ambiguous`)}
+              items={(frozenDeleteGroupsRef.current ?? deleteGroups).map(group => group.valid ? group.resolvedTitle : `${group.label} · ambiguous`)}
             />
           )}
         </div>

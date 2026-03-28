@@ -476,6 +476,10 @@ function WeekCalendarGrid({
   deadlines = [],
   selectedDate,
   draftPreview,
+  headerLabel,
+  onPrevWeek,
+  onNextWeek,
+  onToday,
   onSelectDate,
   onEditEvent,
   onCreateEventAt,
@@ -485,6 +489,10 @@ function WeekCalendarGrid({
   deadlines?: import('../types').Deadline[];
   selectedDate: string;
   draftPreview: { dateKey: string; startMinutes: number; endMinutes: number } | null;
+  headerLabel: string;
+  onPrevWeek: () => void;
+  onNextWeek: () => void;
+  onToday: () => void;
   onSelectDate: (date: string) => void;
   onEditEvent: (event: GoogleCalendarEvent, anchorRect?: { top: number; left: number; width: number; height: number }) => void;
   onCreateEventAt: (
@@ -588,6 +596,35 @@ function WeekCalendarGrid({
 
   return (
     <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)]">
+      <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
+        <h2 className="text-[22px] font-semibold tracking-tight text-[var(--text-primary)]">{headerLabel}</h2>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onToday}
+            className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            onClick={onPrevWeek}
+            className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+            aria-label="Previous week"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={onNextWeek}
+            className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+            aria-label="Next week"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-[var(--border-soft)]">
         <div className="border-r border-[var(--border-soft)] bg-[var(--surface)] px-3 py-4 text-[11px] font-medium text-[var(--text-faint)]">
           GMT-04
@@ -1169,39 +1206,6 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
         </div>
       ) : viewMode === 'week' ? (
         <div className="space-y-5">
-          <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)]">
-            <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
-              <h2 className="text-[22px] font-semibold tracking-tight text-[var(--text-primary)]">
-                {formatWeekRangeLabel(weekStart)}
-              </h2>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleToday}
-                  className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewDate(formatDateKey(addDays(viewAnchor, -7)))}
-                  className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
-                  aria-label="Previous week"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewDate(formatDateKey(addDays(viewAnchor, 7)))}
-                  className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
-                  aria-label="Next week"
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </div>
-          </div>
-
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
             <WeekCalendarGrid
               weekStart={weekStart}
@@ -1209,6 +1213,10 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
               deadlines={deadlines}
               selectedDate={selectedDate}
               draftPreview={weekDraftPreview}
+              headerLabel={formatWeekRangeLabel(weekStart)}
+              onPrevWeek={() => setViewDate(formatDateKey(addDays(viewAnchor, -7)))}
+              onNextWeek={() => setViewDate(formatDateKey(addDays(viewAnchor, 7)))}
+              onToday={handleToday}
               onSelectDate={selectDate}
               onEditEvent={handleEditEvent}
               onCreateEventAt={handleCreateFromWeekSlot}

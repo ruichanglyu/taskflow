@@ -479,9 +479,11 @@ LINKING RULES:
 
 SCHEDULING RULES (CRITICAL — you MUST follow these when creating calendar events):
 - The LOADED CALENDAR EVENTS section above shows each day's BUSY times and FREE slots with durations.
-- You MUST ONLY schedule new events during FREE slots. NEVER schedule during BUSY times.
+- You MUST ONLY schedule new events during FREE slots. NEVER schedule during BUSY times, even if the user does not explicitly remind you about conflicts.
+- For each requested day, keep the day/cadence the user asked for whenever possible and adjust the TIME within that same day before you consider skipping the day.
 - For each day, pick a FREE slot that is long enough for the requested duration. Different days will have different free times — use different times per day.
 - If no FREE slot on a day is long enough, skip that day and tell the user.
+- If the user gives a time floor like "after 4 PM", every start time you emit must be at or after that exact time. Never move earlier than the requested floor, even by 15 minutes.
 - When explaining, mention which free slot you used per day (e.g. "Saturday at 2 PM in your free window between EAS 1600 and MATH 3012").
 - Import blocks are suggested changes only until the user clicks Apply. Do not say you already created, updated, deleted, removed, or linked something unless the user explicitly confirmed those changes were applied.
 - Do not assume earlier suggested changes exist. Only treat the data listed in USER'S DATA as real unless the user explicitly says they already applied a suggestion.

@@ -2180,6 +2180,7 @@ function findFreeSlotForDuration(
   dateKey: string,
   durationMinutes: number,
   preferredStartMinutes: number,
+  minStartMinutes: number,
   scoreStudySlot?: (dateKey: string, startMinutes: number, durationMinutes: number) => number,
 ) {
   const DAY_START = 8 * 60;
@@ -2223,7 +2224,7 @@ function findFreeSlotForDuration(
   for (const gap of gaps) {
     if (gap.end - gap.start < durationMinutes) continue;
 
-    const gapStart = Math.max(gap.start, DAY_START);
+    const gapStart = Math.max(gap.start, DAY_START, minStartMinutes);
     const gapEnd = Math.min(gap.end, DAY_END);
     let start = gapStart;
     while (start + durationMinutes <= gapEnd) {
@@ -2270,6 +2271,7 @@ function maybeResolveCalendarCreateConflict(
     events,
     timedDetails.dateKey,
     timedDetails.durationMinutes,
+    timedDetails.startMinutes,
     timedDetails.startMinutes,
     scoreStudySlot,
   );

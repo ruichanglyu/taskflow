@@ -505,7 +505,7 @@ function WeekCalendarGrid({
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const weekStartHour = 0;
   const hourRows = Array.from({ length: 24 }, (_, index) => weekStartHour + index);
-  const rowHeight = 44;
+  const rowHeight = 40;
   const todayKey = formatDateKey(new Date());
   const [hoverSlot, setHoverSlot] = useState<{ dateKey: string; startMinutes: number } | null>(null);
   const [dragSelection, setDragSelection] = useState<{

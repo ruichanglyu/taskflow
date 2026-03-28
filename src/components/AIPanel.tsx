@@ -3049,8 +3049,7 @@ function ActionBundleCard({
     frozenDeleteGroupsRef.current = deleteGroups;
     frozenCalendarGroupsRef.current = calendarGroups;
 
-    // Flip to "Applied" immediately — imports run in background
-    setOptimisticDone(true);
+    setApplying(true);
     setActionError(null);
 
     const sortedEntries = [...pendingEntries].sort((a, b) => a.order - b.order);
@@ -3063,11 +3062,12 @@ function ActionBundleCard({
           nextResults[entry.key] = count;
         }
         setResults(prev => ({ ...prev, ...nextResults }));
+        setOptimisticDone(true);
         setConfirmDelete(false);
       } catch (error) {
-        // Revert optimistic state and show error
-        setOptimisticDone(false);
         setActionError(error instanceof Error ? error.message : 'Could not apply these actions.');
+      } finally {
+        setApplying(false);
       }
     })();
   };
@@ -3085,13 +3085,21 @@ function ActionBundleCard({
           <div className="flex items-center gap-2">
             <div className={cn(
               'flex h-7 w-7 items-center justify-center rounded-lg',
-              allDone ? 'bg-emerald-500/20' : 'bg-[var(--accent-soft)]',
+              allDone
+                ? 'bg-emerald-500/20'
+                : applying
+                  ? 'bg-[var(--accent-strong)]/20'
+                  : 'bg-[var(--accent-soft)]',
             )}>
-              {allDone ? <Check size={14} className="text-emerald-400" /> : <Sparkles size={14} className="text-[var(--accent)]" />}
+              {allDone ? (
+                <Check size={14} className="text-emerald-400" />
+              ) : (
+                <Sparkles size={14} className={cn(applying ? 'text-[var(--accent-strong)]' : 'text-[var(--accent)]')} />
+              )}
             </div>
             <div>
               <p className="text-sm font-medium text-[var(--text-primary)]">
-                {allDone ? `Applied ${resultSummary} changes` : 'Suggested changes'}
+                {allDone ? `Applied ${resultSummary} changes` : applying ? 'Applying changes…' : 'Suggested changes'}
               </p>
               <p className="text-[11px] text-[var(--text-faint)]">
                 {[summary.tasks ? `${summary.tasks} task${summary.tasks === 1 ? '' : 's'}` : null,

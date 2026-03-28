@@ -565,3 +565,128 @@ drop policy if exists "Users can update their avatar" on storage.objects;
 create policy "Users can update their avatar" on storage.objects for update to authenticated using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
 drop policy if exists "Users can delete their avatar" on storage.objects;
 create policy "Users can delete their avatar" on storage.objects for delete to authenticated using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- ============================================================
+-- Behavior learning
+-- ============================================================
+
+create table if not exists public.behavior_learning_settings (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  ai_testing_mode boolean not null default true,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.behavior_learning_schedule_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  source text not null check (source in ('manual', 'ai')),
+  action text not null check (action in ('create', 'reschedule', 'delete')),
+  title text not null,
+  calendar_id text,
+  calendar_summary text,
+  date_key date not null,
+  weekday smallint not null check (weekday between 0 and 6),
+  start_minutes int not null check (start_minutes >= 0 and start_minutes < 1440),
+  duration_minutes int not null check (duration_minutes > 0 and duration_minutes <= 1440),
+  previous_date_key date,
+  previous_weekday smallint check (previous_weekday is null or previous_weekday between 0 and 6),
+  previous_start_minutes int check (previous_start_minutes is null or (previous_start_minutes >= 0 and previous_start_minutes < 1440)),
+  previous_duration_minutes int check (previous_duration_minutes is null or (previous_duration_minutes > 0 and previous_duration_minutes <= 1440)),
+  counts_for_learning boolean not null default true,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.behavior_learning_app_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  source text not null check (source in ('manual', 'ai')),
+  entity text not null check (entity in ('task', 'deadline', 'project', 'habit', 'deadline-link', 'calendar')),
+  action text not null,
+  title text not null,
+  detail text,
+  counts_for_learning boolean not null default true,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create index if not exists behavior_learning_schedule_events_user_id_idx
+  on public.behavior_learning_schedule_events(user_id);
+create index if not exists behavior_learning_schedule_events_user_date_idx
+  on public.behavior_learning_schedule_events(user_id, date_key);
+create index if not exists behavior_learning_schedule_events_user_created_idx
+  on public.behavior_learning_schedule_events(user_id, created_at desc);
+
+create index if not exists behavior_learning_app_events_user_id_idx
+  on public.behavior_learning_app_events(user_id);
+create index if not exists behavior_learning_app_events_user_created_idx
+  on public.behavior_learning_app_events(user_id, created_at desc);
+
+alter table public.behavior_learning_settings enable row level security;
+alter table public.behavior_learning_schedule_events enable row level security;
+alter table public.behavior_learning_app_events enable row level security;
+
+drop policy if exists "Users can read their own behavior_learning_settings" on public.behavior_learning_settings;
+drop policy if exists "Users can insert their own behavior_learning_settings" on public.behavior_learning_settings;
+drop policy if exists "Users can update their own behavior_learning_settings" on public.behavior_learning_settings;
+drop policy if exists "Users can delete their own behavior_learning_settings" on public.behavior_learning_settings;
+
+create policy "Users can read their own behavior_learning_settings"
+on public.behavior_learning_settings for select to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can insert their own behavior_learning_settings"
+on public.behavior_learning_settings for insert to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update their own behavior_learning_settings"
+on public.behavior_learning_settings for update to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can delete their own behavior_learning_settings"
+on public.behavior_learning_settings for delete to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "Users can read their own behavior_learning_schedule_events" on public.behavior_learning_schedule_events;
+drop policy if exists "Users can insert their own behavior_learning_schedule_events" on public.behavior_learning_schedule_events;
+drop policy if exists "Users can update their own behavior_learning_schedule_events" on public.behavior_learning_schedule_events;
+drop policy if exists "Users can delete their own behavior_learning_schedule_events" on public.behavior_learning_schedule_events;
+
+create policy "Users can read their own behavior_learning_schedule_events"
+on public.behavior_learning_schedule_events for select to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can insert their own behavior_learning_schedule_events"
+on public.behavior_learning_schedule_events for insert to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update their own behavior_learning_schedule_events"
+on public.behavior_learning_schedule_events for update to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can delete their own behavior_learning_schedule_events"
+on public.behavior_learning_schedule_events for delete to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "Users can read their own behavior_learning_app_events" on public.behavior_learning_app_events;
+drop policy if exists "Users can insert their own behavior_learning_app_events" on public.behavior_learning_app_events;
+drop policy if exists "Users can update their own behavior_learning_app_events" on public.behavior_learning_app_events;
+drop policy if exists "Users can delete their own behavior_learning_app_events" on public.behavior_learning_app_events;
+
+create policy "Users can read their own behavior_learning_app_events"
+on public.behavior_learning_app_events for select to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can insert their own behavior_learning_app_events"
+on public.behavior_learning_app_events for insert to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update their own behavior_learning_app_events"
+on public.behavior_learning_app_events for update to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can delete their own behavior_learning_app_events"
+on public.behavior_learning_app_events for delete to authenticated
+using (auth.uid() = user_id);

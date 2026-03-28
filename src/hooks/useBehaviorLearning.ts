@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { GoogleCalendarEvent, NewGoogleCalendarEvent } from '../lib/googleCalendar';
+import { supabase } from '../lib/supabase';
 
 type LearningSource = 'manual' | 'ai';
 type LearningAction = 'create' | 'reschedule' | 'delete';
@@ -18,6 +19,7 @@ interface AppBehaviorEvent {
   action: string;
   title: string;
   detail: string | null;
+  countsForLearning: boolean;
   createdAt: string;
 }
 
@@ -36,6 +38,7 @@ interface BehaviorLearningEvent {
   previousWeekday: number | null;
   previousStartMinutes: number | null;
   previousDurationMinutes: number | null;
+  countsForLearning: boolean;
   createdAt: string;
 }
 
@@ -47,6 +50,45 @@ interface TimedBehaviorSnapshot {
   weekday: number;
   startMinutes: number;
   durationMinutes: number;
+}
+
+interface BehaviorLearningSettingsRow {
+  user_id: string;
+  ai_testing_mode: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface BehaviorLearningScheduleEventRow {
+  id: string;
+  user_id: string;
+  source: LearningSource;
+  action: LearningAction;
+  title: string;
+  calendar_id: string | null;
+  calendar_summary: string | null;
+  date_key: string;
+  weekday: number;
+  start_minutes: number;
+  duration_minutes: number;
+  previous_date_key: string | null;
+  previous_weekday: number | null;
+  previous_start_minutes: number | null;
+  previous_duration_minutes: number | null;
+  counts_for_learning: boolean;
+  created_at: string;
+}
+
+interface BehaviorLearningAppEventRow {
+  id: string;
+  user_id: string;
+  source: LearningSource;
+  entity: AppBehaviorEntity;
+  action: string;
+  title: string;
+  detail: string | null;
+  counts_for_learning: boolean;
+  created_at: string;
 }
 
 const STORAGE_PREFIX = 'taskflow_behavior_learning_events';
@@ -146,7 +188,12 @@ function loadEventsFromStorage(userId: string): BehaviorLearningEvent[] {
     const saved = localStorage.getItem(eventsStorageKey(userId));
     if (!saved) return [];
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed)
+      ? parsed.map((event) => ({
+          ...event,
+          countsForLearning: event?.countsForLearning ?? true,
+        }))
+      : [];
   } catch {
     return [];
   }
@@ -164,7 +211,12 @@ function loadAppEventsFromStorage(userId: string): AppBehaviorEvent[] {
     const saved = localStorage.getItem(appEventsStorageKey(userId));
     if (!saved) return [];
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed)
+      ? parsed.map((event) => ({
+          ...event,
+          countsForLearning: event?.countsForLearning ?? true,
+        }))
+      : [];
   } catch {
     return [];
   }
@@ -195,6 +247,88 @@ function broadcastBehaviorUpdate(userId: string) {
   window.dispatchEvent(new CustomEvent(BEHAVIOR_EVENT_NAME, { detail: { userId } }));
 }
 
+function mapScheduleRowToEvent(row: BehaviorLearningScheduleEventRow): BehaviorLearningEvent {
+  return {
+    id: row.id,
+    source: row.source,
+    action: row.action,
+    title: row.title,
+    calendarId: row.calendar_id,
+    calendarSummary: row.calendar_summary,
+    dateKey: row.date_key,
+    weekday: row.weekday,
+    startMinutes: row.start_minutes,
+    durationMinutes: row.duration_minutes,
+    previousDateKey: row.previous_date_key,
+    previousWeekday: row.previous_weekday,
+    previousStartMinutes: row.previous_start_minutes,
+    previousDurationMinutes: row.previous_duration_minutes,
+    countsForLearning: row.counts_for_learning,
+    createdAt: row.created_at,
+  };
+}
+
+function mapEventToScheduleRow(userId: string, event: BehaviorLearningEvent): BehaviorLearningScheduleEventRow {
+  return {
+    id: event.id,
+    user_id: userId,
+    source: event.source,
+    action: event.action,
+    title: event.title,
+    calendar_id: event.calendarId,
+    calendar_summary: event.calendarSummary,
+    date_key: event.dateKey,
+    weekday: event.weekday,
+    start_minutes: event.startMinutes,
+    duration_minutes: event.durationMinutes,
+    previous_date_key: event.previousDateKey,
+    previous_weekday: event.previousWeekday,
+    previous_start_minutes: event.previousStartMinutes,
+    previous_duration_minutes: event.previousDurationMinutes,
+    counts_for_learning: event.countsForLearning,
+    created_at: event.createdAt,
+  };
+}
+
+function mapAppRowToEvent(row: BehaviorLearningAppEventRow): AppBehaviorEvent {
+  return {
+    id: row.id,
+    source: row.source,
+    entity: row.entity,
+    action: row.action,
+    title: row.title,
+    detail: row.detail,
+    countsForLearning: row.counts_for_learning,
+    createdAt: row.created_at,
+  };
+}
+
+function mapAppEventToRow(userId: string, event: AppBehaviorEvent): BehaviorLearningAppEventRow {
+  return {
+    id: event.id,
+    user_id: userId,
+    source: event.source,
+    entity: event.entity,
+    action: event.action,
+    title: event.title,
+    detail: event.detail,
+    counts_for_learning: event.countsForLearning,
+    created_at: event.createdAt,
+  };
+}
+
+async function upsertBehaviorSettings(userId: string, aiTestingMode: boolean) {
+  if (!supabase) return;
+  await supabase.from('behavior_learning_settings').upsert(
+    {
+      user_id: userId,
+      ai_testing_mode: aiTestingMode,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id' },
+  );
+}
+
 function buildScoreMaps(events: BehaviorLearningEvent[]) {
   const weekdayScores = Array.from({ length: 7 }, () => new Map<number, number>());
   const overallScores = new Map<number, number>();
@@ -206,6 +340,7 @@ function buildScoreMaps(events: BehaviorLearningEvent[]) {
   };
 
   for (const event of events) {
+    if (!event.countsForLearning) continue;
     const isAi = event.source === 'ai';
     if (event.action === 'create') {
       addScore(event.weekday, event.startMinutes, isAi ? 1 : 2);
@@ -320,12 +455,144 @@ export function useBehaviorLearning(userId: string) {
     return () => window.removeEventListener(BEHAVIOR_EVENT_NAME, handleUpdate as EventListener);
   }, [userId]);
 
+  useEffect(() => {
+    if (!userId || !supabase) return;
+
+    let cancelled = false;
+
+    async function hydrateFromSupabase() {
+      const localEvents = loadEventsFromStorage(userId);
+      const localAppEvents = loadAppEventsFromStorage(userId);
+      const localTestingMode = loadAiTestingMode(userId);
+
+      try {
+        let [
+          { data: settingsRow, error: settingsError },
+          { data: scheduleRows, error: scheduleError },
+          { data: appRows, error: appError },
+        ] = await Promise.all([
+          supabase
+            .from('behavior_learning_settings')
+            .select('user_id, ai_testing_mode, created_at, updated_at')
+            .eq('user_id', userId)
+            .maybeSingle(),
+          supabase
+            .from('behavior_learning_schedule_events')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(250)
+            .returns<BehaviorLearningScheduleEventRow[]>(),
+          supabase
+            .from('behavior_learning_app_events')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(500)
+            .returns<BehaviorLearningAppEventRow[]>(),
+        ]);
+
+        if (settingsError || scheduleError || appError) {
+          if (cancelled) return;
+          setEvents(localEvents);
+          setAppEvents(localAppEvents);
+          setAiTestingModeState(localTestingMode);
+          return;
+        }
+
+        let migrated = false;
+
+        if (!settingsRow) {
+          await upsertBehaviorSettings(userId, localTestingMode);
+          migrated = true;
+        }
+
+        if ((!scheduleRows || scheduleRows.length === 0) && localEvents.length > 0) {
+          const rows = localEvents.map((event) => mapEventToScheduleRow(userId, event));
+          const { error } = await supabase.from('behavior_learning_schedule_events').insert(rows);
+          if (!error) migrated = true;
+        }
+
+        if ((!appRows || appRows.length === 0) && localAppEvents.length > 0) {
+          const rows = localAppEvents.map((event) => mapAppEventToRow(userId, event));
+          const { error } = await supabase.from('behavior_learning_app_events').insert(rows);
+          if (!error) migrated = true;
+        }
+
+        if (migrated) {
+          [
+            { data: settingsRow, error: settingsError },
+            { data: scheduleRows, error: scheduleError },
+            { data: appRows, error: appError },
+          ] = await Promise.all([
+            supabase
+              .from('behavior_learning_settings')
+              .select('user_id, ai_testing_mode, created_at, updated_at')
+              .eq('user_id', userId)
+              .maybeSingle(),
+            supabase
+              .from('behavior_learning_schedule_events')
+              .select('*')
+              .eq('user_id', userId)
+              .order('created_at', { ascending: false })
+              .limit(250)
+              .returns<BehaviorLearningScheduleEventRow[]>(),
+            supabase
+              .from('behavior_learning_app_events')
+              .select('*')
+              .eq('user_id', userId)
+              .order('created_at', { ascending: false })
+              .limit(500)
+              .returns<BehaviorLearningAppEventRow[]>(),
+          ]);
+
+          if (settingsError || scheduleError || appError) {
+            if (cancelled) return;
+            setEvents(localEvents);
+            setAppEvents(localAppEvents);
+            setAiTestingModeState(localTestingMode);
+            return;
+          }
+        }
+
+        if (cancelled) return;
+
+        const nextEvents = (scheduleRows ?? []).map(mapScheduleRowToEvent).reverse();
+        const nextAppEvents = (appRows ?? []).map(mapAppRowToEvent).reverse();
+        const nextTestingMode = settingsRow?.ai_testing_mode ?? localTestingMode;
+
+        setEvents(nextEvents);
+        setAppEvents(nextAppEvents);
+        setAiTestingModeState(nextTestingMode);
+        saveEventsToStorage(userId, nextEvents);
+        saveAppEventsToStorage(userId, nextAppEvents);
+        saveAiTestingMode(userId, nextTestingMode);
+      } catch {
+        if (cancelled) return;
+        setEvents(localEvents);
+        setAppEvents(localAppEvents);
+        setAiTestingModeState(localTestingMode);
+      }
+    }
+
+    void hydrateFromSupabase();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
   const persistEvent = useCallback((event: BehaviorLearningEvent) => {
     setEvents(previous => {
       const next = appendBehaviorEvent(previous, event);
       saveEventsToStorage(userId, next);
       return next;
     });
+    if (supabase) {
+      void supabase
+        .from('behavior_learning_schedule_events')
+        .insert(mapEventToScheduleRow(userId, event));
+    }
     broadcastBehaviorUpdate(userId);
   }, [userId]);
 
@@ -335,12 +602,20 @@ export function useBehaviorLearning(userId: string) {
       saveAppEventsToStorage(userId, next);
       return next;
     });
+    if (supabase) {
+      void supabase
+        .from('behavior_learning_app_events')
+        .insert(mapAppEventToRow(userId, event));
+    }
     broadcastBehaviorUpdate(userId);
   }, [userId]);
 
   const setAiTestingMode = useCallback((value: boolean) => {
     setAiTestingModeState(value);
     saveAiTestingMode(userId, value);
+    if (supabase) {
+      void upsertBehaviorSettings(userId, value);
+    }
     broadcastBehaviorUpdate(userId);
   }, [userId]);
 
@@ -351,7 +626,7 @@ export function useBehaviorLearning(userId: string) {
     options?: BehaviorLearningActionOptions,
     detail?: string | null,
   ) => {
-    if (!shouldLearn(options)) return;
+    const countsForLearning = shouldLearn(options);
     persistAppEvent({
       id: crypto.randomUUID(),
       source: options?.source ?? 'manual',
@@ -359,13 +634,14 @@ export function useBehaviorLearning(userId: string) {
       action,
       title,
       detail: detail ?? null,
+      countsForLearning,
       createdAt: new Date().toISOString(),
     });
   }, [persistAppEvent]);
 
   const recordCalendarCreate = useCallback((
     payload: NewGoogleCalendarEvent,
-    options: { source: LearningSource; calendarId?: string | null; calendarSummary?: string | null },
+    options: { source: LearningSource; calendarId?: string | null; calendarSummary?: string | null; countsForLearning: boolean },
   ) => {
     const snapshot = parseTimedPayload(payload, options.calendarId, options.calendarSummary);
     if (!snapshot || !isStudyBlockLike(snapshot.title, snapshot.calendarSummary)) return;
@@ -385,6 +661,7 @@ export function useBehaviorLearning(userId: string) {
       previousWeekday: null,
       previousStartMinutes: null,
       previousDurationMinutes: null,
+      countsForLearning: options.countsForLearning,
       createdAt: new Date().toISOString(),
     });
   }, [persistEvent]);
@@ -392,7 +669,7 @@ export function useBehaviorLearning(userId: string) {
   const recordCalendarUpdate = useCallback((
     previousEvent: GoogleCalendarEvent,
     payload: NewGoogleCalendarEvent,
-    options: { source: LearningSource; calendarId?: string | null; calendarSummary?: string | null },
+    options: { source: LearningSource; calendarId?: string | null; calendarSummary?: string | null; countsForLearning: boolean },
   ) => {
     const previousSnapshot = parseTimedCalendarEvent(previousEvent);
     const nextSnapshot = parseTimedPayload(
@@ -429,11 +706,12 @@ export function useBehaviorLearning(userId: string) {
       previousWeekday: previousSnapshot?.weekday ?? null,
       previousStartMinutes: previousSnapshot?.startMinutes ?? null,
       previousDurationMinutes: previousSnapshot?.durationMinutes ?? null,
+      countsForLearning: options.countsForLearning,
       createdAt: new Date().toISOString(),
     });
   }, [persistEvent]);
 
-  const recordCalendarDelete = useCallback((event: GoogleCalendarEvent, options: { source: LearningSource }) => {
+  const recordCalendarDelete = useCallback((event: GoogleCalendarEvent, options: { source: LearningSource; countsForLearning: boolean }) => {
     const snapshot = parseTimedCalendarEvent(event);
     if (!snapshot || !isStudyBlockLike(snapshot.title, snapshot.calendarSummary)) return;
 
@@ -452,6 +730,7 @@ export function useBehaviorLearning(userId: string) {
       previousWeekday: snapshot.weekday,
       previousStartMinutes: snapshot.startMinutes,
       previousDurationMinutes: snapshot.durationMinutes,
+      countsForLearning: options.countsForLearning,
       createdAt: new Date().toISOString(),
     });
   }, [persistEvent]);
@@ -542,10 +821,10 @@ export function useBehaviorLearning(userId: string) {
     options?: BehaviorLearningActionOptions,
   ) => {
     recordAppAction('calendar', 'create', payload.summary, options, calendarSummary ?? null);
-    if (!shouldLearn(options)) return;
     recordCalendarCreate(payload, {
       source: options?.source ?? 'manual',
       calendarSummary,
+      countsForLearning: shouldLearn(options),
     });
   }, [recordAppAction, recordCalendarCreate]);
 
@@ -562,7 +841,6 @@ export function useBehaviorLearning(userId: string) {
       options,
       calendarSummary ?? previousEvent.calendarSummary ?? null,
     );
-    if (!shouldLearn(options)) return;
 
     const mergedPayload: NewGoogleCalendarEvent = {
       summary: payload.summary ?? previousEvent.summary ?? 'Untitled event',
@@ -584,6 +862,7 @@ export function useBehaviorLearning(userId: string) {
       source: options?.source ?? 'manual',
       calendarId: previousEvent.calendarId,
       calendarSummary: calendarSummary ?? previousEvent.calendarSummary,
+      countsForLearning: shouldLearn(options),
     });
   }, [recordAppAction, recordCalendarUpdate]);
 
@@ -592,8 +871,10 @@ export function useBehaviorLearning(userId: string) {
     options?: BehaviorLearningActionOptions,
   ) => {
     recordAppAction('calendar', 'delete', event.summary ?? 'Untitled event', options, event.calendarSummary ?? null);
-    if (!shouldLearn(options)) return;
-    recordCalendarDelete(event, { source: options?.source ?? 'manual' });
+    recordCalendarDelete(event, {
+      source: options?.source ?? 'manual',
+      countsForLearning: shouldLearn(options),
+    });
   }, [recordAppAction, recordCalendarDelete]);
 
   const logDeadlineCreated = useCallback((params: {

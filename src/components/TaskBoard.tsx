@@ -298,7 +298,12 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {statusColumns.map(col => {
-            const columnTasks = filteredTasks.filter(t => t.status === col.status);
+            const columnTasks = filteredTasks.filter(t => t.status === col.status).sort((a, b) => {
+              if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+              if (a.dueDate && !b.dueDate) return -1;
+              if (!a.dueDate && b.dueDate) return 1;
+              return 0;
+            });
             return (
               <div key={col.status} className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm transition-colors hover:border-[var(--border-strong)]">
                 <div className="mb-4 flex items-center gap-2 border-b border-[var(--border-soft)] pb-3">

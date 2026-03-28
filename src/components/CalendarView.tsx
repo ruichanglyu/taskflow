@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { CalendarDays, Check, ChevronDown, ExternalLink, List, LayoutGrid, Pencil, Plus, RefreshCcw, Trash2, Unplug } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, List, LayoutGrid, Pencil, Plus, RefreshCcw, Trash2, Unplug } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { GoogleCalendarEvent } from '../lib/googleCalendar';
 import { CreateEventModal } from './CreateEventModal';
@@ -1169,32 +1169,36 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
         </div>
       ) : viewMode === 'week' ? (
         <div className="space-y-5">
-          <div className="flex flex-col gap-3 rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-5">
-            <div className="text-lg font-semibold text-[var(--text-primary)]">
-              {formatWeekRangeLabel(weekStart)}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setViewDate(formatDateKey(addDays(viewAnchor, -7)))}
-                className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
-              >
-                ←
-              </button>
-              <button
-                type="button"
-                onClick={handleToday}
-                className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
-              >
-                This week
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewDate(formatDateKey(addDays(viewAnchor, 7)))}
-                className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
-              >
-                →
-              </button>
+          <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)]">
+            <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
+              <h2 className="text-[22px] font-semibold tracking-tight text-[var(--text-primary)]">
+                {formatWeekRangeLabel(weekStart)}
+              </h2>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleToday}
+                  className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewDate(formatDateKey(addDays(viewAnchor, -7)))}
+                  className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+                  aria-label="Previous week"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewDate(formatDateKey(addDays(viewAnchor, 7)))}
+                  className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+                  aria-label="Next week"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
             </div>
           </div>
 

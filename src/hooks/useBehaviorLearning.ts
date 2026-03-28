@@ -3,6 +3,12 @@ import type { GoogleCalendarEvent, NewGoogleCalendarEvent } from '../lib/googleC
 
 type LearningSource = 'manual' | 'ai';
 type LearningAction = 'create' | 'reschedule' | 'delete';
+type TaskStatusLike = 'todo' | 'in-progress' | 'done' | 'not-started' | 'missed';
+
+export interface BehaviorLearningActionOptions {
+  source?: LearningSource;
+  learn?: boolean;
+}
 
 interface BehaviorLearningEvent {
   id: string;
@@ -232,12 +238,34 @@ function choosePreferredStartMinute(
   return bestMinute;
 }
 
+function scoreStudySlotFromEvents(
+  events: BehaviorLearningEvent[],
+  dateKey: string,
+  startMinutes: number,
+  durationMinutes: number,
+) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return 0;
+
+  const bucket = bucketMinutes(startMinutes);
+  const durationBias = durationMinutes >= 90 ? 0.2 : 0;
+  const { weekdayScores, overallScores } = buildScoreMaps(events);
+  const weekday = date.getDay();
+  const weekdayScore = weekdayScores[weekday].get(bucket) ?? 0;
+  const overallScore = overallScores.get(bucket) ?? 0;
+  return weekdayScore * 1.6 + overallScore * 0.5 + durationBias;
+}
+
 function appendBehaviorEvent(
   previous: BehaviorLearningEvent[],
   nextEvent: BehaviorLearningEvent,
 ) {
   const next = [...previous, nextEvent].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   return next.slice(-250);
+}
+
+function shouldLearn(options?: BehaviorLearningActionOptions) {
+  return options?.learn !== false;
 }
 
 export function useBehaviorLearning(userId: string) {
@@ -381,12 +409,100 @@ export function useBehaviorLearning(userId: string) {
     });
   }, [events]);
 
+  const aiLearningEnabled = !aiTestingMode;
+  const setAiLearningEnabled = useCallback((enabled: boolean) => {
+    setAiTestingMode(!enabled);
+  }, [setAiTestingMode]);
+
+  const scoreStudySlot = useCallback((dateKey: string, startMinutes: number, durationMinutes: number) => {
+    return scoreStudySlotFromEvents(events, dateKey, startMinutes, durationMinutes);
+  }, [events]);
+
+  const logTaskCreated = useCallback((_: {
+    title: string;
+    projectId: string | null;
+    dueDate: string | null;
+    status?: TaskStatusLike;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    // Task learning is intentionally deferred. We only teach study-block scheduling in v1.
+  }, []);
+
+  const logTaskUpdated = useCallback((_: {
+    title: string;
+    projectId: string | null;
+    dueDate: string | null;
+    status?: TaskStatusLike;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    // Task learning is intentionally deferred. We only teach study-block scheduling in v1.
+  }, []);
+
+  const logCalendarCreated = useCallback((
+    payload: NewGoogleCalendarEvent,
+    calendarSummary?: string | null,
+    options?: BehaviorLearningActionOptions,
+  ) => {
+    if (!shouldLearn(options)) return;
+    recordCalendarCreate(payload, {
+      source: options?.source ?? 'manual',
+      calendarSummary,
+    });
+  }, [recordCalendarCreate]);
+
+  const logCalendarUpdated = useCallback((
+    previousEvent: GoogleCalendarEvent,
+    payload: Partial<NewGoogleCalendarEvent>,
+    calendarSummary?: string | null,
+    options?: BehaviorLearningActionOptions,
+  ) => {
+    if (!shouldLearn(options)) return;
+
+    const mergedPayload: NewGoogleCalendarEvent = {
+      summary: payload.summary ?? previousEvent.summary ?? 'Untitled event',
+      ...(payload.description !== undefined || previousEvent.description ? { description: payload.description ?? previousEvent.description ?? undefined } : {}),
+      ...(payload.location !== undefined || previousEvent.location ? { location: payload.location ?? previousEvent.location ?? undefined } : {}),
+      start: payload.start ?? (
+        previousEvent.start?.dateTime
+          ? { dateTime: previousEvent.start.dateTime, ...(previousEvent.start.timeZone ? { timeZone: previousEvent.start.timeZone } : {}) }
+          : { date: previousEvent.start?.date ?? '' }
+      ),
+      end: payload.end ?? (
+        previousEvent.end?.dateTime
+          ? { dateTime: previousEvent.end.dateTime, ...(previousEvent.end.timeZone ? { timeZone: previousEvent.end.timeZone } : {}) }
+          : { date: previousEvent.end?.date ?? previousEvent.start?.date ?? '' }
+      ),
+    };
+
+    recordCalendarUpdate(previousEvent, mergedPayload, {
+      source: options?.source ?? 'manual',
+      calendarId: previousEvent.calendarId,
+      calendarSummary: calendarSummary ?? previousEvent.calendarSummary,
+    });
+  }, [recordCalendarUpdate]);
+
+  const logCalendarDeleted = useCallback((
+    event: GoogleCalendarEvent,
+    options?: BehaviorLearningActionOptions,
+  ) => {
+    if (!shouldLearn(options)) return;
+    recordCalendarDelete(event, { source: options?.source ?? 'manual' });
+  }, [recordCalendarDelete]);
+
   return {
     aiTestingMode,
+    aiLearningEnabled,
     setAiTestingMode,
+    setAiLearningEnabled,
     behaviorEvents: events,
     getPreferredStudyStartMinutes,
     preferenceSummary,
+    scoreStudySlot,
+    logTaskCreated,
+    logTaskUpdated,
+    logCalendarCreated,
+    logCalendarUpdated,
+    logCalendarDeleted,
     recordCalendarCreate,
     recordCalendarUpdate,
     recordCalendarDelete,

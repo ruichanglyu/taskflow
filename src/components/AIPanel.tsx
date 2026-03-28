@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Component, type ReactNode } from 'react';
-import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen, Mic, MicOff, FlaskConical } from 'lucide-react';
+import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen, Mic, MicOff } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow, type ImageAttachment, type ChatThread } from '../hooks/useAI';
 import type { BehaviorLearningActionOptions } from '../hooks/useBehaviorLearning';
@@ -8,7 +8,6 @@ import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
 import type { GoogleCalendarEvent, GoogleCalendarListItem, NewGoogleCalendarEvent } from '../lib/googleCalendar';
-import { useBehaviorLearning } from '../hooks/useBehaviorLearning';
 
 /* Error boundary — prevents the entire app from crashing if AI panel rendering fails */
 class AIPanelErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
@@ -224,7 +223,6 @@ export function AIPanel({
   onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
   habits, onAddHabit, onToggleHabit, onDeleteHabit,
 }: AIPanelProps) {
-  const behaviorLearning = useBehaviorLearning(userId);
   const {
     threads,
     currentChat,

@@ -522,7 +522,7 @@ export function AppShell({ user }: AppShellProps) {
             />
           )}
           {currentView === 'calendar' && (
-            <CalendarView userId={user.id} calendar={calendarController} deadlines={deadlineStore.deadlines} />
+            <CalendarView calendar={calendarController} deadlines={deadlineStore.deadlines} />
           )}
           {currentView === 'timeline' && (
             <TimelineView

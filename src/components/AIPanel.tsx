@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Component, type ReactNode } from 'react';
-import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen, Mic, MicOff } from 'lucide-react';
+import { X, Send, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen, Mic, MicOff } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useAI, getAPIKey, getAPIKeyCached, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow, type ImageAttachment, type ChatThread } from '../hooks/useAI';
-import type { BehaviorLearningActionOptions, BehaviorLearningSeedPreset } from '../hooks/useBehaviorLearning';
+import type { BehaviorLearningActionOptions } from '../hooks/useBehaviorLearning';
 import type { Habit } from '../hooks/useHabits';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus, TaskStatus } from '../types';
 import type { Recurrence } from '../types';
@@ -198,7 +198,6 @@ interface AIPanelProps {
   getCalendarEventsForRange?: (range: { timeMin?: string; timeMax?: string }, calendarIds?: string[]) => Promise<GoogleCalendarEvent[]>;
   aiLearningEnabled: boolean;
   onAiLearningEnabledChange: (enabled: boolean) => void;
-  onSeedLearningProfile: (preset: BehaviorLearningSeedPreset) => void;
   scoreStudySlot: (dateKey: string, startMinutes: number, durationMinutes: number) => number;
   // Callbacks for imports
   onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence, status?: TaskStatus, options?: BehaviorLearningActionOptions) => Promise<string | null>;
@@ -220,7 +219,7 @@ interface AIPanelProps {
 export function AIPanel({
   open, onClose, userId,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
-  calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange, onSeedLearningProfile, scoreStudySlot,
+  calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot,
   onAddTask, onUpdateTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
   onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
   habits, onAddHabit, onToggleHabit, onDeleteHabit,
@@ -245,7 +244,6 @@ export function AIPanel({
   const [hasKey, setHasKey] = useState(!!getAPIKeyCached(userId));
   const [keyLoading, setKeyLoading] = useState(!getAPIKeyCached(userId));
   const [showKeyInput, setShowKeyInput] = useState(false);
-  const [showSeedMenu, setShowSeedMenu] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -302,7 +300,6 @@ export function AIPanel({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
-  const seedMenuRef = useRef<HTMLDivElement>(null);
   const recentAiTasksRef = useRef<Task[]>([]);
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const dictationBaseInputRef = useRef('');
@@ -316,11 +313,6 @@ export function AIPanel({
     learn: aiLearningEnabled,
   }), [aiLearningEnabled]);
   const testingModeEnabled = !aiLearningEnabled;
-
-  const handleSeedLearningProfile = useCallback((preset: BehaviorLearningSeedPreset) => {
-    onSeedLearningProfile(preset);
-    setShowSeedMenu(false);
-  }, [onSeedLearningProfile]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = messagesScrollRef.current;
@@ -376,18 +368,6 @@ export function AIPanel({
     window.addEventListener('mousedown', handlePointerDown);
     return () => window.removeEventListener('mousedown', handlePointerDown);
   }, [showAttachmentMenu]);
-
-  useEffect(() => {
-    if (!showSeedMenu) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (seedMenuRef.current?.contains(event.target as Node)) return;
-      setShowSeedMenu(false);
-    };
-
-    window.addEventListener('mousedown', handlePointerDown);
-    return () => window.removeEventListener('mousedown', handlePointerDown);
-  }, [showSeedMenu]);
 
   useEffect(() => {
     const textarea = inputRef.current;
@@ -1652,44 +1632,6 @@ export function AIPanel({
                   style={{ height: 'auto' }}
                 />
                 <div className="flex shrink-0 items-center gap-2">
-                  <div ref={seedMenuRef} className="relative shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setShowSeedMenu(prev => !prev)}
-                      className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-faint)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                      title="Seed behavior learning"
-                    >
-                      <Sparkles size={15} />
-                    </button>
-                    {showSeedMenu && (
-                      <div className="absolute bottom-full right-0 z-20 mb-2 w-[224px] rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-1.5 shadow-2xl">
-                        <div className="px-3 py-2 text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--text-faint)]">
-                          Seed learning
-                        </div>
-                        <button
-                          onClick={() => handleSeedLearningProfile('afternoon')}
-                          className="flex w-full flex-col items-start rounded-xl px-3 py-2 text-left transition hover:bg-[var(--surface)]"
-                        >
-                          <span className="text-sm font-medium text-[var(--text-primary)]">Afternoon studier</span>
-                          <span className="text-xs text-[var(--text-faint)]">Bias toward 4:00 PM to 5:30 PM.</span>
-                        </button>
-                        <button
-                          onClick={() => handleSeedLearningProfile('evening')}
-                          className="flex w-full flex-col items-start rounded-xl px-3 py-2 text-left transition hover:bg-[var(--surface)]"
-                        >
-                          <span className="text-sm font-medium text-[var(--text-primary)]">Evening studier</span>
-                          <span className="text-xs text-[var(--text-faint)]">Bias toward 4:45 PM to 8:00 PM.</span>
-                        </button>
-                        <button
-                          onClick={() => handleSeedLearningProfile('night')}
-                          className="flex w-full flex-col items-start rounded-xl px-3 py-2 text-left transition hover:bg-[var(--surface)]"
-                        >
-                          <span className="text-sm font-medium text-[var(--text-primary)]">Night owl</span>
-                          <span className="text-xs text-[var(--text-faint)]">Bias toward 7:45 PM to 9:15 PM.</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
                   <button
                     type="button"
                     onClick={() => onAiLearningEnabledChange(!aiLearningEnabled)}

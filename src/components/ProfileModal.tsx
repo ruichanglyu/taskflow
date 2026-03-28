@@ -1,12 +1,13 @@
 import { useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Camera, Check, AlertCircle, Download, Eye, EyeOff, Mail, Lock, User as UserIcon, Calendar, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
+import { X, Camera, Check, AlertCircle, Download, Eye, EyeOff, Mail, Lock, User as UserIcon, Calendar, Sparkles, Trash2, Moon, Sunrise, Sunset, Fingerprint, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
 import { supabase } from '../lib/supabase';
 import { cn } from '../utils/cn';
 import { Task, Deadline, Project } from '../types';
+import type { BehaviorLearningSeedPreset } from '../hooks/useBehaviorLearning';
 
 interface ProfileModalProps {
   user: User;
@@ -15,10 +16,14 @@ interface ProfileModalProps {
   tasks: Task[];
   deadlines: Deadline[];
   projects: Project[];
+  aiLearningEnabled: boolean;
+  onAiLearningEnabledChange: (enabled: boolean) => void;
+  onSeedLearningProfile: (preset: BehaviorLearningSeedPreset) => void;
+  onClearBehaviorHistory: () => void;
   onUserUpdated: () => void;
 }
 
-type Tab = 'profile' | 'security' | 'data';
+type Tab = 'profile' | 'preferences' | 'data';
 
 // ── Crop helper: canvas → blob ──
 async function getCroppedBlob(imageSrc: string, crop: Area): Promise<Blob> {
@@ -51,7 +56,19 @@ async function getCroppedBlob(imageSrc: string, crop: Area): Promise<Blob> {
   });
 }
 
-export function ProfileModal({ user, open, onClose, tasks, deadlines, projects, onUserUpdated }: ProfileModalProps) {
+export function ProfileModal({
+  user,
+  open,
+  onClose,
+  tasks,
+  deadlines,
+  projects,
+  aiLearningEnabled,
+  onAiLearningEnabledChange,
+  onSeedLearningProfile,
+  onClearBehaviorHistory,
+  onUserUpdated,
+}: ProfileModalProps) {
   const [tab, setTab] = useState<Tab>('profile');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -269,8 +286,15 @@ export function ProfileModal({ user, open, onClose, tasks, deadlines, projects, 
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'profile', label: 'Profile' },
-    { id: 'security', label: 'Security' },
+    { id: 'preferences', label: 'Preferences' },
     { id: 'data', label: 'Data' },
+  ];
+
+  const testingModeEnabled = !aiLearningEnabled;
+  const preferenceCards: { id: BehaviorLearningSeedPreset; title: string; subtitle: string; icon: typeof Sunrise }[] = [
+    { id: 'early-bird', title: 'Early bird', subtitle: '6:00 AM to 2:00 PM', icon: Sunrise },
+    { id: 'normal-grinder', title: 'Normal grinder', subtitle: '2:00 PM to 8:00 PM', icon: Sunset },
+    { id: 'night-owl', title: 'Night owl', subtitle: '8:00 PM to 4:00 AM', icon: Moon },
   ];
 
   // ── Crop overlay ──
@@ -435,9 +459,13 @@ export function ProfileModal({ user, open, onClose, tasks, deadlines, projects, 
                   {displayName || user.email?.split('@')[0] || 'User'}
                 </h2>
                 <p className="text-sm text-[var(--text-muted)]">{user.email}</p>
-                <div className="mt-1 flex items-center gap-1.5 text-xs text-[var(--text-faint)]">
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-faint)]">
                   <Calendar size={12} />
                   Member since {memberSince}
+                  <span className="flex items-center gap-1.5">
+                    <Fingerprint size={12} />
+                    {user.id.slice(0, 8)}...
+                  </span>
                 </div>
               </div>
             </div>
@@ -532,42 +560,8 @@ export function ProfileModal({ user, open, onClose, tasks, deadlines, projects, 
                   </p>
                 </div>
 
-                {/* Account info */}
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
-                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-faint)]">Account Info</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">User ID</span>
-                      <span className="font-mono text-xs text-[var(--text-faint)]">{user.id.slice(0, 8)}...</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Member since</span>
-                      <span className="text-[var(--text-secondary)]">{memberSince}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Tasks</span>
-                      <span className="text-[var(--text-secondary)]">{tasks.length}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Deadlines</span>
-                      <span className="text-[var(--text-secondary)]">{deadlines.length}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Courses</span>
-                      <span className="text-[var(--text-secondary)]">{projects.length}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {tab === 'security' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[var(--text-faint)]">
-                    <Lock size={12} />
-                    Change Password
-                  </label>
+                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-faint)]">Password</h3>
                   <div className="space-y-2.5">
                     <div className="relative">
                       <input
@@ -618,23 +612,92 @@ export function ProfileModal({ user, open, onClose, tasks, deadlines, projects, 
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {tab === 'preferences' && (
+              <div className="space-y-5">
+                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-[var(--text-primary)]">AI testing mode</h3>
+                      <p className="mt-1 text-xs text-[var(--text-faint)]">
+                        Keep this on while you experiment so AI actions do not affect learning.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onAiLearningEnabledChange(!aiLearningEnabled)}
+                      aria-pressed={testingModeEnabled}
+                      className={cn(
+                        'relative h-[24px] w-[42px] shrink-0 rounded-full transition-colors',
+                        testingModeEnabled ? 'bg-amber-400' : 'bg-[var(--text-faint)]/30'
+                      )}
+                      title={testingModeEnabled ? 'Testing mode is on' : 'Testing mode is off'}
+                    >
+                      <span
+                        className={cn(
+                          'absolute top-[2px] left-[2px] h-[20px] w-[20px] rounded-full bg-white shadow-sm transition-transform',
+                          testingModeEnabled ? 'translate-x-[18px]' : 'translate-x-0'
+                        )}
+                      />
+                    </button>
+                  </div>
+                </div>
 
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-faint)]">Security Info</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Auth provider</span>
-                      <span className="text-[var(--text-secondary)]">{user.app_metadata?.provider ?? 'email'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Last sign in</span>
-                      <span className="text-[var(--text-secondary)]">
-                        {user.last_sign_in_at
-                          ? new Date(user.last_sign_in_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                          : 'Unknown'}
-                      </span>
-                    </div>
+                  <div className="mb-3 flex items-center gap-2">
+                    <Sparkles size={14} className="text-[var(--accent)]" />
+                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">Study preferences</h3>
                   </div>
+                  <p className="mb-3 text-xs text-[var(--text-faint)]">
+                    Pick a starting style and we’ll seed learning data without creating any real calendar events.
+                  </p>
+                  <div className="space-y-2">
+                    {preferenceCards.map(card => {
+                      const Icon = card.icon;
+                      return (
+                        <button
+                          key={card.id}
+                          onClick={() => {
+                            onSeedLearningProfile(card.id);
+                            showMessage('success', `${card.title} preference applied.`);
+                          }}
+                          className="flex w-full items-center justify-between rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-3 text-left transition hover:border-[var(--accent)]/40"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[var(--accent)]">
+                              <Icon size={16} />
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-[var(--text-primary)]">{card.title}</div>
+                              <div className="text-xs text-[var(--text-faint)]">{card.subtitle}</div>
+                            </div>
+                          </div>
+                          <span className="text-xs font-medium text-[var(--accent)]">Apply</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-rose-500/15 bg-rose-500/5 p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Trash2 size={14} className="text-rose-400" />
+                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">Reset learned behavior</h3>
+                  </div>
+                  <p className="mb-3 text-xs text-[var(--text-faint)]">
+                    Clear behavior-learning history if you were testing a lot and want a clean slate.
+                  </p>
+                  <button
+                    onClick={() => {
+                      onClearBehaviorHistory();
+                      showMessage('success', 'Behavior learning history cleared.');
+                    }}
+                    className="rounded-xl border border-rose-500/20 px-4 py-2.5 text-sm font-medium text-rose-400 transition hover:bg-rose-500/10"
+                  >
+                    Clear learned behavior
+                  </button>
                 </div>
               </div>
             )}

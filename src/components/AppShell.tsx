@@ -723,6 +723,10 @@ export function AppShell({ user }: AppShellProps) {
         tasks={store.tasks}
         deadlines={deadlineStore.deadlines}
         projects={store.projects}
+        aiLearningEnabled={learning.aiLearningEnabled}
+        onAiLearningEnabledChange={learning.setAiLearningEnabled}
+        onSeedLearningProfile={learning.seedLearningProfile}
+        onClearBehaviorHistory={learning.clearBehaviorHistory}
         onUserUpdated={handleUserUpdated}
       />
 
@@ -765,7 +769,6 @@ export function AppShell({ user }: AppShellProps) {
         onDeleteCalendarEvent={handleDeleteCalendarEvent}
         aiLearningEnabled={learning.aiLearningEnabled}
         onAiLearningEnabledChange={learning.setAiLearningEnabled}
-        onSeedLearningProfile={learning.seedLearningProfile}
         scoreStudySlot={learning.scoreStudySlot}
         habits={habits.habits}
         onAddHabit={handleAddHabit}

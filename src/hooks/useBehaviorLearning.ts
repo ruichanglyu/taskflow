@@ -6,7 +6,7 @@ type LearningSource = 'manual' | 'ai';
 type LearningAction = 'create' | 'reschedule' | 'delete';
 type TaskStatusLike = 'todo' | 'in-progress' | 'done' | 'not-started' | 'missed';
 type AppBehaviorEntity = 'task' | 'deadline' | 'project' | 'habit' | 'deadline-link' | 'calendar';
-export type BehaviorLearningSeedPreset = 'afternoon' | 'evening' | 'night';
+export type BehaviorLearningSeedPreset = 'early-bird' | 'normal-grinder' | 'night-owl';
 
 export interface BehaviorLearningActionOptions {
   source?: LearningSource;
@@ -95,6 +95,7 @@ interface BehaviorLearningAppEventRow {
 const STORAGE_PREFIX = 'taskflow_behavior_learning_events';
 const APP_STORAGE_PREFIX = 'taskflow_behavior_learning_app_events';
 const AI_TESTING_PREFIX = 'taskflow_behavior_learning_ai_testing';
+const MIGRATED_PREFIX = 'taskflow_behavior_learning_migrated';
 const BEHAVIOR_EVENT_NAME = 'taskflow-behavior-learning-updated';
 
 function eventsStorageKey(userId: string) {
@@ -107,6 +108,10 @@ function aiTestingStorageKey(userId: string) {
 
 function appEventsStorageKey(userId: string) {
   return `${APP_STORAGE_PREFIX}:${userId}`;
+}
+
+function migratedStorageKey(userId: string) {
+  return `${MIGRATED_PREFIX}:${userId}`;
 }
 
 function formatDateKey(date: Date) {
@@ -241,6 +246,26 @@ function loadAiTestingMode(userId: string) {
 function saveAiTestingMode(userId: string, value: boolean) {
   if (typeof window === 'undefined') return;
   localStorage.setItem(aiTestingStorageKey(userId), String(value));
+}
+
+function loadHasMigrated(userId: string) {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(migratedStorageKey(userId)) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function saveHasMigrated(userId: string, value: boolean) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(migratedStorageKey(userId), String(value));
+}
+
+function clearBehaviorStorage(userId: string) {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(eventsStorageKey(userId));
+  localStorage.removeItem(appEventsStorageKey(userId));
 }
 
 function broadcastBehaviorUpdate(userId: string) {
@@ -479,26 +504,26 @@ function createSeedEvent(
 
 function buildSeedEvents(preset: BehaviorLearningSeedPreset) {
   const titleMap: Record<BehaviorLearningSeedPreset, string> = {
-    afternoon: 'Seeded afternoon study preference',
-    evening: 'Seeded evening study preference',
-    night: 'Seeded night study preference',
+    'early-bird': 'Seeded early bird study preference',
+    'normal-grinder': 'Seeded normal grinder study preference',
+    'night-owl': 'Seeded night owl study preference',
   };
 
   const profile = {
-    afternoon: {
-      preferred: [960, 1005, 1050],
-      avoided: [495, 540, 825],
-      rescheduleTarget: 1005,
+    'early-bird': {
+      preferred: [480, 540, 630],
+      avoided: [915, 1005, 1200],
+      rescheduleTarget: 540,
     },
-    evening: {
+    'normal-grinder': {
       preferred: [1005, 1050, 1185, 1200],
       avoided: [495, 540, 825],
       rescheduleTarget: 1185,
     },
-    night: {
-      preferred: [1185, 1200, 1275],
+    'night-owl': {
+      preferred: [1200, 1275, 1320],
       avoided: [540, 825, 960],
-      rescheduleTarget: 1200,
+      rescheduleTarget: 1275,
     },
   }[preset];
 
@@ -618,13 +643,16 @@ export function useBehaviorLearning(userId: string) {
           migrated = true;
         }
 
-        if ((!scheduleRows || scheduleRows.length === 0) && localEvents.length > 0) {
+        const hasMigrated = loadHasMigrated(userId);
+        const canMigrateLocal = !hasMigrated;
+
+        if ((!scheduleRows || scheduleRows.length === 0) && localEvents.length > 0 && canMigrateLocal) {
           const rows = localEvents.map((event) => mapEventToScheduleRow(userId, event));
           const { error } = await supabase.from('behavior_learning_schedule_events').insert(rows);
           if (!error) migrated = true;
         }
 
-        if ((!appRows || appRows.length === 0) && localAppEvents.length > 0) {
+        if ((!appRows || appRows.length === 0) && localAppEvents.length > 0 && canMigrateLocal) {
           const rows = localAppEvents.map((event) => mapAppEventToRow(userId, event));
           const { error } = await supabase.from('behavior_learning_app_events').insert(rows);
           if (!error) migrated = true;
@@ -672,12 +700,17 @@ export function useBehaviorLearning(userId: string) {
         const nextAppEvents = (appRows ?? []).map(mapAppRowToEvent).reverse();
         const nextTestingMode = settingsRow?.ai_testing_mode ?? localTestingMode;
 
+        if (hasMigrated && nextEvents.length === 0 && nextAppEvents.length === 0) {
+          clearBehaviorStorage(userId);
+        }
+
         setEvents(nextEvents);
         setAppEvents(nextAppEvents);
         setAiTestingModeState(nextTestingMode);
         saveEventsToStorage(userId, nextEvents);
         saveAppEventsToStorage(userId, nextAppEvents);
         saveAiTestingMode(userId, nextTestingMode);
+        saveHasMigrated(userId, true);
       } catch {
         if (cancelled) return;
         setEvents(localEvents);
@@ -736,6 +769,28 @@ export function useBehaviorLearning(userId: string) {
     saveAiTestingMode(userId, value);
     if (supabase) {
       void upsertBehaviorSettings(userId, value);
+    }
+    broadcastBehaviorUpdate(userId);
+  }, [userId]);
+
+  const clearBehaviorHistory = useCallback(() => {
+    setEvents([]);
+    setAppEvents([]);
+    clearBehaviorStorage(userId);
+    saveHasMigrated(userId, true);
+    if (supabase) {
+      void (async () => {
+        const [{ error: scheduleError }, { error: appError }] = await Promise.all([
+          supabase.from('behavior_learning_schedule_events').delete().eq('user_id', userId),
+          supabase.from('behavior_learning_app_events').delete().eq('user_id', userId),
+        ]);
+        if (scheduleError) {
+          console.warn('[BehaviorLearning] Failed to clear schedule history', scheduleError);
+        }
+        if (appError) {
+          console.warn('[BehaviorLearning] Failed to clear app history', appError);
+        }
+      })();
     }
     broadcastBehaviorUpdate(userId);
   }, [userId]);
@@ -1169,6 +1224,7 @@ export function useBehaviorLearning(userId: string) {
     aiLearningEnabled,
     setAiTestingMode,
     setAiLearningEnabled,
+    clearBehaviorHistory,
     behaviorEvents: events,
     appBehaviorEvents: appEvents,
     getPreferredStudyStartMinutes,

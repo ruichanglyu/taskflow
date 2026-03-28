@@ -924,6 +924,7 @@ export function AIPanel({
     } else if (block.type === 'calendar-delete') {
       let deleted = 0;
       let skipped = 0;
+      const deletedKeys = new Set<string>();
 
       for (const row of block.rows) {
         const matches = resolveCalendarDeleteCandidates(workingCalendarEvents, calendarCalendars, selectedCalendarId, row);
@@ -934,9 +935,14 @@ export function AIPanel({
 
         let allDeleted = true;
         for (const match of matches) {
+          const deleteKey = `${match.calendarId || ''}:${match.id}`;
+          if (deletedKeys.has(deleteKey)) {
+            continue;
+          }
           const ok = await onDeleteCalendarEvent(match.id, match.calendarId, aiLearningOptions, match);
           if (ok) {
             deleted++;
+            deletedKeys.add(deleteKey);
             workingCalendarEvents = workingCalendarEvents.filter(event => !(event.id === match.id && event.calendarId === match.calendarId));
           } else {
             allDeleted = false;
@@ -2336,7 +2342,18 @@ function collectCalendarRangeRows(block: ImportBlock) {
 
 function buildCalendarLookupRange(rows: ParsedImportRow[]) {
   const dates = rows.flatMap(row => [row.dueDate, row.newDate]).filter((value): value is string => Boolean(value));
-  if (dates.length === 0) return null;
+  if (dates.length === 0) {
+    const rangeStart = new Date();
+    const rangeEnd = new Date();
+    rangeStart.setDate(rangeStart.getDate() - 90);
+    rangeEnd.setDate(rangeEnd.getDate() + 180);
+    rangeStart.setHours(0, 0, 0, 0);
+    rangeEnd.setHours(0, 0, 0, 0);
+    return {
+      timeMin: rangeStart.toISOString(),
+      timeMax: rangeEnd.toISOString(),
+    };
+  }
 
   const sorted = [...dates].sort();
   const minDate = sorted[0];
@@ -2510,18 +2527,21 @@ function resolveCalendarDeleteCandidates(
     : resolvedMatches;
 
   const preferredDateKeys = new Set(preferredMatches.map(getEventDateKey));
+  const isUndatedDelete = !row.dueDate && !row.startTime;
+  const isStudyBlockLikeDelete = isStudyBlockAutoScheduleTarget(row);
 
   const canDeleteDuplicatesTogether = preferredMatches.length > 0 && preferredMatches.every(event => {
     const eventTitle = normalizeDeleteCandidate(stripTrailingCourseTag(event.summary || ''));
+    const eventCalendarSummary = event.calendarSummary || getCalendarSummaryById(calendars, event.calendarId);
     const eventCalendar = normalizeCalendarCandidate(
-      event.calendarId ? calendars.find(calendar => calendar.id === event.calendarId)?.summary ?? '' : ''
+      eventCalendarSummary ?? ''
     );
 
     return (
       eventTitle === normalizedTitle &&
       (!normalizedCalendar || eventCalendar === normalizedCalendar)
     );
-  }) && preferredDateKeys.size === 1;
+  }) && (preferredDateKeys.size === 1 || (isUndatedDelete && isStudyBlockLikeDelete));
 
   if (canDeleteDuplicatesTogether) {
     return preferredMatches;
@@ -2977,10 +2997,11 @@ function ActionBundleCard({
       .filter(block => block.type === 'calendar-delete')
       .flatMap(block => block.rows.map(row => {
         const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, selectedCalendarId, row);
+        const canDeferLookup = !row.dueDate && !row.startTime && Boolean(row.title?.trim());
         return {
           label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${matches.length > 1 ? ` · ${matches.length} matches` : ''}`,
-          valid: matches.length > 0,
-          reason: matches.length === 0 ? 'event not found' : '',
+          valid: matches.length > 0 || canDeferLookup,
+          reason: matches.length === 0 && !canDeferLookup ? 'event not found' : '',
         };
       }));
 

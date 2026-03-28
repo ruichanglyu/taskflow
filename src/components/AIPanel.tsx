@@ -1560,10 +1560,10 @@ export function AIPanel({
                     onClick={() => onAiLearningEnabledChange(!aiLearningEnabled)}
                     aria-pressed={testingModeEnabled}
                     className={cn(
-                      'relative h-[24px] w-[42px] shrink-0 rounded-full border transition-colors',
+                      'relative h-[22px] w-[40px] shrink-0 rounded-full transition-colors',
                       testingModeEnabled
-                        ? 'border-amber-300/40 bg-amber-400/25'
-                        : 'border-[var(--border-soft)] bg-[var(--surface-muted)]'
+                        ? 'bg-amber-400'
+                        : 'bg-[var(--text-faint)]/30'
                     )}
                     title={
                       testingModeEnabled
@@ -1573,8 +1573,8 @@ export function AIPanel({
                   >
                     <span
                       className={cn(
-                        'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
-                        testingModeEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'
+                        'absolute top-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform',
+                        testingModeEnabled ? 'translate-x-[18px]' : 'translate-x-0'
                       )}
                     />
                   </button>

@@ -187,12 +187,18 @@ function buildSystemPrompt(data: {
     ? data.calendarEvents
         .slice(0, 40)
         .map(event => {
-          const start = event.start?.dateTime
-            ? new Date(event.start.dateTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-            : event.start?.date
-              ? event.start.date
-              : 'unknown';
-          return `- ${event.summary || 'Untitled event'} — ${start}${event.calendarSummary ? ` [${event.calendarSummary}]` : ''}`;
+          const startDt = event.start?.dateTime ? new Date(event.start.dateTime) : null;
+          const endDt = event.end?.dateTime ? new Date(event.end.dateTime) : null;
+          const fmt = (d: Date) => d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+          const timeFmt = (d: Date) => d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' });
+          const timeRange = startDt && endDt
+            ? `${fmt(startDt)} – ${timeFmt(endDt)}`
+            : startDt
+              ? fmt(startDt)
+              : event.start?.date
+                ? `${event.start.date} (all day)`
+                : 'unknown';
+          return `- ${event.summary || 'Untitled event'} — ${timeRange}${event.calendarSummary ? ` [${event.calendarSummary}]` : ''}`;
         })
         .join('\n')
     : '(none loaded)';
@@ -332,6 +338,15 @@ LINKING RULES:
 - Only say a task is linked if the app explicitly created or updated a real \`deadline_tasks\` link.
 - Never claim a calendar event was created, updated, or deleted unless you emitted the matching calendar import block.
 - For calendar update/delete, do not guess. If you are not sure which event is meant, ask a follow-up instead of emitting the block.
+
+SCHEDULING RULES (CRITICAL — read before creating calendar events):
+- ALWAYS check the LOADED CALENDAR EVENTS above before scheduling anything. You MUST avoid time conflicts with existing events.
+- When the user asks you to "block out time" or "schedule study blocks", look at each day's existing events and only schedule in genuinely free time slots.
+- Never schedule over classes, labs, recitations, exams, or any other existing events.
+- If a day is too packed to fit the requested duration, skip that day and tell the user.
+- Prefer scheduling study blocks at consistent times across days when possible, but conflict avoidance is the #1 priority.
+- If the user doesn't specify a time, pick a free slot that makes sense (not too early, not too late). Prefer gaps between existing events.
+- When explaining what you scheduled, briefly mention why you chose those times (e.g. "I put it after your MATH 3012 class since that slot was free").
 
 STRICT RESPONSE RULES FOR NORMAL CHAT:
 - Use plain sentences or short paragraphs.

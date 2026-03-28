@@ -690,3 +690,33 @@ with check (auth.uid() = user_id);
 create policy "Users can delete their own behavior_learning_app_events"
 on public.behavior_learning_app_events for delete to authenticated
 using (auth.uid() = user_id);
+
+-- ============================================================
+-- User settings (synced across devices)
+-- ============================================================
+
+create table if not exists public.user_settings (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  gemini_api_key text,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+alter table public.user_settings enable row level security;
+
+drop policy if exists "Users can read their own user_settings" on public.user_settings;
+drop policy if exists "Users can insert their own user_settings" on public.user_settings;
+drop policy if exists "Users can update their own user_settings" on public.user_settings;
+
+create policy "Users can read their own user_settings"
+on public.user_settings for select to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can insert their own user_settings"
+on public.user_settings for insert to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update their own user_settings"
+on public.user_settings for update to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);

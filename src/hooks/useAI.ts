@@ -75,7 +75,35 @@ function keyStorage(userId: string) { return `taskflow_ai_key_${userId}`; }
 function chatStorage(userId: string) { return `taskflow_ai_chats_${userId}`; }
 function activeChatStorage(userId: string) { return `taskflow_ai_active_chat_${userId}`; }
 
-export function getAPIKey(userId: string): string | null {
+// --- API key: synced via Supabase, localStorage used as fast cache ---
+
+export async function getAPIKey(userId: string): Promise<string | null> {
+  // Fast path: check localStorage cache first
+  try {
+    const cached = localStorage.getItem(keyStorage(userId));
+    if (cached) return cached;
+  } catch { /* ignore */ }
+
+  // Slow path: fetch from Supabase
+  try {
+    const { supabase } = await import('../lib/supabase');
+    if (!supabase) return null;
+    const { data, error } = await supabase
+      .from('user_settings')
+      .select('gemini_api_key')
+      .eq('user_id', userId)
+      .single();
+    if (error || !data?.gemini_api_key) return null;
+    // Cache locally for fast reads
+    try { localStorage.setItem(keyStorage(userId), data.gemini_api_key); } catch { /* ignore */ }
+    return data.gemini_api_key;
+  } catch {
+    return null;
+  }
+}
+
+/** Synchronous read from cache only — used during streaming when we can't await */
+export function getAPIKeyCached(userId: string): string | null {
   try {
     return localStorage.getItem(keyStorage(userId));
   } catch {
@@ -83,18 +111,41 @@ export function getAPIKey(userId: string): string | null {
   }
 }
 
-export function setAPIKey(userId: string, key: string) {
-  localStorage.setItem(keyStorage(userId), key);
-}
+export async function setAPIKey(userId: string, key: string) {
+  // Write to localStorage cache immediately
+  try { localStorage.setItem(keyStorage(userId), key); } catch { /* ignore */ }
 
-export function removeAPIKey(userId: string) {
-  localStorage.removeItem(keyStorage(userId));
-}
-
-/** One-time migration: move legacy global data to the current user. Call once on app load. */
-export function migrateLegacyAIData(userId: string) {
+  // Persist to Supabase
   try {
-    // Migrate API key
+    const { supabase } = await import('../lib/supabase');
+    if (!supabase) return;
+    await supabase
+      .from('user_settings')
+      .upsert({
+        user_id: userId,
+        gemini_api_key: key,
+        updated_at: new Date().toISOString(),
+      });
+  } catch { /* ignore — localStorage still has it */ }
+}
+
+export async function removeAPIKey(userId: string) {
+  try { localStorage.removeItem(keyStorage(userId)); } catch { /* ignore */ }
+
+  try {
+    const { supabase } = await import('../lib/supabase');
+    if (!supabase) return;
+    await supabase
+      .from('user_settings')
+      .update({ gemini_api_key: null, updated_at: new Date().toISOString() })
+      .eq('user_id', userId);
+  } catch { /* ignore */ }
+}
+
+/** One-time migration: move legacy global/localStorage data to Supabase. Call once on app load. */
+export async function migrateLegacyAIData(userId: string) {
+  try {
+    // Migrate legacy global API key
     const legacyKey = localStorage.getItem('taskflow_ai_key');
     if (legacyKey && !localStorage.getItem(keyStorage(userId))) {
       localStorage.setItem(keyStorage(userId), legacyKey);
@@ -114,6 +165,28 @@ export function migrateLegacyAIData(userId: string) {
       localStorage.setItem(activeChatStorage(userId), legacyActive);
     }
     localStorage.removeItem('taskflow_ai_active_chat');
+
+    // Push localStorage API key to Supabase if not already there
+    const localKey = localStorage.getItem(keyStorage(userId));
+    if (localKey) {
+      const { supabase } = await import('../lib/supabase');
+      if (supabase) {
+        const { data } = await supabase
+          .from('user_settings')
+          .select('gemini_api_key')
+          .eq('user_id', userId)
+          .single();
+        if (!data?.gemini_api_key) {
+          await supabase
+            .from('user_settings')
+            .upsert({
+              user_id: userId,
+              gemini_api_key: localKey,
+              updated_at: new Date().toISOString(),
+            });
+        }
+      }
+    }
   } catch { /* ignore */ }
 }
 
@@ -866,7 +939,7 @@ export function useAI(userId: string) {
     appData: Parameters<typeof buildSystemPrompt>[0],
     images?: ImageAttachment[],
   ) => {
-    const key = getAPIKey(userId);
+    const key = getAPIKeyCached(userId) ?? await getAPIKey(userId);
     if (!key) {
       setError('Please add your Gemini API key first.');
       return;

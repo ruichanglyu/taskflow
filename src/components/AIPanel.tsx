@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Component, type ReactNode } from 'react';
 import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen, Mic, MicOff } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { useAI, getAPIKey, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow, type ImageAttachment, type ChatThread } from '../hooks/useAI';
+import { useAI, getAPIKey, getAPIKeyCached, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow, type ImageAttachment, type ChatThread } from '../hooks/useAI';
 import type { BehaviorLearningActionOptions } from '../hooks/useBehaviorLearning';
 import type { Habit } from '../hooks/useHabits';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus, TaskStatus } from '../types';
@@ -239,9 +239,25 @@ export function AIPanel({
   } = useAI(userId);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [input, setInput] = useState('');
-  const [apiKey, setApiKey] = useState(getAPIKey(userId) ?? '');
-  const [hasKey, setHasKey] = useState(!!getAPIKey(userId));
+  const [apiKey, setApiKey] = useState(getAPIKeyCached(userId) ?? '');
+  const [hasKey, setHasKey] = useState(!!getAPIKeyCached(userId));
+  const [keyLoading, setKeyLoading] = useState(!getAPIKeyCached(userId));
   const [showKeyInput, setShowKeyInput] = useState(false);
+
+  // Load API key from Supabase on mount (if not already cached locally)
+  useEffect(() => {
+    if (hasKey) { setKeyLoading(false); return; }
+    let cancelled = false;
+    getAPIKey(userId).then(key => {
+      if (cancelled) return;
+      if (key) {
+        setApiKey(key);
+        setHasKey(true);
+      }
+      setKeyLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [userId, hasKey]);
   const [importedBlocks, setImportedBlocks] = useState<Set<string>>(new Set());
   const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([]);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
@@ -634,16 +650,16 @@ export function AIPanel({
     fileInputRef.current?.click();
   }, []);
 
-  const handleSaveKey = () => {
+  const handleSaveKey = async () => {
     if (apiKey.trim()) {
-      setAPIKey(userId, apiKey.trim());
+      await setAPIKey(userId, apiKey.trim());
       setHasKey(true);
       setShowKeyInput(false);
     }
   };
 
-  const handleRemoveKey = () => {
-    removeAPIKey(userId);
+  const handleRemoveKey = async () => {
+    await removeAPIKey(userId);
     setApiKey('');
     setHasKey(false);
     setShowKeyInput(false);
@@ -1934,10 +1950,9 @@ function buildCalendarSummary(row: ParsedImportRow, rawSummary?: string) {
   const summary = (rawSummary ?? '').trim();
   if (!summary) return '';
 
-  const normalized = normalizeDeleteCandidate(summary);
-  if (normalized !== 'study block') return summary;
+  if (!/^study block\b/i.test(summary)) return summary;
 
-  const context = extractStudyBlockContext(row);
+  const context = extractStudyBlockContext(row) || normalizeStudyBlockContext(summary);
   return context ? `Study Block - ${context}` : summary;
 }
 
@@ -1961,7 +1976,7 @@ function extractStudyBlockContext(row: ParsedImportRow) {
 
 function normalizeStudyBlockContext(value: string) {
   let cleaned = value
-    .replace(/^(study|studying|study block|prep|prepping|prepare|preparing)\s+(for\s+)?/i, '')
+    .replace(/^(study|studying|study block|prep|prepping|prepare|preparing)\s*[:\-–—]?\s*(for\s+)?/i, '')
     .replace(/^(review|reviewing)\s+/i, '')
     .replace(/\b(on|under|in)\s+(the\s+)?(study blocks?|exam prep|personal|primary)\b/gi, '')
     .replace(/\b(calendar|class)\b/gi, '')

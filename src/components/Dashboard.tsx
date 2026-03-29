@@ -4,6 +4,7 @@ import type { GoogleCalendarEvent } from '../lib/googleCalendar';
 import type { StudyBlockOutcome } from '../hooks/useStudyBlockOutcomes';
 import { Task, Project, Deadline, StudyBlockOutcomeStatus } from '../types';
 import { cn } from '../utils/cn';
+import { isStudyBlockLikeCalendarEvent } from '../utils/studyBlockDetection';
 
 interface DashboardProps {
   tasks: Task[];
@@ -22,24 +23,6 @@ const STUDY_OUTCOME_OPTIONS: { status: StudyBlockOutcomeStatus; label: string }[
   { status: 'skipped', label: 'Skipped' },
   { status: 'rescheduled', label: 'Rescheduled' },
 ];
-
-function normalizeText(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function normalizeCalendarSummary(value: string) {
-  return normalizeText(value).replace(/\s*\((primary|read-only|read only|owner)\)\s*$/i, '').trim();
-}
-
-function isStudyBlockLike(title?: string, calendarSummary?: string | null) {
-  const normalizedTitle = normalizeText(title ?? '');
-  const normalizedCalendar = normalizeCalendarSummary(calendarSummary ?? '');
-  return (
-    normalizedTitle.includes('study block') ||
-    normalizedCalendar.includes('study blocks') ||
-    normalizedCalendar.includes('exam prep')
-  );
-}
 
 function getEventDateKey(event: GoogleCalendarEvent): string | null {
   if (event.start?.date) return event.start.date;
@@ -204,7 +187,7 @@ export function Dashboard({
     return calendarEvents
       .filter(event => {
         if (!event.id) return false;
-        if (!isStudyBlockLike(event.summary, event.calendarSummary)) return false;
+        if (!isStudyBlockLikeCalendarEvent(event)) return false;
         if (!hasEventEnded(event, now)) return false;
         if (getStudyBlockOutcome(event)) return false;
         return true;

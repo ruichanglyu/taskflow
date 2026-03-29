@@ -5,6 +5,7 @@ import { GoogleCalendarEvent } from '../lib/googleCalendar';
 import { CreateEventModal } from './CreateEventModal';
 import { CalendarGrid } from './CalendarGrid';
 import { cn } from '../utils/cn';
+import { isStudyBlockLikeCalendarEvent } from '../utils/studyBlockDetection';
 import type { GoogleCalendarController } from '../hooks/useGoogleCalendar';
 import type { StudyBlockOutcome } from '../hooks/useStudyBlockOutcomes';
 import type { StudyBlockOutcomeStatus } from '../types';
@@ -140,24 +141,6 @@ function getEventSectionLabel(date?: { date?: string; dateTime?: string }) {
   }
 
   return 'Later';
-}
-
-function normalizeText(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function normalizeCalendarSummary(value: string) {
-  return normalizeText(value).replace(/\s*\((primary|read-only|read only|owner)\)\s*$/i, '').trim();
-}
-
-function isStudyBlockLike(title?: string, calendarSummary?: string | null) {
-  const normalizedTitle = normalizeText(title ?? '');
-  const normalizedCalendar = normalizeCalendarSummary(calendarSummary ?? '');
-  return (
-    normalizedTitle.includes('study block') ||
-    normalizedCalendar.includes('study blocks') ||
-    normalizedCalendar.includes('exam prep')
-  );
 }
 
 function getEventDateKey(event: GoogleCalendarEvent): string | null {
@@ -457,13 +440,13 @@ function DayPanel({
 
   const dayDeadlines = deadlines.filter(d => d.dueDate === dateStr);
   const reviewableStudyBlocks = events.filter(event => {
-    if (!isStudyBlockLike(event.summary, event.calendarSummary)) return false;
+    if (!isStudyBlockLikeCalendarEvent(event)) return false;
     const eventDateKey = getEventDateKey(event);
     if (eventDateKey !== dateStr) return false;
     return hasEventEnded(event);
   });
   const futureStudyBlocks = events.filter(event => {
-    if (!isStudyBlockLike(event.summary, event.calendarSummary)) return false;
+    if (!isStudyBlockLikeCalendarEvent(event)) return false;
     const eventDateKey = getEventDateKey(event);
     if (eventDateKey !== dateStr) return false;
     return !hasEventEnded(event);

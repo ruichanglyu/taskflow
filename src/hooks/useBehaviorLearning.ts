@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { GoogleCalendarEvent, NewGoogleCalendarEvent } from '../lib/googleCalendar';
 import { supabase } from '../lib/supabase';
 import type { StudyBlockOutcomeStatus } from '../types';
+import { isStudyBlockLikeEvent } from '../utils/studyBlockDetection';
 
 type LearningSource = 'manual' | 'ai';
 type LearningAction = 'create' | 'reschedule' | 'delete';
@@ -126,14 +127,6 @@ function formatDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function normalizeText(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function normalizeCalendarSummary(value: string) {
-  return normalizeText(value).replace(/\s*\((primary|read-only|read only|owner)\)\s*$/i, '').trim();
-}
-
 function getDetailToken(detail: string | null | undefined, prefix: string) {
   if (!detail) return null;
   const token = detail
@@ -163,16 +156,6 @@ function parseStudyBlockOutcomeDetail(detail: string | null | undefined): Parsed
     durationMinutes,
     weekday: date.getDay(),
   };
-}
-
-function isStudyBlockLike(title: string, calendarSummary?: string | null) {
-  const normalizedTitle = normalizeText(title);
-  const normalizedCalendar = normalizeCalendarSummary(calendarSummary ?? '');
-  return (
-    normalizedTitle.includes('study block') ||
-    normalizedCalendar.includes('study blocks') ||
-    normalizedCalendar.includes('exam prep')
-  );
 }
 
 function parseTimedPayload(payload: NewGoogleCalendarEvent, calendarId?: string | null, calendarSummary?: string | null): TimedBehaviorSnapshot | null {
@@ -947,7 +930,11 @@ export function useBehaviorLearning(userId: string) {
     options: { source: LearningSource; calendarId?: string | null; calendarSummary?: string | null; countsForLearning: boolean },
   ) => {
     const snapshot = parseTimedPayload(payload, options.calendarId, options.calendarSummary);
-    if (!snapshot || !isStudyBlockLike(snapshot.title, snapshot.calendarSummary)) return;
+    if (!snapshot || !isStudyBlockLikeEvent({
+      title: snapshot.title,
+      calendarSummary: snapshot.calendarSummary,
+      description: payload.description,
+    })) return;
 
     persistEvent({
       id: crypto.randomUUID(),
@@ -983,7 +970,11 @@ export function useBehaviorLearning(userId: string) {
     const title = nextSnapshot?.title ?? previousSnapshot?.title ?? previousEvent.summary ?? '';
     const calendarSummary = nextSnapshot?.calendarSummary ?? previousSnapshot?.calendarSummary;
 
-    if (!isStudyBlockLike(title, calendarSummary)) return;
+    if (!isStudyBlockLikeEvent({
+      title,
+      calendarSummary,
+      description: updates.description ?? event.description,
+    })) return;
     if (!nextSnapshot) return;
 
     const changedTime =
@@ -1016,7 +1007,11 @@ export function useBehaviorLearning(userId: string) {
 
   const recordCalendarDelete = useCallback((event: GoogleCalendarEvent, options: { source: LearningSource; countsForLearning: boolean }) => {
     const snapshot = parseTimedCalendarEvent(event);
-    if (!snapshot || !isStudyBlockLike(snapshot.title, snapshot.calendarSummary)) return;
+    if (!snapshot || !isStudyBlockLikeEvent({
+      title: snapshot.title,
+      calendarSummary: snapshot.calendarSummary,
+      description: event.description,
+    })) return;
 
     persistEvent({
       id: crypto.randomUUID(),

@@ -8,6 +8,7 @@ import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
 import type { GoogleCalendarEvent, GoogleCalendarListItem, NewGoogleCalendarEvent } from '../lib/googleCalendar';
+import { isStudyBlockLikeEvent, normalizeCalendarSummary } from '../utils/studyBlockDetection';
 
 /* Error boundary — prevents the entire app from crashing if AI panel rendering fails */
 class AIPanelErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
@@ -2346,13 +2347,11 @@ function getTimedEventDetails(event: GoogleCalendarEvent) {
 }
 
 function isStudyBlockAutoScheduleTarget(row: ParsedImportRow, calendarSummary?: string) {
-  const normalizedTitle = normalizeDeleteCandidate(row.title);
-  const normalizedCalendar = normalizeCalendarCandidate(calendarSummary ?? row.calendar ?? '');
-  return (
-    normalizedTitle.includes('study block') ||
-    normalizedCalendar.includes('study blocks') ||
-    normalizedCalendar.includes('exam prep')
-  );
+  return isStudyBlockLikeEvent({
+    title: row.title,
+    calendarSummary: normalizeCalendarSummary(calendarSummary ?? row.calendar ?? ''),
+    description: row.description,
+  });
 }
 
 function findStudyBlockReplacementCandidate(

@@ -3174,11 +3174,10 @@ function ActionBundleCard({
 
           const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, selectedCalendarId, row);
           deleteTargetsByKey[deleteRequestKey] = matches;
-          const canDeferLookup = !row.dueDate && !row.startTime && Boolean(row.title?.trim());
           return [{
             label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${matches.length > 1 ? ` · ${matches.length} matches` : ''}`,
-            valid: matches.length > 0 || canDeferLookup,
-            reason: matches.length === 0 && !canDeferLookup ? 'event not found' : '',
+            valid: matches.length > 0,
+            reason: matches.length === 0 ? 'event not found' : '',
           }];
         });
       });

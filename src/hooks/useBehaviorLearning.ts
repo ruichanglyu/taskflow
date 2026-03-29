@@ -7,7 +7,7 @@ import { isStudyBlockLikeEvent } from '../utils/studyBlockDetection';
 type LearningSource = 'manual' | 'ai';
 type LearningAction = 'create' | 'reschedule' | 'delete';
 type TaskStatusLike = 'todo' | 'in-progress' | 'done' | 'not-started' | 'missed';
-type AppBehaviorEntity = 'task' | 'deadline' | 'project' | 'habit' | 'deadline-link' | 'calendar' | 'ai' | 'study-review';
+type AppBehaviorEntity = 'task' | 'deadline' | 'project' | 'habit' | 'deadline-link' | 'calendar' | 'ai' | 'study-review' | 'study-block';
 export type BehaviorLearningSeedPreset = 'early-bird' | 'normal-grinder' | 'night-owl';
 
 export interface BehaviorLearningActionOptions {
@@ -722,6 +722,9 @@ function buildBehaviorInsightSummary(
 
   const aiPromptCount = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'prompt-submit').length;
   const aiApplyCount = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'actions-apply').length;
+  const aiSuggestionAcceptedCount = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'suggestion-accepted').length;
+  const aiSuggestionEditedCount = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'suggestion-edited').length;
+  const aiSuggestionRejectedCount = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'suggestion-rejected').length;
   const aiPromptAcceptance = aiPromptCount > 0 ? Math.round((aiApplyCount / aiPromptCount) * 100) : null;
   const aiPanelOpenCount = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'panel-open').length;
   const viewOpenEvents = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'view-open');
@@ -803,9 +806,9 @@ function buildBehaviorInsightSummary(
   }
 
   if (aiEngagementConfidence === 'high') {
-    lines.push(`AI engagement: strong signal from ${aiPromptCount} prompts with ${aiApplyCount} applied suggestion bundles${aiPromptAcceptance !== null ? ` (${aiPromptAcceptance}% apply rate)` : ''}; AI panel opened ${aiPanelOpenCount} times${topViews.length > 0 ? `, most visited views: ${topViews.join(', ')}` : ''}.`);
+    lines.push(`AI engagement: strong signal from ${aiPromptCount} prompts with ${aiApplyCount} applied suggestion bundles${aiPromptAcceptance !== null ? ` (${aiPromptAcceptance}% apply rate)` : ''}; accepted ${aiSuggestionAcceptedCount}, edited ${aiSuggestionEditedCount}, rejected ${aiSuggestionRejectedCount}; AI panel opened ${aiPanelOpenCount} times${topViews.length > 0 ? `, most visited views: ${topViews.join(', ')}` : ''}.`);
   } else if (aiEngagementConfidence === 'medium') {
-    lines.push(`AI engagement: early signal from ${aiPromptCount} prompts and ${aiApplyCount} applied suggestion bundles${aiPromptAcceptance !== null ? ` (${aiPromptAcceptance}% apply rate)` : ''}.`);
+    lines.push(`AI engagement: early signal from ${aiPromptCount} prompts and ${aiApplyCount} applied suggestion bundles${aiPromptAcceptance !== null ? ` (${aiPromptAcceptance}% apply rate)` : ''}; accepted ${aiSuggestionAcceptedCount}, edited ${aiSuggestionEditedCount}, rejected ${aiSuggestionRejectedCount}.`);
   } else {
     lines.push('AI engagement: still learning how often AI suggestions turn into applied changes.');
   }
@@ -1840,6 +1843,139 @@ export function useBehaviorLearning(userId: string) {
     );
   }, [recordAppAction]);
 
+  const logAiSuggestionAccepted = useCallback((params: {
+    blockType: string;
+    actionCount: number;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'ai',
+      'suggestion-accepted',
+      params.blockType,
+      params.options,
+      `count:${params.actionCount}`,
+    );
+  }, [recordAppAction]);
+
+  const logAiSuggestionEdited = useCallback((params: {
+    blockType: string;
+    actionCount: number;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'ai',
+      'suggestion-edited',
+      params.blockType,
+      params.options,
+      `count:${params.actionCount}`,
+    );
+  }, [recordAppAction]);
+
+  const logAiSuggestionRejected = useCallback((params: {
+    blockTypes: string[];
+    actionCount: number;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'ai',
+      'suggestion-rejected',
+      params.blockTypes.join(', ') || 'unknown',
+      params.options,
+      `count:${params.actionCount}`,
+    );
+  }, [recordAppAction]);
+
+  const logStudyBlockLinkedTarget = useCallback((params: {
+    title: string;
+    calendarSummary?: string | null;
+    course?: string | null;
+    deadlineTitle: string;
+    deadlineDate: string;
+    deadlineType?: string | null;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'study-block',
+      'target-link',
+      params.title,
+      params.options,
+      [
+        params.calendarSummary ? `calendar:${params.calendarSummary}` : null,
+        params.course ? `course:${params.course}` : null,
+        `deadline:${params.deadlineTitle}`,
+        `deadline-date:${params.deadlineDate}`,
+        params.deadlineType ? `deadline-type:${params.deadlineType}` : null,
+      ].filter(Boolean).join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logStudySlotCandidates = useCallback((params: {
+    title: string;
+    calendarSummary?: string | null;
+    course?: string | null;
+    dateKey: string;
+    durationMinutes: number;
+    requestedStartMinutes: number;
+    adjusted: boolean;
+    deadlineTitle?: string | null;
+    deadlineDate?: string | null;
+    deadlineType?: string | null;
+    candidates: Array<{
+      startMinutes: number;
+      endMinutes: number;
+      score: number;
+      distance: number;
+      selected: boolean;
+    }>;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    if (params.candidates.length === 0) {
+      recordAppAction(
+        'study-block',
+        'slot-no-fit',
+        params.title,
+        params.options,
+        [
+          params.calendarSummary ? `calendar:${params.calendarSummary}` : null,
+          params.course ? `course:${params.course}` : null,
+          `date:${params.dateKey}`,
+          `duration:${params.durationMinutes}`,
+          `requested:${params.requestedStartMinutes}`,
+          params.adjusted ? 'adjusted:true' : 'adjusted:false',
+          params.deadlineTitle ? `deadline:${params.deadlineTitle}` : null,
+          params.deadlineDate ? `deadline-date:${params.deadlineDate}` : null,
+          params.deadlineType ? `deadline-type:${params.deadlineType}` : null,
+        ].filter(Boolean).join(' · '),
+      );
+      return;
+    }
+
+    params.candidates.forEach(candidate => {
+      recordAppAction(
+        'study-block',
+        'slot-candidate',
+        params.title,
+        params.options,
+        [
+          params.calendarSummary ? `calendar:${params.calendarSummary}` : null,
+          params.course ? `course:${params.course}` : null,
+          `date:${params.dateKey}`,
+          `duration:${params.durationMinutes}`,
+          `requested:${params.requestedStartMinutes}`,
+          `start:${candidate.startMinutes}`,
+          `end:${candidate.endMinutes}`,
+          `score:${candidate.score.toFixed(3)}`,
+          `distance:${candidate.distance}`,
+          `selected:${candidate.selected ? 'true' : 'false'}`,
+          params.adjusted ? 'adjusted:true' : 'adjusted:false',
+          params.deadlineTitle ? `deadline:${params.deadlineTitle}` : null,
+          params.deadlineDate ? `deadline-date:${params.deadlineDate}` : null,
+          params.deadlineType ? `deadline-type:${params.deadlineType}` : null,
+        ].filter(Boolean).join(' · '),
+      );
+    });
+  }, [recordAppAction]);
+
   const logStudyReviewPromptShown = useCallback((params: {
     count: number;
     options?: BehaviorLearningActionOptions;
@@ -1899,9 +2035,14 @@ export function useBehaviorLearning(userId: string) {
     logHabitDeleted,
     logAiPromptSubmitted,
     logAiActionsApplied,
+    logAiSuggestionAccepted,
+    logAiSuggestionEdited,
+    logAiSuggestionRejected,
     logStudyReviewPromptShown,
     logAiPanelOpened,
     logViewOpened,
+    logStudyBlockLinkedTarget,
+    logStudySlotCandidates,
     recordCalendarCreate,
     recordCalendarUpdate,
     recordCalendarDelete,

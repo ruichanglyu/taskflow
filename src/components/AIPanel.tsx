@@ -49,6 +49,36 @@ interface ImportExecutionOptions {
   frozenCalendarDeleteTargets?: Record<string, GoogleCalendarEvent[]>;
 }
 
+interface PendingSuggestionSnapshot {
+  signature: string;
+  blockCount: number;
+  actionCount: number;
+  blockTypes: string[];
+}
+
+interface StudySlotCandidate {
+  startMinutes: number;
+  endMinutes: number;
+  score: number;
+  distance: number;
+}
+
+interface SlotSearchResult {
+  startMinutes: number;
+  endMinutes: number;
+  candidates: StudySlotCandidate[];
+}
+
+interface SlotResolutionResult {
+  payload: NewGoogleCalendarEvent | null;
+  adjusted: boolean;
+  dateKey: string | null;
+  requestedStartMinutes: number | null;
+  durationMinutes: number | null;
+  selectedStartMinutes: number | null;
+  candidates: StudySlotCandidate[];
+}
+
 interface RecentCalendarTarget {
   id?: string;
   calendarId?: string;
@@ -259,6 +289,39 @@ function findCalendarMention(message: string, calendars: GoogleCalendarListItem[
   });
 }
 
+function promptLooksLikeSuggestionAdjustment(message: string) {
+  return /\b(change|adjust|instead|move|later|earlier|different|another|shift|reschedule|update|edit|tweak|not that|doesn'?t work)\b/i.test(message);
+}
+
+function getLatestPendingSuggestion(messages: ChatMessage[], importedBlocks: Set<string>): PendingSuggestionSnapshot | null {
+  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
+    const message = messages[messageIndex];
+    if (message.role !== 'assistant' || !message.content?.trim()) continue;
+
+    let blocks: ImportBlock[] = [];
+    try {
+      blocks = parseImportBlocks(message.content);
+    } catch {
+      blocks = [];
+    }
+
+    const pendingEntries = blocks
+      .map((block, index) => ({ block, key: `${message.id}:block:${index}` }))
+      .filter(entry => !importedBlocks.has(entry.key));
+
+    if (pendingEntries.length === 0) continue;
+
+    return {
+      signature: `${message.id}:${pendingEntries.map(entry => entry.key).join('|')}`,
+      blockCount: pendingEntries.length,
+      actionCount: pendingEntries.reduce((sum, entry) => sum + entry.block.rows.length, 0),
+      blockTypes: Array.from(new Set(pendingEntries.map(entry => entry.block.type))),
+    };
+  }
+
+  return null;
+}
+
 function formatRecentListedCalendarEvent(event: GoogleCalendarEvent, calendars: GoogleCalendarListItem[]) {
   const calendarSummary = event.calendarSummary
     || calendars.find(calendar => calendar.id === event.calendarId)?.summary
@@ -442,6 +505,36 @@ interface AIPanelProps {
   behaviorSummary?: string;
   onAiPromptSubmitted?: (prompt: string, hasImages: boolean) => void;
   onAiActionsApplied?: (blockType: string, appliedCount: number, skippedCount: number) => void;
+  onAiSuggestionAccepted?: (blockType: string, actionCount: number) => void;
+  onAiSuggestionEdited?: (blockType: string, actionCount: number) => void;
+  onAiSuggestionRejected?: (blockTypes: string[], actionCount: number) => void;
+  onStudyBlockLinkedTarget?: (params: {
+    title: string;
+    calendarSummary?: string | null;
+    course?: string | null;
+    deadlineTitle: string;
+    deadlineDate: string;
+    deadlineType?: string | null;
+  }) => void;
+  onStudySlotCandidatesLogged?: (params: {
+    title: string;
+    calendarSummary?: string | null;
+    course?: string | null;
+    dateKey: string;
+    durationMinutes: number;
+    requestedStartMinutes: number;
+    adjusted: boolean;
+    deadlineTitle?: string | null;
+    deadlineDate?: string | null;
+    deadlineType?: string | null;
+    candidates: Array<{
+      startMinutes: number;
+      endMinutes: number;
+      score: number;
+      distance: number;
+      selected: boolean;
+    }>;
+  }) => void;
   // Callbacks for imports
   onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence, status?: TaskStatus, options?: BehaviorLearningActionOptions) => Promise<string | null>;
   onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence; status?: TaskStatus }, options?: BehaviorLearningActionOptions) => Promise<boolean>;
@@ -462,7 +555,7 @@ interface AIPanelProps {
 export function AIPanel({
   open, onClose, userId,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
-  calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot, behaviorSummary, onAiPromptSubmitted, onAiActionsApplied,
+  calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot, behaviorSummary, onAiPromptSubmitted, onAiActionsApplied, onAiSuggestionAccepted, onAiSuggestionEdited, onAiSuggestionRejected, onStudyBlockLinkedTarget, onStudySlotCandidatesLogged,
   onAddTask, onUpdateTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
   onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
   habits, onAddHabit, onToggleHabit, onDeleteHabit,
@@ -544,6 +637,7 @@ export function AIPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
   const recentAiTasksRef = useRef<Task[]>([]);
+  const handledPendingSuggestionRefs = useRef<Set<string>>(new Set());
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const dictationBaseInputRef = useRef('');
   const composerDragDepthRef = useRef(0);
@@ -790,6 +884,15 @@ export function AIPanel({
       );
     }
     setPanelError(null);
+    const pendingSuggestion = getLatestPendingSuggestion(messages, importedBlocks);
+    if (
+      pendingSuggestion &&
+      !handledPendingSuggestionRefs.current.has(pendingSuggestion.signature) &&
+      !promptLooksLikeSuggestionAdjustment(msg)
+    ) {
+      onAiSuggestionRejected?.(pendingSuggestion.blockTypes, pendingSuggestion.actionCount);
+      handledPendingSuggestionRefs.current.add(pendingSuggestion.signature);
+    }
     onAiPromptSubmitted?.(msg, Boolean(images?.length));
     setInput('');
     setPendingImages([]);
@@ -809,7 +912,7 @@ export function AIPanel({
       recentListedCalendarEvents,
       behaviorSummary,
     }, images);
-  }, [input, pendingImages, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises, calendarEvents, calendarCalendars, selectedCalendarId, habits, userId, onAiPromptSubmitted, behaviorSummary]);
+  }, [input, pendingImages, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises, calendarEvents, calendarCalendars, selectedCalendarId, habits, userId, messages, importedBlocks, onAiPromptSubmitted, onAiSuggestionRejected, behaviorSummary]);
 
   const appendImageFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return false;
@@ -1071,6 +1174,7 @@ export function AIPanel({
         const ok = await onDeleteTask(matches[0].id, aiLearningOptions);
         if (ok) {
           imported++;
+          onAiSuggestionAccepted?.(block.type, 1);
         } else {
           skipped++;
         }
@@ -1107,8 +1211,11 @@ export function AIPanel({
           updates.projectId = projectId;
         }
         const ok = await onUpdateTask(matches[0].id, updates, aiLearningOptions);
-        if (ok) imported++;
-        else skipped++;
+        if (ok) {
+          imported++;
+          onAiSuggestionAccepted?.(block.type, 1);
+          onAiSuggestionEdited?.(block.type, 1);
+        } else skipped++;
       }
       if (skipped > 0) {
         setPanelError(
@@ -1145,6 +1252,26 @@ export function AIPanel({
           scoreStudySlot,
         );
         if (!resolved.payload) {
+          if (
+            resolved.dateKey &&
+            resolved.durationMinutes !== null &&
+            resolved.requestedStartMinutes !== null
+          ) {
+            const linkedTarget = resolveStudyBlockLinkedDeadline(row, rawPayload.summary, deadlines, projects);
+            onStudySlotCandidatesLogged?.({
+              title: rawPayload.summary,
+              calendarSummary: targetCalendar?.summary ?? row.calendar,
+              course: linkedTarget?.course ?? row.course ?? extractCourseFromTitle(row.title) ?? extractLeadingCourseCode(rawPayload.summary),
+              dateKey: resolved.dateKey,
+              durationMinutes: resolved.durationMinutes,
+              requestedStartMinutes: resolved.requestedStartMinutes,
+              adjusted: false,
+              deadlineTitle: linkedTarget?.deadline.title ?? null,
+              deadlineDate: linkedTarget?.deadline.dueDate ?? null,
+              deadlineType: linkedTarget?.deadline.type ?? null,
+              candidates: [],
+            });
+          }
           skipped++;
           continue;
         }
@@ -1202,6 +1329,43 @@ export function AIPanel({
             ]);
             workingCalendarEvents.push(nextSyntheticEvent);
           }
+
+          onAiSuggestionAccepted?.(block.type, 1);
+
+          if (
+            resolved.dateKey &&
+            resolved.durationMinutes !== null &&
+            resolved.requestedStartMinutes !== null
+          ) {
+            const linkedTarget = resolveStudyBlockLinkedDeadline(row, resolved.payload.summary, deadlines, projects);
+            if (linkedTarget) {
+              onStudyBlockLinkedTarget?.({
+                title: resolved.payload.summary,
+                calendarSummary: targetCalendar?.summary ?? row.calendar,
+                course: linkedTarget.course,
+                deadlineTitle: linkedTarget.deadline.title,
+                deadlineDate: linkedTarget.deadline.dueDate,
+                deadlineType: linkedTarget.deadline.type,
+              });
+            }
+
+            onStudySlotCandidatesLogged?.({
+              title: resolved.payload.summary,
+              calendarSummary: targetCalendar?.summary ?? row.calendar,
+              course: linkedTarget?.course ?? row.course ?? extractCourseFromTitle(row.title) ?? extractLeadingCourseCode(resolved.payload.summary),
+              dateKey: resolved.dateKey,
+              durationMinutes: resolved.durationMinutes,
+              requestedStartMinutes: resolved.requestedStartMinutes,
+              adjusted: resolved.adjusted,
+              deadlineTitle: linkedTarget?.deadline.title ?? null,
+              deadlineDate: linkedTarget?.deadline.dueDate ?? null,
+              deadlineType: linkedTarget?.deadline.type ?? null,
+              candidates: resolved.candidates.map(candidate => ({
+                ...candidate,
+                selected: resolved.selectedStartMinutes === candidate.startMinutes,
+              })),
+            });
+          }
         } else {
           skipped++;
         }
@@ -1249,6 +1413,26 @@ export function AIPanel({
         );
 
         if (!updateResolution.payload) {
+          if (
+            updateResolution.dateKey &&
+            updateResolution.durationMinutes !== null &&
+            updateResolution.requestedStartMinutes !== null
+          ) {
+            const linkedTarget = resolveStudyBlockLinkedDeadline(row, payload.summary, deadlines, projects);
+            onStudySlotCandidatesLogged?.({
+              title: payload.summary,
+              calendarSummary: targetCalendarSummary,
+              course: linkedTarget?.course ?? row.course ?? extractCourseFromTitle(row.title) ?? extractLeadingCourseCode(payload.summary),
+              dateKey: updateResolution.dateKey,
+              durationMinutes: updateResolution.durationMinutes,
+              requestedStartMinutes: updateResolution.requestedStartMinutes,
+              adjusted: false,
+              deadlineTitle: linkedTarget?.deadline.title ?? null,
+              deadlineDate: linkedTarget?.deadline.dueDate ?? null,
+              deadlineType: linkedTarget?.deadline.type ?? null,
+              candidates: [],
+            });
+          }
           skipped++;
           continue;
         }
@@ -1258,6 +1442,8 @@ export function AIPanel({
         const ok = await onUpdateCalendarEvent(matches[0].id, payload, targetCalendarId, aiLearningOptions, matches[0]);
         if (ok) {
           updated++;
+          onAiSuggestionAccepted?.(block.type, 1);
+          onAiSuggestionEdited?.(block.type, 1);
           const targetCalendar = calendarCalendars.find(item => item.id === targetCalendarId);
           appliedCalendarActions.push(
             summarizePayloadAction('updated', payload, targetCalendar?.summary ?? row.newCalendar ?? matches[0].calendarSummary),
@@ -1281,6 +1467,41 @@ export function AIPanel({
               ? { ...nextSyntheticEvent, id: matches[0].id }
               : event
           );
+
+          if (
+            updateResolution.dateKey &&
+            updateResolution.durationMinutes !== null &&
+            updateResolution.requestedStartMinutes !== null
+          ) {
+            const linkedTarget = resolveStudyBlockLinkedDeadline(row, payload.summary, deadlines, projects);
+            if (linkedTarget) {
+              onStudyBlockLinkedTarget?.({
+                title: payload.summary,
+                calendarSummary: targetCalendar?.summary ?? row.newCalendar ?? matches[0].calendarSummary,
+                course: linkedTarget.course,
+                deadlineTitle: linkedTarget.deadline.title,
+                deadlineDate: linkedTarget.deadline.dueDate,
+                deadlineType: linkedTarget.deadline.type,
+              });
+            }
+
+            onStudySlotCandidatesLogged?.({
+              title: payload.summary,
+              calendarSummary: targetCalendar?.summary ?? row.newCalendar ?? matches[0].calendarSummary,
+              course: linkedTarget?.course ?? row.course ?? extractCourseFromTitle(row.title) ?? extractLeadingCourseCode(payload.summary),
+              dateKey: updateResolution.dateKey,
+              durationMinutes: updateResolution.durationMinutes,
+              requestedStartMinutes: updateResolution.requestedStartMinutes,
+              adjusted: updateResolution.adjusted,
+              deadlineTitle: linkedTarget?.deadline.title ?? null,
+              deadlineDate: linkedTarget?.deadline.dueDate ?? null,
+              deadlineType: linkedTarget?.deadline.type ?? null,
+              candidates: updateResolution.candidates.map(candidate => ({
+                ...candidate,
+                selected: updateResolution.selectedStartMinutes === candidate.startMinutes,
+              })),
+            });
+          }
         } else skipped++;
       }
 
@@ -1323,6 +1544,7 @@ export function AIPanel({
           const ok = await onDeleteCalendarEvent(match.id, match.calendarId, aiLearningOptions, match);
           if (ok) {
             deleted++;
+            onAiSuggestionAccepted?.(block.type, 1);
             appliedCalendarActions.push(summarizeEventAction('deleted', match));
             recentCalendarTargets = recentCalendarTargets.filter(target => !(
               target.id === match.id &&
@@ -1376,8 +1598,10 @@ export function AIPanel({
         }
 
         const ok = await onLinkTask(deadlineMatches[0].id, taskMatches[0].id, aiLearningOptions);
-        if (ok) linked++;
-        else skipped++;
+        if (ok) {
+          linked++;
+          onAiSuggestionAccepted?.(block.type, 1);
+        } else skipped++;
       }
 
       imported = linked;
@@ -1409,6 +1633,7 @@ export function AIPanel({
           block.rows.map(row => onAddSubtask(parentTask.id, row.title, aiLearningOptions))
         );
         imported += subtaskResults.filter(Boolean).length;
+        subtaskResults.filter(Boolean).forEach(() => onAiSuggestionAccepted?.(block.type, 1));
         skippedForLog = subtaskResults.length - subtaskResults.filter(Boolean).length;
       }
     } else if (block.type === 'tasks') {
@@ -1433,6 +1658,7 @@ export function AIPanel({
       for (const { result, row, projectId, priority, recurrence, status } of taskResults) {
         if (result) {
           imported++;
+          onAiSuggestionAccepted?.(block.type, 1);
           const newTask: Task = {
             id: result,
             title: row.title,
@@ -1471,8 +1697,10 @@ export function AIPanel({
           status,
           aiLearningOptions,
         );
-        if (ok) imported++;
-        else skipped++;
+        if (ok) {
+          imported++;
+          onAiSuggestionAccepted?.(block.type, 1);
+        } else skipped++;
       }
       skippedForLog = skipped;
     } else if (block.type === 'habits-create') {
@@ -1480,6 +1708,7 @@ export function AIPanel({
         const freq = (row.frequency === 'weekly' ? 'weekly' : 'daily') as 'daily' | 'weekly';
         await onAddHabit(row.title, freq, aiLearningOptions);
         imported++;
+        onAiSuggestionAccepted?.(block.type, 1);
       }
       skippedForLog = Math.max(0, block.rows.length - imported);
     } else if (block.type === 'habits-complete') {
@@ -1489,6 +1718,7 @@ export function AIPanel({
         if (habit && !habit.doneToday) {
           await onToggleHabit(habit.id, aiLearningOptions);
           imported++;
+          onAiSuggestionAccepted?.(block.type, 1);
         } else {
           skipped++;
         }
@@ -1501,6 +1731,7 @@ export function AIPanel({
         if (habit) {
           await onDeleteHabit(habit.id, aiLearningOptions);
           imported++;
+          onAiSuggestionAccepted?.(block.type, 1);
         } else {
           skipped++;
         }
@@ -2488,6 +2719,52 @@ function buildStudyBlockMatchKeys(value: string) {
   ));
 }
 
+function extractLeadingCourseCode(value: string) {
+  const match = value.match(/^([A-Za-z]{2,6}\s*\d{3,4}[A-Za-z]?)/);
+  return match?.[1]?.replace(/\s+/g, ' ').trim();
+}
+
+function extractStudyTargetPhrase(value: string) {
+  const match = value.match(/\b(exam|demo|quiz|lab|project|homework|hw|webwork)\s*([a-z0-9.-]+)?\b/i);
+  if (!match) return '';
+  return [match[1], match[2]].filter(Boolean).join(' ').trim();
+}
+
+function resolveStudyBlockLinkedDeadline(
+  row: ParsedImportRow,
+  summary: string,
+  deadlines: Deadline[],
+  projects: Project[],
+) {
+  const course = row.course ?? extractCourseFromTitle(row.title) ?? extractLeadingCourseCode(summary) ?? extractLeadingCourseCode(row.title);
+  if (!course) return null;
+
+  const normalizedCourse = normalizeDeleteCandidate(course);
+  const sameCourseDeadlines = deadlines.filter(deadline => {
+    const projectName = deadline.projectId
+      ? projects.find(project => project.id === deadline.projectId)?.name ?? ''
+      : '';
+    return normalizeDeleteCandidate(projectName) === normalizedCourse;
+  });
+  if (sameCourseDeadlines.length === 0) return null;
+
+  const targetPhrase = extractStudyTargetPhrase(summary) || extractStudyTargetPhrase(row.title);
+  const normalizedTarget = normalizeDeleteCandidate(targetPhrase);
+  const datedMatches = sameCourseDeadlines
+    .filter(deadline => normalizedTarget ? normalizeDeleteCandidate(deadline.title).includes(normalizedTarget) : true)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+  const preferred = datedMatches.find(deadline => ['exam', 'quiz', 'project', 'lab'].includes((deadline.type || '').toLowerCase()))
+    ?? datedMatches[0];
+
+  if (!preferred) return null;
+
+  return {
+    deadline: preferred,
+    course,
+  };
+}
+
 function getTimedPayloadDetails(payload: NewGoogleCalendarEvent) {
   if (!('dateTime' in payload.start) || !('dateTime' in payload.end)) return null;
 
@@ -2575,7 +2852,7 @@ function findFreeSlotForDuration(
   preferredStartMinutes: number,
   minStartMinutes: number,
   scoreStudySlot?: (dateKey: string, startMinutes: number, durationMinutes: number) => number,
-) {
+) : SlotSearchResult | null {
   const DAY_START = 8 * 60;
   const DAY_END = 23 * 60 + 59;
 
@@ -2642,9 +2919,17 @@ function findFreeSlotForDuration(
     return a.startMinutes - b.startMinutes;
   });
 
+  const topCandidates = candidates.slice(0, 8).map(candidate => ({
+    startMinutes: candidate.startMinutes,
+    endMinutes: candidate.endMinutes,
+    score: candidate.score,
+    distance: candidate.distance,
+  }));
+
   return {
     startMinutes: candidates[0].startMinutes,
     endMinutes: candidates[0].endMinutes,
+    candidates: topCandidates,
   };
 }
 
@@ -2654,10 +2939,18 @@ function maybeResolveCalendarCreateConflict(
   events: GoogleCalendarEvent[],
   calendarSummary?: string,
   scoreStudySlot?: (dateKey: string, startMinutes: number, durationMinutes: number) => number,
-) {
+) : SlotResolutionResult {
   const timedDetails = getTimedPayloadDetails(payload);
   if (!timedDetails) {
-    return { payload, adjusted: false };
+    return {
+      payload,
+      adjusted: false,
+      dateKey: null,
+      requestedStartMinutes: null,
+      durationMinutes: null,
+      selectedStartMinutes: null,
+      candidates: [],
+    };
   }
 
   const nextSlot = findFreeSlotForDuration(
@@ -2671,14 +2964,30 @@ function maybeResolveCalendarCreateConflict(
 
   if (isStudyBlockAutoScheduleTarget(row, calendarSummary)) {
     if (!nextSlot) {
-      return { payload: null, adjusted: false };
+      return {
+        payload: null,
+        adjusted: false,
+        dateKey: timedDetails.dateKey,
+        requestedStartMinutes: timedDetails.startMinutes,
+        durationMinutes: timedDetails.durationMinutes,
+        selectedStartMinutes: null,
+        candidates: [],
+      };
     }
 
     if (
       nextSlot.startMinutes === timedDetails.startMinutes &&
       nextSlot.endMinutes === timedDetails.endMinutes
     ) {
-      return { payload, adjusted: false };
+      return {
+        payload,
+        adjusted: false,
+        dateKey: timedDetails.dateKey,
+        requestedStartMinutes: timedDetails.startMinutes,
+        durationMinutes: timedDetails.durationMinutes,
+        selectedStartMinutes: timedDetails.startMinutes,
+        candidates: nextSlot.candidates,
+      };
     }
 
     const adjustedPayload: NewGoogleCalendarEvent = {
@@ -2693,7 +3002,15 @@ function maybeResolveCalendarCreateConflict(
       },
     };
 
-    return { payload: adjustedPayload, adjusted: true };
+    return {
+      payload: adjustedPayload,
+      adjusted: true,
+      dateKey: timedDetails.dateKey,
+      requestedStartMinutes: timedDetails.startMinutes,
+      durationMinutes: timedDetails.durationMinutes,
+      selectedStartMinutes: nextSlot.startMinutes,
+      candidates: nextSlot.candidates,
+    };
   }
 
   const hasConflict = events.some(event => {
@@ -2703,10 +3020,26 @@ function maybeResolveCalendarCreateConflict(
   });
 
   if (!hasConflict) {
-    return { payload, adjusted: false };
+    return {
+      payload,
+      adjusted: false,
+      dateKey: timedDetails.dateKey,
+      requestedStartMinutes: timedDetails.startMinutes,
+      durationMinutes: timedDetails.durationMinutes,
+      selectedStartMinutes: timedDetails.startMinutes,
+      candidates: nextSlot?.candidates ?? [],
+    };
   }
 
-  return { payload: null, adjusted: false };
+  return {
+    payload: null,
+    adjusted: false,
+    dateKey: timedDetails.dateKey,
+    requestedStartMinutes: timedDetails.startMinutes,
+    durationMinutes: timedDetails.durationMinutes,
+    selectedStartMinutes: null,
+    candidates: nextSlot?.candidates ?? [],
+  };
 }
 
 function maybeResolveCalendarUpdateConflict(

@@ -948,6 +948,29 @@ export function AppShell({ user }: AppShellProps) {
           skippedCount,
           options: { source: 'manual', learn: true },
         })}
+        onAiSuggestionAccepted={(blockType, actionCount) => learning.logAiSuggestionAccepted({
+          blockType,
+          actionCount,
+          options: { source: 'manual', learn: true },
+        })}
+        onAiSuggestionEdited={(blockType, actionCount) => learning.logAiSuggestionEdited({
+          blockType,
+          actionCount,
+          options: { source: 'manual', learn: true },
+        })}
+        onAiSuggestionRejected={(blockTypes, actionCount) => learning.logAiSuggestionRejected({
+          blockTypes,
+          actionCount,
+          options: { source: 'manual', learn: true },
+        })}
+        onStudyBlockLinkedTarget={(params) => learning.logStudyBlockLinkedTarget({
+          ...params,
+          options: { source: 'manual', learn: true },
+        })}
+        onStudySlotCandidatesLogged={(params) => learning.logStudySlotCandidates({
+          ...params,
+          options: { source: 'manual', learn: true },
+        })}
         habits={habits.habits}
         onAddHabit={handleAddHabit}
         onToggleHabit={handleToggleHabit}

@@ -503,6 +503,8 @@ interface AIPanelProps {
   onAiLearningEnabledChange: (enabled: boolean) => void;
   scoreStudySlot: (dateKey: string, startMinutes: number, durationMinutes: number) => number;
   behaviorSummary?: string;
+  draftPrompt?: string | null;
+  onDraftPromptConsumed?: () => void;
   onAiPromptSubmitted?: (prompt: string, hasImages: boolean) => void;
   onAiActionsApplied?: (blockType: string, appliedCount: number, skippedCount: number) => void;
   onAiSuggestionAccepted?: (blockType: string, actionCount: number) => void;
@@ -555,7 +557,7 @@ interface AIPanelProps {
 export function AIPanel({
   open, onClose, userId,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
-  calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot, behaviorSummary, onAiPromptSubmitted, onAiActionsApplied, onAiSuggestionAccepted, onAiSuggestionEdited, onAiSuggestionRejected, onStudyBlockLinkedTarget, onStudySlotCandidatesLogged,
+  calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot, behaviorSummary, draftPrompt, onDraftPromptConsumed, onAiPromptSubmitted, onAiActionsApplied, onAiSuggestionAccepted, onAiSuggestionEdited, onAiSuggestionRejected, onStudyBlockLinkedTarget, onStudySlotCandidatesLogged,
   onAddTask, onUpdateTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
   onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
   habits, onAddHabit, onToggleHabit, onDeleteHabit,
@@ -699,6 +701,13 @@ export function AIPanel({
       setTimeout(() => inputRef.current?.focus(), 300);
     }
   }, [open, hasKey]);
+
+  useEffect(() => {
+    if (!open || !draftPrompt?.trim()) return;
+    setInput(draftPrompt.trim());
+    requestAnimationFrame(() => inputRef.current?.focus());
+    onDraftPromptConsumed?.();
+  }, [draftPrompt, onDraftPromptConsumed, open]);
 
   useEffect(() => {
     if (open) return;

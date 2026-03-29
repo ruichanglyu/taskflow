@@ -77,6 +77,7 @@ export function AppShell({ user }: AppShellProps) {
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [queuedAiPrompt, setQueuedAiPrompt] = useState<string | null>(null);
   const [habitsOpen, setHabitsOpen] = useState(false);
   const habitsButtonRef = useRef<HTMLButtonElement>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -96,6 +97,10 @@ export function AppShell({ user }: AppShellProps) {
   const deadlineCourseFilterId = searchParams.get('course');
   const deadlineFocusId = searchParams.get('deadline');
   const taskProjectFilterId = searchParams.get('project') ?? 'all';
+  const openAiWithPrompt = useCallback((prompt: string) => {
+    setQueuedAiPrompt(prompt);
+    setAiOpen(true);
+  }, []);
 
   const pushToast = useCallback((tone: ToastTone, title: string, message?: string) => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
@@ -753,6 +758,9 @@ export function AppShell({ user }: AppShellProps) {
                 count,
                 options: { source: 'manual', learn: true },
               })}
+              behaviorSummary={learning.behaviorInsights.summary}
+              proactivePrompts={learning.behaviorInsights.proactivePrompts}
+              onUseBehaviorPrompt={openAiWithPrompt}
             />
           )}
           {currentView === 'deadlines' && (
@@ -889,10 +897,13 @@ export function AppShell({ user }: AppShellProps) {
         tasks={store.tasks}
         deadlines={deadlineStore.deadlines}
         projects={store.projects}
+        behaviorSummary={learning.behaviorInsights.summary}
+        proactivePrompts={learning.behaviorInsights.proactivePrompts}
         aiLearningEnabled={learning.aiLearningEnabled}
         onAiLearningEnabledChange={learning.setAiLearningEnabled}
         onSeedLearningProfile={learning.seedLearningProfile}
         onClearBehaviorHistory={learning.clearBehaviorHistory}
+        onUseBehaviorPrompt={openAiWithPrompt}
         onUserUpdated={handleUserUpdated}
       />
 
@@ -937,6 +948,8 @@ export function AppShell({ user }: AppShellProps) {
         onAiLearningEnabledChange={learning.setAiLearningEnabled}
         scoreStudySlot={learning.scoreStudySlot}
         behaviorSummary={learning.behaviorInsights.summary}
+        draftPrompt={queuedAiPrompt}
+        onDraftPromptConsumed={() => setQueuedAiPrompt(null)}
         onAiPromptSubmitted={(prompt, hasImages) => learning.logAiPromptSubmitted({
           prompt,
           hasImages,

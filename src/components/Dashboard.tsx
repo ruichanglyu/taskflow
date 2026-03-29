@@ -16,6 +16,9 @@ interface DashboardProps {
   studyBlockOutcomesLoading: boolean;
   onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => Promise<boolean>;
   onStudyReviewPromptShown?: (count: number) => void;
+  behaviorSummary?: string;
+  proactivePrompts?: string[];
+  onUseBehaviorPrompt?: (prompt: string) => void;
 }
 
 const STUDY_OUTCOME_OPTIONS: { status: StudyBlockOutcomeStatus; label: string }[] = [
@@ -127,6 +130,9 @@ export function Dashboard({
   studyBlockOutcomesLoading,
   onSetStudyBlockOutcome,
   onStudyReviewPromptShown,
+  behaviorSummary,
+  proactivePrompts = [],
+  onUseBehaviorPrompt,
 }: DashboardProps) {
   const [savingOutcomeId, setSavingOutcomeId] = useState<string | null>(null);
   const lastPromptKeyRef = useRef<string>('');
@@ -242,6 +248,45 @@ export function Dashboard({
           </div>
         </div>
       </div>
+
+      {behaviorSummary && (
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <BarChart3 size={18} className="text-[var(--accent)]" />
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">Behavior insights</h3>
+              </div>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                TaskFlow is using your recent planning and follow-through signals to learn what feels realistic.
+              </p>
+            </div>
+            {proactivePrompts.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {proactivePrompts.map(prompt => (
+                  <button
+                    key={prompt}
+                    onClick={() => onUseBehaviorPrompt?.(prompt)}
+                    className="rounded-full border border-[var(--accent)]/25 bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-medium text-[var(--accent)] transition hover:border-[var(--accent)]/45"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="mt-4 grid gap-2">
+            {behaviorSummary.split('\n').filter(Boolean).map(line => (
+              <div
+                key={line}
+                className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2.5 text-sm text-[var(--text-secondary)]"
+              >
+                {line}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {pendingStudyReview.length > 0 && (
         <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">

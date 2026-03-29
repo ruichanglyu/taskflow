@@ -43,6 +43,7 @@ interface ParsedTaskDueDetail {
 
 interface BehaviorInsightSummary {
   summary: string;
+  proactivePrompts: string[];
 }
 
 type InsightConfidence = 'low' | 'medium' | 'high';
@@ -740,6 +741,7 @@ function buildBehaviorInsightSummary(
   const lines: string[] = [
     `Study outcomes tracked: ${completedOutcomes.length} completed, ${partialOutcomes.length} partial, ${skippedOutcomes.length} skipped, ${rescheduledOutcomes.length} marked rescheduled.`,
   ];
+  const proactivePrompts: string[] = [];
 
   if (plannedByDate.size >= 3) {
     lines.push(`Plan realism: ${[...plannedByDate.values()].reduce((sum, value) => sum + value, 0)} planned study blocks versus ${Math.round([...completedByDate.values()].reduce((sum, value) => sum + value, 0) * 10) / 10} completed-equivalent blocks.`);
@@ -749,8 +751,10 @@ function buildBehaviorInsightSummary(
 
   if (timeWindowConfidence === 'high') {
     lines.push(`Time-of-day pattern: strong signal toward ${strongestWindow}${weakestWindow && weakestWindow !== strongestWindow ? `, while ${weakestWindow} is noticeably weaker` : ''}.`);
+    proactivePrompts.push(`Build my next study plan around my ${strongestWindow} study window.`);
   } else if (timeWindowConfidence === 'medium') {
     lines.push(`Time-of-day pattern: early signal that ${strongestWindow} may fit better${weakestWindow && weakestWindow !== strongestWindow ? ` than ${weakestWindow}` : ''}.`);
+    proactivePrompts.push(`Suggest study blocks that lean toward my ${strongestWindow} window.`);
   } else {
     lines.push('Time-of-day pattern: still learning which study window is strongest for you.');
   }
@@ -763,8 +767,14 @@ function buildBehaviorInsightSummary(
 
   if (workloadConfidence === 'high') {
     lines.push(`Workload tolerance: strong signal that days with 3+ planned blocks average ${overloadedDayCompletionAverage.toFixed(1)} completions, versus ${manageableDayCompletionAverage.toFixed(1)} on lighter days.`);
+    if (manageableDayCompletionAverage > overloadedDayCompletionAverage) {
+      proactivePrompts.push('Make this week’s study plan more realistic based on how many blocks I usually finish in a day.');
+    }
   } else if (workloadConfidence === 'medium') {
     lines.push(`Workload tolerance: there is some signal that lighter days average ${manageableDayCompletionAverage.toFixed(1)} completions, versus ${overloadedDayCompletionAverage.toFixed(1)} on heavier days.`);
+    if (manageableDayCompletionAverage > overloadedDayCompletionAverage) {
+      proactivePrompts.push('Lighten my study plan using my recent completion pattern.');
+    }
   } else {
     lines.push('Workload tolerance: still learning how much you can realistically get through in one day.');
   }
@@ -783,8 +793,14 @@ function buildBehaviorInsightSummary(
 
   if (deadlineApproachConfidence === 'high') {
     lines.push(`Deadline approach: strong signal that ${startedEarly} task starts happened 2+ days before the due date, while ${startedLastMinute} started within the last day.`);
+    if (startedLastMinute > startedEarly) {
+      proactivePrompts.push('Help me start upcoming deadlines earlier based on my recent procrastination pattern.');
+    }
   } else if (deadlineApproachConfidence === 'medium') {
     lines.push(`Deadline approach: some signal from recent tasks shows ${startedEarly} early starts versus ${startedLastMinute} last-minute starts.`);
+    if (startedLastMinute > startedEarly) {
+      proactivePrompts.push('Suggest an earlier start plan for my upcoming deadlines.');
+    }
   } else {
     lines.push('Deadline approach: still learning how early you usually begin tasks.');
   }
@@ -813,7 +829,10 @@ function buildBehaviorInsightSummary(
     lines.push('AI engagement: still learning how often AI suggestions turn into applied changes.');
   }
 
-  return { summary: lines.join('\n') };
+  return {
+    summary: lines.join('\n'),
+    proactivePrompts: Array.from(new Set(proactivePrompts)).slice(0, 3),
+  };
 }
 
 function appendBehaviorEvent(

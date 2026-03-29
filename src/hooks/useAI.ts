@@ -93,6 +93,12 @@ interface RemoteChatMessageRow {
   created_at: string;
 }
 
+function dedupeRowsById<T extends { id: string }>(rows: T[]): T[] {
+  const byId = new Map<string, T>();
+  for (const row of rows) byId.set(row.id, row);
+  return [...byId.values()];
+}
+
 // --- API key: synced via Supabase, localStorage used as fast cache ---
 
 export async function getAPIKey(userId: string): Promise<string | null> {
@@ -1040,7 +1046,7 @@ async function saveRemoteThreads(userId: string, threads: ChatThread[]): Promise
       created_at: new Date(thread.createdAt).toISOString(),
       updated_at: new Date(thread.updatedAt).toISOString(),
     }));
-    const messageRows = sanitizedThreads.flatMap(thread =>
+    const messageRows = dedupeRowsById(sanitizedThreads.flatMap(thread =>
       thread.messages.map(message => ({
         id: message.id,
         thread_id: thread.id,
@@ -1054,7 +1060,7 @@ async function saveRemoteThreads(userId: string, threads: ChatThread[]): Promise
         })),
         created_at: new Date(message.timestamp).toISOString(),
       })),
-    );
+    ));
 
     const existingThreadsResult = await supabase
       .from('ai_chat_threads')
@@ -1069,6 +1075,20 @@ async function saveRemoteThreads(userId: string, threads: ChatThread[]): Promise
     const existingIds = new Set((existingThreadsResult.data ?? []).map(row => row.id as string));
     const nextIds = new Set(threadRows.map(row => row.id));
     const deletedIds = [...existingIds].filter(id => !nextIds.has(id));
+
+    const existingMessagesResult = await supabase
+      .from('ai_chat_messages')
+      .select('id')
+      .eq('user_id', userId);
+
+    if (existingMessagesResult.error) {
+      console.warn('[AI] Failed to read remote message ids', existingMessagesResult.error);
+      return false;
+    }
+
+    const existingMessageIds = new Set((existingMessagesResult.data ?? []).map(row => row.id as string));
+    const nextMessageIds = new Set(messageRows.map(row => row.id));
+    const deletedMessageIds = [...existingMessageIds].filter(id => !nextMessageIds.has(id));
 
     const upsertThreadsResult = await supabase.from('ai_chat_threads').upsert(threadRows);
     if (upsertThreadsResult.error) {
@@ -1088,19 +1108,24 @@ async function saveRemoteThreads(userId: string, threads: ChatThread[]): Promise
       }
     }
 
-    const deleteMessagesResult = await supabase
-      .from('ai_chat_messages')
-      .delete()
-      .eq('user_id', userId);
-    if (deleteMessagesResult.error) {
-      console.warn('[AI] Failed to clear remote messages before save', deleteMessagesResult.error);
-      return false;
+    if (messageRows.length > 0) {
+      const upsertMessagesResult = await supabase
+        .from('ai_chat_messages')
+        .upsert(messageRows, { onConflict: 'id' });
+      if (upsertMessagesResult.error) {
+        console.warn('[AI] Failed to save remote messages', upsertMessagesResult.error);
+        return false;
+      }
     }
 
-    if (messageRows.length > 0) {
-      const insertMessagesResult = await supabase.from('ai_chat_messages').insert(messageRows);
-      if (insertMessagesResult.error) {
-        console.warn('[AI] Failed to save remote messages', insertMessagesResult.error);
+    if (deletedMessageIds.length > 0) {
+      const deleteMessagesResult = await supabase
+        .from('ai_chat_messages')
+        .delete()
+        .eq('user_id', userId)
+        .in('id', deletedMessageIds);
+      if (deleteMessagesResult.error) {
+        console.warn('[AI] Failed to delete removed remote messages', deleteMessagesResult.error);
         return false;
       }
     }
@@ -1138,6 +1163,8 @@ export function useAI(userId: string) {
   const threadsRef = useRef<ChatThread[]>(threads);
   const activeChatIdRef = useRef(activeChatId);
   const remoteSyncSignatureRef = useRef('');
+  const remoteSaveRequestedRef = useRef(false);
+  const remoteSaveChainRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     threadsRef.current = threads;
@@ -1233,17 +1260,20 @@ export function useAI(userId: string) {
     const nextSignature = serializeThreads(threads);
     if (nextSignature === remoteSyncSignatureRef.current) return;
 
-    let cancelled = false;
-    void (async () => {
-      const saved = await saveRemoteThreads(userId, threads);
-      if (!cancelled && saved) {
-        remoteSyncSignatureRef.current = nextSignature;
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    remoteSaveRequestedRef.current = true;
+    remoteSaveChainRef.current = remoteSaveChainRef.current
+      .catch(() => {})
+      .then(async () => {
+        while (remoteSaveRequestedRef.current) {
+          remoteSaveRequestedRef.current = false;
+          const latestThreads = threadsRef.current;
+          const latestSignature = serializeThreads(latestThreads);
+          if (latestSignature === remoteSyncSignatureRef.current) continue;
+          const saved = await saveRemoteThreads(userId, latestThreads);
+          if (!saved) break;
+          remoteSyncSignatureRef.current = latestSignature;
+        }
+      });
   }, [hasHydratedRemoteChats, isStreaming, threads, userId]);
 
   const updateThread = useCallback((threadId: string, updater: (thread: ChatThread) => ChatThread) => {

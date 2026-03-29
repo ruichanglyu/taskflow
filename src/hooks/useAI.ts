@@ -495,6 +495,8 @@ SCHEDULING RULES (CRITICAL — you MUST follow these when creating calendar even
 - Do not assume earlier suggested changes exist. Only treat the data listed in USER'S DATA as real unless the user explicitly says they already applied a suggestion.
 - If the user refers to “the ones you just created/updated/deleted,” use the RECENT APPLIED AI CALENDAR ACTIONS section above as the source of truth for what was actually applied.
 - When deleting or updating recently applied calendar events, include the exact calendar, date, and start time whenever those details are available from RECENT APPLIED AI CALENDAR ACTIONS or LOADED CALENDAR EVENTS.
+- If the user asks to delete, reschedule, or move calendar events that you just listed from LOADED CALENDAR EVENTS, you MUST reuse those exact event details in the import block. Include one calendar row per real event with the exact title, calendar, date, and start time. Do not emit vague deletes like just a title when you already know the exact matching events.
+- If the user says "delete them", "move them", "change them", or "reschedule them" after you just enumerated real calendar events, interpret "them" as those exact listed events and preserve the exact dates/start times in the import block.
 
 STRICT RESPONSE RULES FOR NORMAL CHAT:
 - Use plain sentences or short paragraphs.

@@ -1908,7 +1908,12 @@ function stripTrailingCourseTag(value: string) {
 }
 
 function normalizeCalendarCandidate(value: string) {
-  return value.trim().toLowerCase().replace(/\s*\((primary|read-only|read only|owner)\)\s*$/i, '').trim();
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s*\((primary|read-only|read only|owner)\)\s*$/i, '')
+    .replace(/\s+calendar$/i, '')
+    .trim();
 }
 
 function getCalendarSummaryById(calendars: GoogleCalendarListItem[], calendarId?: string) {
@@ -3146,6 +3151,7 @@ function ActionBundleCard({
     const total = Object.values(results).reduce((sum, count) => sum + count, 0);
     return total;
   }, [results]);
+  const hasRecordedResults = Object.keys(results).length > 0;
 
   const requestedSummaryTotal = useMemo(() => (
     summary.tasks +
@@ -3224,7 +3230,7 @@ function ActionBundleCard({
             <div>
               <p className="text-sm font-medium text-[var(--text-primary)]">
                 {allDone
-                  ? `Applied ${resultSummary || requestedSummaryTotal} changes`
+                  ? `Applied ${hasRecordedResults ? resultSummary : requestedSummaryTotal} changes`
                   : applying
                     ? 'Applying changes…'
                     : 'Suggested changes'}

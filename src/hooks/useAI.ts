@@ -226,6 +226,7 @@ function buildSystemPrompt(data: {
   calendarCalendars: GoogleCalendarListItem[];
   selectedCalendarId?: string;
   habits?: { id: string; title: string; frequency: string; doneToday: boolean; streak: number }[];
+  recentAppliedCalendarActions?: string[];
 }): string {
   const today = new Date().toISOString().split('T')[0];
 
@@ -359,6 +360,11 @@ ${pastDeadlinesSummary}
 ACTIVE GYM PLAN:
 ${gymSummary}
 
+RECENT APPLIED AI CALENDAR ACTIONS:
+${data.recentAppliedCalendarActions && data.recentAppliedCalendarActions.length > 0
+  ? data.recentAppliedCalendarActions.map(line => `- ${line}`).join('\n')
+  : '(none)'}
+
 CONNECTED CALENDARS:
 ${calendarsSummary}
 
@@ -487,6 +493,8 @@ SCHEDULING RULES (CRITICAL — you MUST follow these when creating calendar even
 - When explaining, mention which free slot you used per day (e.g. "Saturday at 2 PM in your free window between EAS 1600 and MATH 3012").
 - Import blocks are suggested changes only until the user clicks Apply. Do not say you already created, updated, deleted, removed, or linked something unless the user explicitly confirmed those changes were applied.
 - Do not assume earlier suggested changes exist. Only treat the data listed in USER'S DATA as real unless the user explicitly says they already applied a suggestion.
+- If the user refers to “the ones you just created/updated/deleted,” use the RECENT APPLIED AI CALENDAR ACTIONS section above as the source of truth for what was actually applied.
+- When deleting or updating recently applied calendar events, include the exact calendar, date, and start time whenever those details are available from RECENT APPLIED AI CALENDAR ACTIONS or LOADED CALENDAR EVENTS.
 
 STRICT RESPONSE RULES FOR NORMAL CHAT:
 - Use plain sentences or short paragraphs.

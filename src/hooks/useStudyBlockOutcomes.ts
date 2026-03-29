@@ -194,7 +194,6 @@ export function useStudyBlockOutcomes(userId: string) {
     const dateKey = eventDateKey(event);
     if (!dateKey) return false;
 
-    const previousOutcomes = outcomes;
     const existing = getOutcomeForEvent(event);
     const now = new Date().toISOString();
     const next: StudyBlockOutcome = {
@@ -239,10 +238,8 @@ export function useStudyBlockOutcomes(userId: string) {
         setRemoteAvailable(false);
         return true;
       }
-      setOutcomes(previousOutcomes);
-      saveToStorage(userId, previousOutcomes);
       console.warn('Failed to save study block outcome to Supabase:', error);
-      return false;
+      return true;
     }
 
     return true;

@@ -10,6 +10,7 @@ import {
   googleClientId,
   isGoogleCalendarConfigured,
   loadGoogleIdentityScript,
+  moveGoogleCalendarEvent,
   NewGoogleCalendarEvent,
   updateGoogleCalendarEvent,
 } from '../lib/googleCalendar';
@@ -445,6 +446,64 @@ export function useGoogleCalendar(userId: string) {
             : { date: existingEvent.end?.date ?? existingEvent.start?.date ?? '' }
         ),
       };
+
+      const sourceCalendarId = existingEvent.calendarId;
+      const isCalendarMove = Boolean(
+        sourceCalendarId &&
+        targetCalendarId &&
+        sourceCalendarId !== targetCalendarId,
+      );
+
+      const hasFieldChanges =
+        event.summary !== undefined ||
+        event.description !== undefined ||
+        event.location !== undefined ||
+        event.start !== undefined ||
+        event.end !== undefined;
+
+      if (isCalendarMove && sourceCalendarId) {
+        const moved = await moveGoogleCalendarEvent(accessToken, sourceCalendarId, eventId, targetCalendarId);
+        const calendarMeta = calendars.find(calendar => calendar.id === targetCalendarId);
+
+        let finalEvent: GoogleCalendarEvent = {
+          ...moved,
+          calendarId: targetCalendarId,
+          calendarSummary: calendarMeta?.summary,
+          calendarColor: calendarMeta?.backgroundColor,
+        };
+
+        if (hasFieldChanges) {
+          try {
+            const updatedMoved = await updateGoogleCalendarEvent(
+              accessToken,
+              targetCalendarId,
+              moved.id,
+              mergedEvent,
+            );
+            finalEvent = {
+              ...finalEvent,
+              ...updatedMoved,
+              calendarId: targetCalendarId,
+              calendarSummary: calendarMeta?.summary,
+              calendarColor: calendarMeta?.backgroundColor,
+            };
+          } catch (updateError) {
+            setError(updateError instanceof Error ? updateError.message : 'Event moved, but additional changes failed to save.');
+          }
+        }
+
+        setEvents(prev =>
+          [
+            ...prev.filter(existing => !(existing.id === eventId && existing.calendarId === sourceCalendarId)),
+            finalEvent,
+          ].sort((a, b) => {
+            const aTime = a.start?.dateTime || a.start?.date || '';
+            const bTime = b.start?.dateTime || b.start?.date || '';
+            return aTime.localeCompare(bTime);
+          }),
+        );
+        return true;
+      }
 
       const updated = await updateGoogleCalendarEvent(accessToken, targetCalendarId, eventId, mergedEvent);
       const calendarMeta = calendars.find(calendar => calendar.id === targetCalendarId);

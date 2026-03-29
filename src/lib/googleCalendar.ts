@@ -159,6 +159,20 @@ export async function updateGoogleCalendarEvent(
   );
 }
 
+export async function moveGoogleCalendarEvent(
+  accessToken: string,
+  sourceCalendarId: string,
+  eventId: string,
+  destinationCalendarId: string,
+): Promise<GoogleCalendarEvent> {
+  const params = new URLSearchParams({ destination: destinationCalendarId });
+  return googleFetch<GoogleCalendarEvent>(
+    `/calendars/${encodeURIComponent(sourceCalendarId)}/events/${encodeURIComponent(eventId)}/move?${params.toString()}`,
+    accessToken,
+    { method: 'POST' }
+  );
+}
+
 export async function deleteGoogleCalendarEvent(
   accessToken: string,
   calendarId: string,

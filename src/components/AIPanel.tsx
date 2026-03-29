@@ -88,6 +88,7 @@ const PANEL_FRAME_STORAGE = 'taskflow_ai_panel_frame';
 const CHAT_SIDEBAR_WIDTH_STORAGE = 'taskflow_ai_sidebar_width';
 const CHAT_SIDEBAR_COLLAPSED_STORAGE = 'taskflow_ai_sidebar_collapsed';
 const IMPORTED_BLOCKS_STORAGE_PREFIX = 'taskflow_ai_imported_blocks';
+const RECENT_APPLIED_CALENDAR_ACTIONS_STORAGE_PREFIX = 'taskflow_ai_recent_calendar_actions';
 const DEFAULT_PANEL_FRAME: PanelFrame = {
   x: 0,
   y: 88,
@@ -99,6 +100,10 @@ const DEFAULT_CHAT_SIDEBAR_COLLAPSED = false;
 
 function importedBlocksStorageKey(userId: string) {
   return `${IMPORTED_BLOCKS_STORAGE_PREFIX}:${userId}`;
+}
+
+function recentAppliedCalendarActionsStorageKey(userId: string) {
+  return `${RECENT_APPLIED_CALENDAR_ACTIONS_STORAGE_PREFIX}:${userId}`;
 }
 
 function loadImportedBlocks(userId: string) {
@@ -113,6 +118,59 @@ function loadImportedBlocks(userId: string) {
   } catch {
     return new Set<string>();
   }
+}
+
+function loadRecentAppliedCalendarActions(userId: string) {
+  if (typeof window === 'undefined') return [] as string[];
+  try {
+    const raw = localStorage.getItem(recentAppliedCalendarActionsStorageKey(userId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentAppliedCalendarActions(userId: string, entries: string[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(
+      recentAppliedCalendarActionsStorageKey(userId),
+      JSON.stringify(entries.slice(-40)),
+    );
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function formatSummaryTime(dateTime?: string) {
+  if (!dateTime) return '';
+  return new Date(dateTime).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function summarizePayloadAction(
+  action: 'created' | 'updated',
+  payload: NewGoogleCalendarEvent,
+  calendarSummary?: string,
+) {
+  const title = payload.summary || 'Untitled event';
+  const dateKey = 'date' in payload.start ? payload.start.date : payload.start.dateTime?.slice(0, 10) || '';
+  const startLabel = 'dateTime' in payload.start ? formatSummaryTime(payload.start.dateTime) : 'All day';
+  return `${action.toUpperCase()}: ${title}${calendarSummary ? ` | calendar: ${calendarSummary}` : ''}${dateKey ? ` | date: ${dateKey}` : ''}${startLabel ? ` | start: ${startLabel}` : ''}`;
+}
+
+function summarizeEventAction(
+  action: 'deleted' | 'updated',
+  event: GoogleCalendarEvent,
+) {
+  const title = event.summary || 'Untitled event';
+  const dateKey = event.start?.date ?? event.start?.dateTime?.slice(0, 10) ?? '';
+  const startLabel = event.start?.dateTime ? formatSummaryTime(event.start.dateTime) : event.start?.date ? 'All day' : '';
+  return `${action.toUpperCase()}: ${title}${event.calendarSummary ? ` | calendar: ${event.calendarSummary}` : ''}${dateKey ? ` | date: ${dateKey}` : ''}${startLabel ? ` | start: ${startLabel}` : ''}`;
 }
 
 function formatDictationElapsed(seconds: number): string {
@@ -552,8 +610,9 @@ export function AIPanel({
       calendarCalendars,
       selectedCalendarId,
       habits,
+      recentAppliedCalendarActions: loadRecentAppliedCalendarActions(userId),
     }, images);
-  }, [input, pendingImages, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises, calendarEvents, calendarCalendars, selectedCalendarId, habits]);
+  }, [input, pendingImages, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises, calendarEvents, calendarCalendars, selectedCalendarId, habits, userId]);
 
   const appendImageFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return false;
@@ -758,6 +817,7 @@ export function AIPanel({
   const handleImport = async (block: ImportBlock, blockKey: string) => {
     setPanelError(null);
     let imported = 0;
+    const appliedCalendarActions: string[] = [];
     const projectCache = new Map<string, string | null>();
     const workingTasks: Task[] = [
       ...tasks,
@@ -912,12 +972,18 @@ export function AIPanel({
             targetCalendar?.backgroundColor,
           );
           if (replacementMatch) {
+            appliedCalendarActions.push(
+              summarizePayloadAction('updated', resolved.payload, targetCalendar?.summary ?? row.calendar),
+            );
             workingCalendarEvents = workingCalendarEvents.map(event =>
               event.id === replacementMatch.id && event.calendarId === replacementMatch.calendarId
                 ? { ...nextSyntheticEvent, id: replacementMatch.id }
                 : event
             );
           } else {
+            appliedCalendarActions.push(
+              summarizePayloadAction('created', resolved.payload, targetCalendar?.summary ?? row.calendar),
+            );
             workingCalendarEvents.push(nextSyntheticEvent);
           }
         } else {
@@ -953,8 +1019,24 @@ export function AIPanel({
           : matches[0].calendarId;
 
         const ok = await onUpdateCalendarEvent(matches[0].id, payload, targetCalendarId, aiLearningOptions, matches[0]);
-        if (ok) updated++;
-        else skipped++;
+        if (ok) {
+          updated++;
+          const targetCalendar = calendarCalendars.find(item => item.id === targetCalendarId);
+          appliedCalendarActions.push(
+            summarizePayloadAction('updated', payload, targetCalendar?.summary ?? row.newCalendar ?? matches[0].calendarSummary),
+          );
+          const nextSyntheticEvent = buildSyntheticCalendarEvent(
+            payload,
+            targetCalendarId ?? matches[0].calendarId ?? '',
+            targetCalendar?.summary ?? matches[0].calendarSummary,
+            targetCalendar?.backgroundColor ?? matches[0].calendarColor,
+          );
+          workingCalendarEvents = workingCalendarEvents.map(event =>
+            event.id === matches[0].id && event.calendarId === matches[0].calendarId
+              ? { ...nextSyntheticEvent, id: matches[0].id }
+              : event
+          );
+        } else skipped++;
       }
 
       imported = updated;
@@ -986,6 +1068,7 @@ export function AIPanel({
           const ok = await onDeleteCalendarEvent(match.id, match.calendarId, aiLearningOptions, match);
           if (ok) {
             deleted++;
+            appliedCalendarActions.push(summarizeEventAction('deleted', match));
             deletedKeys.add(deleteKey);
             workingCalendarEvents = workingCalendarEvents.filter(event => !(event.id === match.id && event.calendarId === match.calendarId));
           } else {
@@ -1144,6 +1227,11 @@ export function AIPanel({
           imported++;
         }
       }
+    }
+
+    if (appliedCalendarActions.length > 0) {
+      const existingActions = loadRecentAppliedCalendarActions(userId);
+      saveRecentAppliedCalendarActions(userId, [...existingActions, ...appliedCalendarActions]);
     }
 
     setImportedBlocks(prev => new Set(prev).add(blockKey));

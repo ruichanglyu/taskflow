@@ -183,6 +183,10 @@ export function AppShell({ user }: AppShellProps) {
     }
   }, [location.pathname, navigate]);
 
+  useEffect(() => {
+    learning.logViewOpened(currentView, { source: 'manual', learn: true });
+  }, [currentView, learning]);
+
   const handleAddDeadline = useCallback(async (...args: [...Parameters<typeof deadlineStore.addDeadline>, BehaviorLearningActionOptions?]) => {
     const lastArg = args.at(-1);
     const options = isBehaviorLearningActionOptions(lastArg) ? lastArg : { source: 'manual', learn: true };
@@ -693,7 +697,10 @@ export function AppShell({ user }: AppShellProps) {
               <span className="hidden sm:inline text-xs font-medium">Routines</span>
             </button>
             <button
-              onClick={() => setAiOpen(true)}
+              onClick={() => {
+                learning.logAiPanelOpened({ source: 'manual', learn: true });
+                setAiOpen(true);
+              }}
               className="flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:border-[var(--accent)]"
               style={{ color: 'var(--accent)' }}
               title="AI Assistant"

@@ -175,8 +175,8 @@ function parseTaskDueDetail(detail: string | null | undefined): ParsedTaskDueDet
     dueDate: getDetailToken(detail, 'due'),
     previousDueDate: getDetailToken(detail, 'from'),
     nextDueDate: getDetailToken(detail, 'to'),
-    previousStatus: getDetailToken(detail, 'from'),
-    nextStatus: getDetailToken(detail, 'to'),
+    previousStatus: getDetailToken(detail, 'from-status'),
+    nextStatus: getDetailToken(detail, 'to-status'),
   };
 }
 
@@ -611,6 +611,18 @@ function buildBehaviorInsightSummary(
     completedByDate.set(parsed.dateKey, (completedByDate.get(parsed.dateKey) ?? 0) + value);
   });
 
+  let sameDayOutcomeResponses = 0;
+  let laterOutcomeResponses = 0;
+  recentStudyOutcomes.forEach(event => {
+    const parsed = parseStudyBlockOutcomeDetail(event.detail);
+    if (!parsed) return;
+    const responseDate = event.createdAt.slice(0, 10);
+    const diff = daysBetween(parsed.dateKey, responseDate);
+    if (diff === null) return;
+    if (diff <= 0) sameDayOutcomeResponses += 1;
+    else laterOutcomeResponses += 1;
+  });
+
   let overloadedDayCount = 0;
   let overloadedDayCompletionAverage = 0;
   let manageableDayCompletionAverage = 0;
@@ -678,9 +690,30 @@ function buildBehaviorInsightSummary(
     else startedLastMinute += 1;
   });
 
+  const dueDateChangeEvents = learningAppEvents.filter(event => event.entity === 'task' && event.action === 'due-date-change');
+  let dueDatesMovedLater = 0;
+  let dueDatesMovedEarlier = 0;
+  dueDateChangeEvents.forEach(event => {
+    const dueDetail = parseTaskDueDetail(event.detail);
+    if (!dueDetail.previousDueDate || !dueDetail.nextDueDate) return;
+    const diff = daysBetween(dueDetail.previousDueDate, dueDetail.nextDueDate);
+    if (diff === null || diff === 0) return;
+    if (diff > 0) dueDatesMovedLater += 1;
+    else dueDatesMovedEarlier += 1;
+  });
+
   const aiPromptCount = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'prompt-submit').length;
   const aiApplyCount = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'actions-apply').length;
   const aiPromptAcceptance = aiPromptCount > 0 ? Math.round((aiApplyCount / aiPromptCount) * 100) : null;
+  const aiPanelOpenCount = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'panel-open').length;
+  const viewOpenEvents = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'view-open');
+  const topViews = [...viewOpenEvents.reduce<Map<string, number>>((acc, event) => {
+    acc.set(event.title, (acc.get(event.title) ?? 0) + 1);
+    return acc;
+  }, new Map()).entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([view, count]) => `${view} (${count})`);
 
   const lines = [
     `Study outcomes tracked: ${completedOutcomes.length} completed, ${partialOutcomes.length} partial, ${skippedOutcomes.length} skipped, ${rescheduledOutcomes.length} marked rescheduled.`,
@@ -696,6 +729,9 @@ function buildBehaviorInsightSummary(
     overloadedDayCount > 0 || manageableDaysSeen > 0
       ? `Workload tolerance: days with 3+ planned blocks average ${overloadedDayCompletionAverage.toFixed(1)} completions; lighter days average ${manageableDayCompletionAverage.toFixed(1)}.`
       : 'Workload tolerance: not enough daily workload history yet.',
+    recentStudyOutcomes.length > 0
+      ? `Study review follow-through: ${sameDayOutcomeResponses} outcomes were logged the same day, ${laterOutcomeResponses} were logged later.`
+      : 'Study review follow-through: no study review responses logged yet.',
     longestStudyStreak > 0
       ? `Study consistency: longest completion streak is ${longestStudyStreak} day${longestStudyStreak === 1 ? '' : 's'}.`
       : 'Study consistency: no completed study streaks recorded yet.',
@@ -705,8 +741,11 @@ function buildBehaviorInsightSummary(
     taskDoneEvents.length > 0
       ? `Task completion timing: ${doneEarly} finished early, ${doneOnTime} on the due date, ${doneLate} after the due date.`
       : 'Task completion timing: not enough task completion history yet.',
+    dueDateChangeEvents.length > 0
+      ? `Deadline drift: ${dueDatesMovedLater} due dates were pushed later, ${dueDatesMovedEarlier} were pulled earlier.`
+      : 'Deadline drift: no due-date changes logged yet.',
     aiPromptCount > 0
-      ? `AI engagement: ${aiApplyCount} applied suggestion bundles across ${aiPromptCount} prompts${aiPromptAcceptance !== null ? ` (${aiPromptAcceptance}% apply rate)` : ''}.`
+      ? `AI engagement: ${aiApplyCount} applied suggestion bundles across ${aiPromptCount} prompts${aiPromptAcceptance !== null ? ` (${aiPromptAcceptance}% apply rate)` : ''}; AI panel opened ${aiPanelOpenCount} times${topViews.length > 0 ? `, most visited views: ${topViews.join(', ')}` : ''}.`
       : 'AI engagement: no AI prompt history tracked yet.',
   ];
 
@@ -1753,6 +1792,14 @@ export function useBehaviorLearning(userId: string) {
     );
   }, [recordAppAction]);
 
+  const logAiPanelOpened = useCallback((options?: BehaviorLearningActionOptions) => {
+    recordAppAction('ai', 'panel-open', 'AI Assistant', options, null);
+  }, [recordAppAction]);
+
+  const logViewOpened = useCallback((view: string, options?: BehaviorLearningActionOptions) => {
+    recordAppAction('ai', 'view-open', view, options, null);
+  }, [recordAppAction]);
+
   return {
     aiTestingMode,
     aiLearningEnabled,
@@ -1792,6 +1839,8 @@ export function useBehaviorLearning(userId: string) {
     logAiPromptSubmitted,
     logAiActionsApplied,
     logStudyReviewPromptShown,
+    logAiPanelOpened,
+    logViewOpened,
     recordCalendarCreate,
     recordCalendarUpdate,
     recordCalendarDelete,

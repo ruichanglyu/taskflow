@@ -791,6 +791,7 @@ export function AppShell({ user }: AppShellProps) {
               calendar={calendarController}
               deadlines={deadlineStore.deadlines}
               studyBlockOutcomes={studyBlockOutcomes.outcomesByEventId}
+              getStudyBlockOutcome={studyBlockOutcomes.getOutcomeForEvent}
               studyBlockOutcomesLoading={studyBlockOutcomes.isLoading}
               onSetStudyBlockOutcome={handleSetStudyBlockOutcome}
             />

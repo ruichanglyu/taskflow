@@ -413,6 +413,7 @@ interface CalendarViewProps {
   calendar: GoogleCalendarController;
   deadlines?: import('../types').Deadline[];
   studyBlockOutcomes: StudyBlockOutcomeMap;
+  getStudyBlockOutcome: (event: GoogleCalendarEvent) => StudyBlockOutcome | undefined;
   studyBlockOutcomesLoading: boolean;
   onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => Promise<boolean>;
 }
@@ -426,6 +427,7 @@ function DayPanel({
   deletingId,
   onCreateEvent,
   studyBlockOutcomes,
+  getStudyBlockOutcome,
   studyBlockOutcomesLoading,
   onSetStudyBlockOutcome,
 }: {
@@ -437,6 +439,7 @@ function DayPanel({
   deletingId: string | null;
   onCreateEvent: () => void;
   studyBlockOutcomes: StudyBlockOutcomeMap;
+  getStudyBlockOutcome: (event: GoogleCalendarEvent) => StudyBlockOutcome | undefined;
   studyBlockOutcomesLoading: boolean;
   onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => Promise<boolean>;
 }) {
@@ -514,7 +517,7 @@ function DayPanel({
               {reviewableStudyBlocks.length > 0 ? (
                 <div className="mt-3 space-y-2">
                   {reviewableStudyBlocks.map(event => {
-                    const currentOutcome = studyBlockOutcomes[event.id];
+                    const currentOutcome = getStudyBlockOutcome(event);
                     return (
                       <div
                         key={`review-${event.id}`}
@@ -604,12 +607,17 @@ function DayPanel({
                 style={{ backgroundColor: event.calendarColor || '#818cf8' }}
               />
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h4 className="truncate text-sm font-medium text-[var(--text-primary)]">
-                    {event.summary || 'Untitled event'}
-                  </h4>
-                  {studyBlockOutcomes[event.id] && <OutcomeBadge status={studyBlockOutcomes[event.id].status} />}
-                </div>
+                {(() => {
+                  const currentOutcome = getStudyBlockOutcome(event);
+                  return (
+                    <div className="flex items-center gap-2">
+                      <h4 className="truncate text-sm font-medium text-[var(--text-primary)]">
+                        {event.summary || 'Untitled event'}
+                      </h4>
+                      {currentOutcome && <OutcomeBadge status={currentOutcome.status} />}
+                    </div>
+                  );
+                })()}
                 <p className="text-xs text-[var(--text-muted)]">
                   {getEventTimeLabel(event.start)}
                 </p>
@@ -1053,6 +1061,7 @@ export function CalendarView({
   calendar,
   deadlines = [],
   studyBlockOutcomes,
+  getStudyBlockOutcome,
   studyBlockOutcomesLoading,
   onSetStudyBlockOutcome,
 }: CalendarViewProps) {
@@ -1386,6 +1395,7 @@ export function CalendarView({
               deletingId={deletingId}
               onCreateEvent={() => handleCreateFromDate(selectedDate)}
               studyBlockOutcomes={studyBlockOutcomes}
+              getStudyBlockOutcome={getStudyBlockOutcome}
               studyBlockOutcomesLoading={studyBlockOutcomesLoading}
               onSetStudyBlockOutcome={onSetStudyBlockOutcome}
             />
@@ -1439,6 +1449,7 @@ export function CalendarView({
                 deletingId={deletingId}
                 onCreateEvent={() => handleCreateFromDate(selectedDate)}
                 studyBlockOutcomes={studyBlockOutcomes}
+                getStudyBlockOutcome={getStudyBlockOutcome}
                 studyBlockOutcomesLoading={studyBlockOutcomesLoading}
                 onSetStudyBlockOutcome={onSetStudyBlockOutcome}
               />
@@ -1501,12 +1512,17 @@ export function CalendarView({
                         >
                           <div className="flex items-start justify-between gap-4">
                             <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <h4 className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                                  {event.summary || 'Untitled event'}
-                                </h4>
-                                {studyBlockOutcomes[event.id] && <OutcomeBadge status={studyBlockOutcomes[event.id].status} />}
-                              </div>
+                              {(() => {
+                                const currentOutcome = getStudyBlockOutcome(event);
+                                return (
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                                      {event.summary || 'Untitled event'}
+                                    </h4>
+                                    {currentOutcome && <OutcomeBadge status={currentOutcome.status} />}
+                                  </div>
+                                );
+                              })()}
                               <p className="mt-1 text-sm text-[var(--text-secondary)]">
                                 {getEventStartLabel(event.start)}
                               </p>

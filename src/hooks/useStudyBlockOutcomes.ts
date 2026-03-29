@@ -208,7 +208,16 @@ export function useStudyBlockOutcomes(userId: string) {
       updatedAt: now,
     };
 
-    const merged = [next, ...outcomes.filter(item => item.eventId !== event.id)].sort(
+    const previousOutcomes = outcomes;
+    const nextMatchKey = buildOutcomeMatchKeyFromOutcome(next);
+    const merged = [
+      next,
+      ...outcomes.filter(item => (
+        item.id !== next.id &&
+        item.eventId !== event.id &&
+        buildOutcomeMatchKeyFromOutcome(item) !== nextMatchKey
+      )),
+    ].sort(
       (a, b) => b.updatedAt.localeCompare(a.updatedAt),
     );
     setOutcomes(merged);
@@ -220,17 +229,18 @@ export function useStudyBlockOutcomes(userId: string) {
 
     const { error } = await supabase.from('study_block_outcomes').upsert(
       {
+        id: next.id,
         user_id: userId,
         event_id: next.eventId,
         calendar_id: next.calendarId,
         title: next.title,
         date_key: next.dateKey,
         status: next.status,
-        notes: next.notes || null,
+        notes: next.notes,
         created_at: next.createdAt,
         updated_at: next.updatedAt,
       },
-      { onConflict: 'user_id,event_id' },
+      { onConflict: 'id' },
     );
 
     if (error) {
@@ -238,8 +248,10 @@ export function useStudyBlockOutcomes(userId: string) {
         setRemoteAvailable(false);
         return true;
       }
+      setOutcomes(previousOutcomes);
+      saveToStorage(userId, previousOutcomes);
       console.warn('Failed to save study block outcome to Supabase:', error);
-      return true;
+      return false;
     }
 
     return true;

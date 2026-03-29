@@ -3,6 +3,7 @@ import { LogOut, Menu, Search, CheckCircle2, AlertCircle, X, Sparkles, CheckChec
 import { User } from '@supabase/supabase-js';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { View } from '../types';
+import { cn } from '../utils/cn';
 import { useStore } from '../hooks/useStore';
 import { useDeadlines } from '../hooks/useDeadlines';
 import { useCanvas } from '../hooks/useCanvas';
@@ -670,11 +671,14 @@ export function AppShell({ user }: AppShellProps) {
           </button>
 
           <div className="flex-1" />
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               ref={habitsButtonRef}
               onClick={() => setHabitsOpen(prev => !prev)}
-              className={`flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:border-[var(--border-strong)] hover:shadow-md ${habitsOpen ? 'border-[var(--border-strong)]' : ''}`}
+              className={cn(
+                'flex items-center gap-2 rounded-2xl border bg-[var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:border-[var(--border-strong)]',
+                habitsOpen ? 'border-[var(--border-strong)]' : 'border-[var(--border-soft)]'
+              )}
               style={{ color: 'var(--text-secondary)' }}
               title="Routines"
             >
@@ -683,7 +687,7 @@ export function AppShell({ user }: AppShellProps) {
             </button>
             <button
               onClick={() => setAiOpen(true)}
-              className="flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:border-[var(--accent)] hover:shadow-md"
+              className="flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:border-[var(--accent)]"
               style={{ color: 'var(--accent)' }}
               title="AI Assistant"
             >
@@ -691,15 +695,10 @@ export function AppShell({ user }: AppShellProps) {
               <span className="hidden sm:inline text-xs font-medium">AI</span>
             </button>
             <ThemeSwitcher />
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-medium text-[var(--text-primary)]">
-                {user.user_metadata.full_name || user.email || 'TaskFlow user'}
-              </p>
-              <p className="text-xs text-[var(--text-faint)]">{user.email}</p>
-            </div>
             <button
               onClick={handleSignOut}
               className="flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+              title="Sign out"
             >
               <LogOut size={16} />
               <span className="hidden sm:inline">Log out</span>
@@ -928,24 +927,28 @@ export function AppShell({ user }: AppShellProps) {
         {toasts.map(toast => (
           <div
             key={toast.id}
-            className="pointer-events-auto overflow-hidden rounded-2xl border shadow-xl backdrop-blur"
-            style={{
-              borderColor: toast.tone === 'error' ? 'rgba(248,113,113,0.2)' : toast.tone === 'success' ? 'rgba(52,211,153,0.2)' : 'rgba(99,102,241,0.2)',
-              backgroundColor: toast.tone === 'error' ? 'rgba(69,10,10,0.88)' : toast.tone === 'success' ? 'rgba(6,47,32,0.9)' : 'rgba(24,24,39,0.94)',
-            }}
+            className={cn(
+              'pointer-events-auto overflow-hidden rounded-2xl border shadow-xl backdrop-blur-lg',
+              toast.tone === 'error'
+                ? 'border-red-500/20 bg-red-500/10'
+                : toast.tone === 'success'
+                  ? 'border-emerald-500/20 bg-emerald-500/10'
+                  : 'border-[var(--accent)]/20 bg-[var(--accent-soft)]'
+            )}
+            style={{ backgroundColor: 'var(--surface-elevated)' }}
           >
             <div className="flex items-start gap-3 px-4 py-3 text-sm">
               <div className="mt-0.5 shrink-0">
-                {toast.tone === 'error' ? <AlertCircle size={16} className="text-rose-200" /> : <CheckCircle2 size={16} className={toast.tone === 'success' ? 'text-emerald-200' : 'text-indigo-200'} />}
+                {toast.tone === 'error' ? <AlertCircle size={16} className="text-red-400" /> : <CheckCircle2 size={16} className={toast.tone === 'success' ? 'text-emerald-400' : 'text-[var(--accent)]'} />}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-white">{toast.title}</div>
-                {toast.message && <div className="mt-0.5 text-xs text-white/75">{toast.message}</div>}
+                <div className="font-medium text-[var(--text-primary)]">{toast.title}</div>
+                {toast.message && <div className="mt-0.5 text-xs text-[var(--text-muted)]">{toast.message}</div>}
               </div>
               <button
                 type="button"
                 onClick={() => dismissToast(toast.id)}
-                className="rounded-full p-1 text-white/60 transition hover:bg-white/10 hover:text-white"
+                className="rounded-full p-1 text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
               >
                 <X size={14} />
               </button>

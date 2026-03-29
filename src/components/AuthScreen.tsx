@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { LoaderCircle, LockKeyhole, Mail, Rocket } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { ThemeSwitcher } from './ThemeSwitcher';
@@ -15,19 +15,10 @@ export function AuthScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
 
-  const title = useMemo(
-    () => (mode === 'sign-in' ? 'Sign in to TaskFlow' : 'Create your TaskFlow account'),
-    [mode]
-  );
-
-  const subtitle = useMemo(
-    () => (
-      mode === 'sign-in'
-        ? 'Use your email and password to access your workspace.'
-        : 'Create an account so your workspace can move beyond a single browser.'
-    ),
-    [mode]
-  );
+  const title = mode === 'sign-in' ? 'Sign in to TaskFlow' : 'Create your TaskFlow account';
+  const subtitle = mode === 'sign-in'
+    ? 'Use your email and password to access your workspace.'
+    : 'Create an account so your workspace can move beyond a single browser.';
 
   const handlePasswordReset = async () => {
     if (!supabase) {
@@ -137,7 +128,7 @@ export function AuthScreen() {
           </div>
 
           {!isSupabaseConfigured && (
-            <div className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">
+            <div className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-600 dark:text-amber-200">
               Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to your Vercel and local `.env` before authentication will work.
             </div>
           )}
@@ -192,13 +183,13 @@ export function AuthScreen() {
             </label>
 
             {error && (
-              <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-3 text-sm text-rose-100">
+              <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-3 text-sm text-rose-600 dark:text-rose-200">
                 {error}
               </div>
             )}
 
             {message && (
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-100">
+              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-600 dark:text-emerald-200">
                 {message}
               </div>
             )}

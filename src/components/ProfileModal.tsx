@@ -290,7 +290,7 @@ export function ProfileModal({
     { id: 'data', label: 'Data' },
   ];
 
-  const testingModeEnabled = !aiLearningEnabled;
+  // Toggle controls "AI learning" directly (on = learning from your actions)
   const preferenceCards: { id: BehaviorLearningSeedPreset; title: string; subtitle: string; icon: typeof Sunrise }[] = [
     { id: 'early-bird', title: 'Early bird', subtitle: '6:00 AM to 2:00 PM', icon: Sunrise },
     { id: 'normal-grinder', title: 'Normal grinder', subtitle: '2:00 PM to 8:00 PM', icon: Sunset },
@@ -620,25 +620,25 @@ export function ProfileModal({
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold text-[var(--text-primary)]">AI testing mode</h3>
+                      <h3 className="text-sm font-semibold text-[var(--text-primary)]">AI behavior learning</h3>
                       <p className="mt-1 text-xs text-[var(--text-faint)]">
-                        Keep this on while you experiment so AI actions do not affect learning.
+                        When enabled, the AI learns from your actions to give better suggestions. Turn off while testing.
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => onAiLearningEnabledChange(!aiLearningEnabled)}
-                      aria-pressed={testingModeEnabled}
+                      aria-pressed={aiLearningEnabled}
                       className={cn(
                         'relative h-[24px] w-[42px] shrink-0 rounded-full transition-colors',
-                        testingModeEnabled ? 'bg-amber-400' : 'bg-[var(--text-faint)]/30'
+                        aiLearningEnabled ? 'bg-emerald-400' : 'bg-[var(--text-faint)]/30'
                       )}
-                      title={testingModeEnabled ? 'Testing mode is on' : 'Testing mode is off'}
+                      title={aiLearningEnabled ? 'Learning is on' : 'Learning is off (testing mode)'}
                     >
                       <span
                         className={cn(
                           'absolute top-[2px] left-[2px] h-[20px] w-[20px] rounded-full bg-white shadow-sm transition-transform',
-                          testingModeEnabled ? 'translate-x-[18px]' : 'translate-x-0'
+                          aiLearningEnabled ? 'translate-x-[18px]' : 'translate-x-0'
                         )}
                       />
                     </button>

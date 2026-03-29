@@ -14,7 +14,7 @@ interface ProjectListProps {
   onOpenDeadlines?: (projectId: string) => void;
 }
 
-type CourseSort = 'urgency' | 'alphabetical' | 'next-deadline';
+type CourseSort = 'urgency' | 'alphabetical';
 
 function startOfToday() {
   const now = new Date();
@@ -70,7 +70,6 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
 
     withMeta.sort((a, b) => {
       if (sort === 'alphabetical') return a.project.name.localeCompare(b.project.name);
-      if (sort === 'next-deadline') return a.urgency - b.urgency;
       return a.urgency - b.urgency || a.project.name.localeCompare(b.project.name);
     });
 
@@ -113,7 +112,6 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
           >
             <option value="urgency">Sort by urgency</option>
             <option value="alphabetical">Sort alphabetically</option>
-            <option value="next-deadline">Sort by next deadline</option>
           </select>
         </div>
         <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[var(--text-faint)]">
@@ -178,8 +176,6 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
             .filter(d => d.projectId === project.id)
             .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || (a.dueTime ?? '').localeCompare(b.dueTime ?? ''));
           const done = projectTasks.filter(t => t.status === 'done').length;
-          const inProgress = projectTasks.filter(t => t.status === 'in-progress').length;
-          const todo = projectTasks.filter(t => t.status === 'todo').length;
           const progress = projectTasks.length > 0 ? Math.round((done / projectTasks.length) * 100) : 0;
           const activeDeadlines = projectDeadlines.filter(d => d.status !== 'done' && d.status !== 'missed');
           const upcomingDeadlines = activeDeadlines.filter(d => deadlineDate(d) >= today);
@@ -220,78 +216,32 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
                 </button>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-[var(--text-faint)]">
-                <span className="rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-1">
-                  {projectTasks.length} tasks
-                </span>
-                <span className="rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-1">
-                  {activeDeadlines.length} active deadlines
-                </span>
-                <span className="rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-1">
-                  {projectDeadlines.length} total deadlines
-                </span>
-              </div>
-
-              <div className="mt-5">
+              <div className="mt-4">
                 <div className="mb-2 flex justify-between text-xs text-[var(--text-faint)]">
-                  <span>Progress</span>
+                  <span>{done}/{projectTasks.length} tasks done</span>
                   <span>{progress}%</span>
                 </div>
-                <div className="h-2 w-full rounded-full bg-[var(--surface-muted)]">
+                <div className="h-1.5 w-full rounded-full bg-[var(--surface-muted)]">
                   <div
-                    className="h-2 rounded-full transition-all"
+                    className="h-1.5 rounded-full transition-all"
                     style={{ width: `${progress}%`, backgroundColor: project.color }}
                   />
                 </div>
               </div>
 
-              <div className="mt-4 flex gap-3 border-t border-[var(--border-soft)] pt-3">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-[var(--text-faint)]" />
-                  <span className="text-xs text-[var(--text-faint)]">{todo} todo</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-blue-400" />
-                  <span className="text-xs text-[var(--text-faint)]">{inProgress} active</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span className="text-xs text-[var(--text-faint)]">{done} done</span>
-                </div>
-              </div>
-
-              <div className="mt-5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)]">
-                    <Target size={13} />
-                    Deadline Snapshot
-                  </div>
-                  <span className="text-[10px] text-[var(--text-faint)]">
-                    {projectDeadlines.length} total
+              <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-faint)]">
+                {activeDeadlines.length > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Target size={11} />
+                    {activeDeadlines.length} active deadline{activeDeadlines.length !== 1 ? 's' : ''}
                   </span>
-                </div>
-
-                <div className="mt-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-3">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-faint)]">Next deadline</div>
-                  {nextDeadline ? (
-                    <div className="mt-1.5">
-                      <div className="text-sm font-medium text-[var(--text-primary)]">{nextDeadline.title}</div>
-                      <div className="mt-0.5 text-xs text-[var(--text-faint)]">
-                        {new Date(`${nextDeadline.dueDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        {nextDeadline.dueTime ? ` · ${nextDeadline.dueTime}` : ''}
-                      </div>
-                    </div>
-                  ) : projectDeadlines.length > 0 ? (
-                    <div className="mt-1.5 text-xs text-[var(--text-faint)]">No active deadlines right now.</div>
-                  ) : (
-                    <div className="mt-1.5 text-xs text-[var(--text-faint)]">No deadlines for this course yet.</div>
-                  )}
-                </div>
+                )}
+                {nextDeadline && (
+                  <span>
+                    Next: {new Date(`${nextDeadline.dueDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                )}
               </div>
-
-              <p className="mt-3 text-[10px] text-[var(--text-faint)]">
-                Created {new Date(project.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-              </p>
             </div>
           );
         })}
@@ -299,17 +249,16 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
         {projects.length === 0 && (
           <div className="col-span-full flex flex-col items-center justify-center rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] py-16">
             <FolderOpen size={40} className="mb-3 text-[var(--text-faint)]" />
-            <p className="text-sm text-[var(--text-muted)]">No projects yet</p>
-            <p className="mt-1 text-xs text-[var(--text-faint)]">Create your first project to get started</p>
+            <p className="text-sm text-[var(--text-muted)]">No courses yet</p>
+            <p className="mt-1 text-xs text-[var(--text-faint)]">Create your first course to get started</p>
+          </div>
+        )}
+        {projects.length > 0 && visibleProjects.length === 0 && (
+          <div className="col-span-full rounded-2xl border border-dashed border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
+            No courses match your search.
           </div>
         )}
       </div>
-
-      {visibleProjects.length === 0 && (
-        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
-          No courses match your search yet.
-        </div>
-      )}
 
       {selectedProject && (
         <CourseDetailModal

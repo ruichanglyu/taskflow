@@ -43,23 +43,17 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail,
         style={{ boxShadow: '24px 0 80px var(--shadow-color)' }}
       >
         {/* Logo */}
-        <div className="border-b border-[var(--border-soft)] px-6 py-6">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--surface-muted)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-[var(--text-faint)]">
-              Focus OS
+        <div className="border-b border-[var(--border-soft)] px-6 py-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl shadow-lg" style={{ backgroundImage: 'var(--sidebar-gradient)', boxShadow: '0 12px 32px var(--glow-accent)' }}>
+                <Zap size={18} className="text-white" />
+              </div>
+              <span className="text-lg font-bold tracking-tight text-[var(--text-primary)]">TaskFlow</span>
             </div>
             <button onClick={onClose} className="lg:hidden text-[var(--text-muted)] hover:text-[var(--text-primary)]">
               <X size={20} />
             </button>
-          </div>
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl shadow-lg" style={{ backgroundImage: 'var(--sidebar-gradient)', boxShadow: '0 12px 32px var(--glow-accent)' }}>
-              <Zap size={18} className="text-white" />
-            </div>
-            <div>
-              <span className="text-lg font-bold tracking-tight text-[var(--text-primary)]">TaskFlow</span>
-              <p className="text-xs text-[var(--text-faint)]">School, schedule, training</p>
-            </div>
           </div>
         </div>
 
@@ -80,7 +74,7 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail,
               <span className="flex items-center gap-3">
                 <span
                   className={cn(
-                    'flex h-10 w-10 items-center justify-center rounded-xl border transition-all',
+                    'flex h-9 w-9 items-center justify-center rounded-xl border transition-all',
                     currentView === item.view
                       ? 'border-transparent text-[var(--accent-contrast)]'
                       : 'border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-faint)] group-hover:text-[var(--text-primary)]'
@@ -89,18 +83,7 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail,
                 >
                   {item.icon}
                 </span>
-                <span className="flex flex-col items-start">
-                  <span>{item.label}</span>
-                  <span className="text-[11px] font-normal text-[var(--text-faint)]">
-                    {item.view === 'dashboard' && 'What matters now'}
-                    {item.view === 'deadlines' && 'Due dates and exams'}
-                    {item.view === 'tasks' && 'Current execution'}
-                    {item.view === 'projects' && 'Course hubs'}
-                    {item.view === 'calendar' && 'Time and events'}
-                    {item.view === 'timeline' && 'Workload horizon'}
-                    {item.view === 'gym' && 'Training and sessions'}
-                  </span>
-                </span>
+                {item.label}
               </span>
             </button>
           ))}
@@ -113,13 +96,10 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail,
             className="flex w-full items-center justify-between rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-3 text-sm font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
           >
             <span className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)]">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)]">
                 <GraduationCap size={20} />
               </span>
-              <span className="flex flex-col items-start">
-                <span>Canvas</span>
-                <span className="text-[11px] font-normal text-[var(--text-faint)]">Sync classes and deadlines</span>
-              </span>
+              Canvas
             </span>
             <span className="ml-auto">
               {canvasConnected ? (

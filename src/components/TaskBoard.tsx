@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Search, Filter, Pencil, MessageSquare, Target, ListTodo, Clock3, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Search, Filter, Pencil, MessageSquare, Target } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Task, Project, Deadline, TaskStatus, Priority, Recurrence } from '../types';
 import { cn } from '../utils/cn';
@@ -24,9 +24,9 @@ interface TaskBoardProps {
 }
 
 const statusColumns: { status: TaskStatus; label: string; dotColor: string }[] = [
-  { status: 'todo', label: 'To Do', color: 'border-[var(--border-strong)]', dotColor: 'bg-[var(--text-faint)]' },
-  { status: 'in-progress', label: 'In Progress', color: 'border-blue-600', dotColor: 'bg-blue-400' },
-  { status: 'done', label: 'Done', color: 'border-emerald-600', dotColor: 'bg-emerald-400' },
+  { status: 'todo', label: 'To Do', dotColor: 'bg-[var(--text-faint)]' },
+  { status: 'in-progress', label: 'In Progress', dotColor: 'bg-blue-400' },
+  { status: 'done', label: 'Done', dotColor: 'bg-emerald-400' },
 ];
 
 const priorityBadge = (p: Priority) => {
@@ -40,14 +40,14 @@ function TaskCard({
   projects,
   deadline,
   onEdit,
-  onDelete,
+  onRequestDelete,
   onOpenDeadline,
 }: {
   task: Task;
   projects: Project[];
   deadline?: Deadline;
   onEdit: (task: Task) => void;
-  onDelete: (id: string) => void;
+  onRequestDelete: (id: string) => void;
   onOpenDeadline?: (deadlineId: string) => void;
 }) {
   const project = projects.find(p => p.id === task.projectId);
@@ -71,7 +71,7 @@ function TaskCard({
             <Pencil size={13} />
           </button>
           <button
-            onClick={() => onDelete(task.id)}
+            onClick={() => onRequestDelete(task.id)}
             className="p-1 text-[var(--text-faint)] opacity-100 transition-opacity hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
             title="Delete task"
           >
@@ -143,13 +143,10 @@ function TaskCard({
 export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilter = 'all', onAddTask, onUpdateStatus, onUpdateTask, onDeleteTask, onAddSubtask, onToggleSubtask, onDeleteSubtask, onAddComment, onDeleteComment, onOpenDeadline }: TaskBoardProps) {
   const [showModal, setShowModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterPriority, setFilterPriority] = useState<Priority | 'all'>('all');
   const [filterProject, setFilterProject] = useState<string>(initialProjectFilter);
-  const totalTasks = tasks.length;
-  const openTasks = tasks.filter(task => task.status !== 'done').length;
-  const completedTasks = tasks.filter(task => task.status === 'done').length;
-  const overdueTasks = tasks.filter(task => task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'done').length;
 
   useEffect(() => {
     setFilterProject(initialProjectFilter);
@@ -175,40 +172,17 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-5 shadow-sm sm:px-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Tasks</h1>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[420px]">
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-faint)]">Total</p>
-                <ListTodo size={14} className="text-indigo-400" />
-              </div>
-              <p className="mt-1 text-2xl font-bold text-[var(--text-primary)]">{totalTasks}</p>
-            </div>
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-faint)]">Open</p>
-                <Clock3 size={14} className="text-blue-400" />
-              </div>
-              <p className="mt-1 text-2xl font-bold text-blue-400">{openTasks}</p>
-            </div>
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-faint)]">Done</p>
-                <CheckCircle2 size={14} className="text-emerald-400" />
-              </div>
-              <p className="mt-1 text-2xl font-bold text-emerald-400">{completedTasks}</p>
-            </div>
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--text-faint)]">Overdue</p>
-                <AlertCircle size={14} className="text-red-400" />
-              </div>
-              <p className="mt-1 text-2xl font-bold text-red-400">{overdueTasks}</p>
-            </div>
+      <div className="overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-5 shadow-sm sm:px-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Tasks</h1>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-faint)]">
+            <span><span className="text-sm font-semibold text-[var(--text-primary)]">{filteredTasks.length}</span> shown</span>
+            <span className="h-3 w-px bg-[var(--border-soft)]" />
+            <span><span className="font-semibold text-[var(--text-secondary)]">{tasks.filter(t => t.status !== 'done').length}</span> open</span>
+            <span><span className="font-semibold text-emerald-400">{tasks.filter(t => t.status === 'done').length}</span> done</span>
+            {tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'done').length > 0 && (
+              <span><span className="font-semibold text-red-400">{tasks.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'done').length}</span> overdue</span>
+            )}
           </div>
         </div>
       </div>
@@ -302,7 +276,7 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
                                 projects={projects}
                                 deadline={deadlines.find(d => d.linkedTaskIds.includes(task.id))}
                                 onEdit={setEditingTask}
-                                onDelete={onDeleteTask}
+                                onRequestDelete={setConfirmDeleteId}
                                 onOpenDeadline={onOpenDeadline}
                               />
                             </div>
@@ -347,6 +321,35 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
           onDeleteComment={onDeleteComment}
           onClose={() => setEditingTask(null)}
         />
+      )}
+
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4" onClick={() => setConfirmDeleteId(null)}>
+          <div className="w-full max-w-sm rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4">
+              <h3 className="text-base font-semibold text-[var(--text-primary)]">Delete task?</h3>
+              <p className="mt-1.5 text-sm text-[var(--text-muted)]">
+                This will permanently remove "<span className="font-medium text-[var(--text-primary)]">{tasks.find(t => t.id === confirmDeleteId)?.title}</span>".
+              </p>
+            </div>
+            <div className="flex gap-3 border-t border-[var(--border-soft)] px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteId(null)}
+                className="flex-1 rounded-xl border border-[var(--border-soft)] py-2.5 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => { onDeleteTask(confirmDeleteId); setConfirmDeleteId(null); }}
+                className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-medium text-white transition hover:bg-red-400"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

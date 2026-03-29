@@ -30,13 +30,22 @@ export function HabitsPanel({
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
-  // Position panel below anchor button
+  // Position panel below anchor button — recalculate on scroll/resize
   const [pos, setPos] = useState({ top: 60, right: 16 });
   useEffect(() => {
-    if (anchorRef.current) {
-      const rect = anchorRef.current.getBoundingClientRect();
-      setPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
-    }
+    const updatePos = () => {
+      if (anchorRef.current) {
+        const rect = anchorRef.current.getBoundingClientRect();
+        setPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+      }
+    };
+    updatePos();
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
+    return () => {
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
+    };
   }, [anchorRef]);
 
   // Close on outside click

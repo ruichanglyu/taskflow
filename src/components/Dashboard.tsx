@@ -158,7 +158,7 @@ export function Dashboard({
 
   const recentTasks = [...tasks].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
 
-  // Tasks completed per day over last 7 days
+  // Tasks created per day over last 7 days
   const weeklyChart = useMemo(() => {
     const days: { label: string; count: number }[] = [];
     for (let i = 6; i >= 0; i--) {
@@ -166,7 +166,6 @@ export function Dashboard({
       d.setDate(d.getDate() - i);
       const dayStr = d.toISOString().slice(0, 10);
       const label = d.toLocaleDateString('en-US', { weekday: 'short' });
-      // Count tasks created on this day (as a proxy for activity)
       const count = tasks.filter(t => {
         const created = t.createdAt.slice(0, 10);
         return created === dayStr;
@@ -186,15 +185,6 @@ export function Dashboard({
       medium: active.filter(t => t.priority === 'medium').length,
       low: active.filter(t => t.priority === 'low').length,
     };
-  }, [tasks]);
-
-  // Upcoming deadlines
-  const upcoming = useMemo(() => {
-    const now = new Date();
-    return tasks
-      .filter(t => t.dueDate && t.status !== 'done' && new Date(t.dueDate) >= now)
-      .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())
-      .slice(0, 5);
   }, [tasks]);
 
   const statusColor = (status: string) => {
@@ -365,7 +355,7 @@ export function Dashboard({
         <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 size={18} className="text-indigo-400" />
-            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Weekly Activity</h3>
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Tasks Created This Week</h3>
           </div>
           <div className="flex items-end gap-2 h-32 mt-4">
             {weeklyChart.map((day, i) => (
@@ -449,73 +439,48 @@ export function Dashboard({
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Upcoming Deadlines</h3>
           </div>
           <div className="space-y-3">
-            {deadlines.length > 0 ? (
-              (() => {
-                const now = new Date();
-                now.setHours(0, 0, 0, 0);
-                const upcomingDl = deadlines
-                  .filter(d => d.status !== 'done' && d.status !== 'missed' && new Date(d.dueDate + 'T00:00:00') >= now)
-                  .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-                  .slice(0, 5);
-                const overdueDl = deadlines
-                  .filter(d => d.status !== 'done' && d.status !== 'missed' && new Date(d.dueDate + 'T00:00:00') < now);
+            {(() => {
+              const now = new Date();
+              now.setHours(0, 0, 0, 0);
+              const upcomingDl = deadlines
+                .filter(d => d.status !== 'done' && d.status !== 'missed' && new Date(d.dueDate + 'T00:00:00') >= now)
+                .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+                .slice(0, 5);
+              const overdueDl = deadlines
+                .filter(d => d.status !== 'done' && d.status !== 'missed' && new Date(d.dueDate + 'T00:00:00') < now);
 
-                return (
-                  <>
-                    {overdueDl.length > 0 && (
-                      <div className="rounded-md bg-red-400/10 px-3 py-2 mb-2">
-                        <span className="text-xs font-medium text-red-400">{overdueDl.length} overdue deadline{overdueDl.length !== 1 ? 's' : ''}</span>
-                      </div>
-                    )}
-                    {upcomingDl.map(dl => {
-                      const due = new Date(dl.dueDate + 'T00:00:00');
-                      const daysLeft = Math.ceil((due.getTime() - now.getTime()) / 86400000);
-                      const project = projects.find(p => p.id === dl.projectId);
-                      return (
-                        <div key={dl.id} className="flex items-center justify-between border-b border-[var(--border-soft)] py-2 last:border-0">
-                          <div className="flex items-center gap-3 min-w-0">
-                            {project && <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: project.color }} />}
-                            <div className="min-w-0">
-                              <span className="truncate text-sm text-[var(--text-secondary)] block">{dl.title}</span>
-                              <span className="text-[10px] text-[var(--text-faint)] uppercase">{dl.type}</span>
-                            </div>
-                          </div>
-                          <span className={cn('text-xs font-medium whitespace-nowrap', daysLeft <= 1 ? 'text-red-400' : daysLeft <= 3 ? 'text-yellow-400' : 'text-[var(--text-faint)]')}>
-                            {daysLeft === 0 ? 'Today' : daysLeft === 1 ? 'Tomorrow' : `${daysLeft}d left`}
-                          </span>
-                        </div>
-                      );
-                    })}
-                    {upcomingDl.length === 0 && overdueDl.length === 0 && (
-                      <p className="py-4 text-center text-sm text-[var(--text-faint)]">No upcoming deadlines</p>
-                    )}
-                  </>
-                );
-              })()
-            ) : (
-              // Fallback: show task-based upcoming if no deadlines exist yet
-              <>
-                {upcoming.map(task => {
-                  const due = new Date(task.dueDate!);
-                  const daysLeft = Math.ceil((due.getTime() - Date.now()) / 86400000);
-                  const project = projects.find(p => p.id === task.projectId);
-                  return (
-                    <div key={task.id} className="flex items-center justify-between border-b border-[var(--border-soft)] py-2 last:border-0">
-                      <div className="flex items-center gap-3 min-w-0">
-                        {project && <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: project.color }} />}
-                        <span className="truncate text-sm text-[var(--text-secondary)]">{task.title}</span>
-                      </div>
-                      <span className={cn('text-xs font-medium whitespace-nowrap', daysLeft <= 1 ? 'text-red-400' : daysLeft <= 3 ? 'text-yellow-400' : 'text-[var(--text-faint)]')}>
-                        {daysLeft === 0 ? 'Today' : daysLeft === 1 ? 'Tomorrow' : `${daysLeft}d left`}
-                      </span>
+              return (
+                <>
+                  {overdueDl.length > 0 && (
+                    <div className="rounded-lg bg-red-400/10 px-3 py-2 mb-2">
+                      <span className="text-xs font-medium text-red-400">{overdueDl.length} overdue deadline{overdueDl.length !== 1 ? 's' : ''}</span>
                     </div>
-                  );
-                })}
-                {upcoming.length === 0 && (
-                  <p className="py-4 text-center text-sm text-[var(--text-faint)]">No upcoming deadlines</p>
-                )}
-              </>
-            )}
+                  )}
+                  {upcomingDl.map(dl => {
+                    const due = new Date(dl.dueDate + 'T00:00:00');
+                    const daysLeft = Math.ceil((due.getTime() - now.getTime()) / 86400000);
+                    const project = projects.find(p => p.id === dl.projectId);
+                    return (
+                      <div key={dl.id} className="flex items-center justify-between border-b border-[var(--border-soft)] py-2 last:border-0">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {project && <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: project.color }} />}
+                          <div className="min-w-0">
+                            <span className="truncate text-sm text-[var(--text-secondary)] block">{dl.title}</span>
+                            <span className="text-[10px] text-[var(--text-faint)] uppercase">{dl.type}</span>
+                          </div>
+                        </div>
+                        <span className={cn('text-xs font-medium whitespace-nowrap', daysLeft <= 1 ? 'text-red-400' : daysLeft <= 3 ? 'text-yellow-400' : 'text-[var(--text-faint)]')}>
+                          {daysLeft === 0 ? 'Today' : daysLeft === 1 ? 'Tomorrow' : `${daysLeft}d left`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {upcomingDl.length === 0 && overdueDl.length === 0 && (
+                    <p className="py-4 text-center text-sm text-[var(--text-faint)]">No upcoming deadlines</p>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>

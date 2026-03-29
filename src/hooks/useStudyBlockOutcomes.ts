@@ -40,6 +40,36 @@ function eventDateKey(event: GoogleCalendarEvent) {
   return null;
 }
 
+function normalizeText(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function buildOutcomeMatchKey(params: {
+  dateKey: string;
+  title: string;
+  calendarId?: string | null;
+}) {
+  return `${params.dateKey}::${normalizeText(params.title)}::${params.calendarId ?? ''}`;
+}
+
+function buildOutcomeMatchKeyFromEvent(event: GoogleCalendarEvent) {
+  const dateKey = eventDateKey(event);
+  if (!event.id || !dateKey || !event.summary) return null;
+  return buildOutcomeMatchKey({
+    dateKey,
+    title: event.summary,
+    calendarId: event.calendarId ?? null,
+  });
+}
+
+function buildOutcomeMatchKeyFromOutcome(outcome: StudyBlockOutcome) {
+  return buildOutcomeMatchKey({
+    dateKey: outcome.dateKey,
+    title: outcome.title,
+    calendarId: outcome.calendarId,
+  });
+}
+
 function isMissingTableError(error: unknown) {
   return Boolean(
     error &&
@@ -138,6 +168,23 @@ export function useStudyBlockOutcomes(userId: string) {
     [outcomes],
   );
 
+  const outcomesByMatchKey = useMemo(
+    () =>
+      outcomes.reduce<Record<string, StudyBlockOutcome>>((acc, outcome) => {
+        acc[buildOutcomeMatchKeyFromOutcome(outcome)] = outcome;
+        return acc;
+      }, {}),
+    [outcomes],
+  );
+
+  const getOutcomeForEvent = useCallback((event: GoogleCalendarEvent) => {
+    if (!event.id) return undefined;
+    const direct = outcomesByEventId[event.id];
+    if (direct) return direct;
+    const matchKey = buildOutcomeMatchKeyFromEvent(event);
+    return matchKey ? outcomesByMatchKey[matchKey] : undefined;
+  }, [outcomesByEventId, outcomesByMatchKey]);
+
   const setOutcome = useCallback(async (
     event: GoogleCalendarEvent,
     status: StudyBlockOutcomeStatus,
@@ -147,7 +194,8 @@ export function useStudyBlockOutcomes(userId: string) {
     const dateKey = eventDateKey(event);
     if (!dateKey) return false;
 
-    const existing = outcomesByEventId[event.id];
+    const previousOutcomes = outcomes;
+    const existing = getOutcomeForEvent(event);
     const now = new Date().toISOString();
     const next: StudyBlockOutcome = {
       id: existing?.id ?? crypto.randomUUID(),
@@ -191,16 +239,20 @@ export function useStudyBlockOutcomes(userId: string) {
         setRemoteAvailable(false);
         return true;
       }
+      setOutcomes(previousOutcomes);
+      saveToStorage(userId, previousOutcomes);
       console.warn('Failed to save study block outcome to Supabase:', error);
       return false;
     }
 
     return true;
-  }, [outcomes, outcomesByEventId, remoteAvailable, userId]);
+  }, [getOutcomeForEvent, outcomes, remoteAvailable, userId]);
 
   return {
     outcomes,
     outcomesByEventId,
+    outcomesByMatchKey,
+    getOutcomeForEvent,
     isLoading,
     setOutcome,
   };

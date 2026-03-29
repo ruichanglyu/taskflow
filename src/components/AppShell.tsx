@@ -503,7 +503,7 @@ export function AppShell({ user }: AppShellProps) {
     event: Parameters<typeof studyBlockOutcomes.setOutcome>[0],
     status: StudyBlockOutcomeStatus,
   ) => {
-    const previousStatus = studyBlockOutcomes.outcomesByEventId[event.id]?.status;
+    const previousStatus = studyBlockOutcomes.getOutcomeForEvent(event)?.status;
     const ok = await studyBlockOutcomes.setOutcome(event, status);
     const start = event.start?.dateTime ? new Date(event.start.dateTime) : null;
     const end = event.end?.dateTime ? new Date(event.end.dateTime) : null;
@@ -733,6 +733,7 @@ export function AppShell({ user }: AppShellProps) {
               deadlines={deadlineStore.deadlines}
               calendarEvents={calendar.events}
               studyBlockOutcomes={studyBlockOutcomes.outcomesByEventId}
+              getStudyBlockOutcome={studyBlockOutcomes.getOutcomeForEvent}
               studyBlockOutcomesLoading={studyBlockOutcomes.isLoading}
               onSetStudyBlockOutcome={handleSetStudyBlockOutcome}
             />

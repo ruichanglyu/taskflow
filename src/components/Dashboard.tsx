@@ -11,6 +11,7 @@ interface DashboardProps {
   deadlines?: Deadline[];
   calendarEvents: GoogleCalendarEvent[];
   studyBlockOutcomes: Record<string, StudyBlockOutcome>;
+  getStudyBlockOutcome: (event: GoogleCalendarEvent) => StudyBlockOutcome | undefined;
   studyBlockOutcomesLoading: boolean;
   onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => Promise<boolean>;
 }
@@ -138,6 +139,7 @@ export function Dashboard({
   deadlines = [],
   calendarEvents,
   studyBlockOutcomes,
+  getStudyBlockOutcome,
   studyBlockOutcomesLoading,
   onSetStudyBlockOutcome,
 }: DashboardProps) {
@@ -214,7 +216,7 @@ export function Dashboard({
         if (!event.id) return false;
         if (!isStudyBlockLike(event.summary, event.calendarSummary)) return false;
         if (!hasEventEnded(event, now)) return false;
-        if (studyBlockOutcomes[event.id]) return false;
+        if (getStudyBlockOutcome(event)) return false;
         return true;
       })
       .sort((a, b) => {
@@ -226,7 +228,7 @@ export function Dashboard({
         return aStart - bStart;
       })
       .slice(0, 6);
-  }, [calendarEvents, studyBlockOutcomes]);
+  }, [calendarEvents, getStudyBlockOutcome]);
 
   const pendingTodayStudyReviewCount = useMemo(() => {
     const todayKey = new Date().toISOString().slice(0, 10);
@@ -293,7 +295,7 @@ export function Dashboard({
                         <h4 className="truncate text-sm font-medium text-[var(--text-primary)]">
                           {event.summary || 'Untitled event'}
                         </h4>
-                        {studyBlockOutcomes[event.id] && <OutcomeBadge status={studyBlockOutcomes[event.id].status} />}
+                        {getStudyBlockOutcome(event) && <OutcomeBadge status={getStudyBlockOutcome(event)!.status} />}
                       </div>
                       <p className="mt-1 text-xs text-[var(--text-muted)]">
                         {dateLabel} · {getEventTimeLabel(event.start)}

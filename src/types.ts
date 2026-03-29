@@ -6,6 +6,7 @@ export type DeadlineType = 'assignment' | 'exam' | 'quiz' | 'lab' | 'project' | 
 export type DeadlineSource = 'manual' | 'canvas_assignment' | 'canvas_quiz';
 export type View = 'dashboard' | 'tasks' | 'projects' | 'calendar' | 'timeline' | 'deadlines' | 'gym';
 export type WorkoutSessionStatus = 'in-progress' | 'completed' | 'abandoned';
+export type StudyBlockOutcomeStatus = 'completed' | 'partial' | 'skipped' | 'rescheduled';
 
 export interface Subtask {
   id: string;

@@ -27,6 +27,8 @@ import { migrateLegacyAIData } from '../hooks/useAI';
 import { useHabits } from '../hooks/useHabits';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import { useBehaviorLearning, type BehaviorLearningActionOptions } from '../hooks/useBehaviorLearning';
+import { useStudyBlockOutcomes } from '../hooks/useStudyBlockOutcomes';
+import type { StudyBlockOutcomeStatus } from '../types';
 
 interface AppShellProps {
   user: User;
@@ -85,6 +87,7 @@ export function AppShell({ user }: AppShellProps) {
   const gym = useGym(user.id);
   const calendar = useGoogleCalendar(user.id);
   const learning = useBehaviorLearning(user.id);
+  const studyBlockOutcomes = useStudyBlockOutcomes(user.id);
   const { requestPermission } = useNotifications(store.tasks);
   const habits = useHabits(user.id);
   const searchParams = new URLSearchParams(location.search);
@@ -496,6 +499,24 @@ export function AppShell({ user }: AppShellProps) {
     return ok;
   }, [learning, store]);
 
+  const handleSetStudyBlockOutcome = useCallback(async (
+    event: Parameters<typeof studyBlockOutcomes.setOutcome>[0],
+    status: StudyBlockOutcomeStatus,
+  ) => {
+    const previousStatus = studyBlockOutcomes.outcomesByEventId[event.id]?.status;
+    const ok = await studyBlockOutcomes.setOutcome(event, status);
+    if (ok && previousStatus !== status) {
+      learning.logStudyBlockOutcome({
+        title: event.summary ?? 'Untitled event',
+        calendarSummary: event.calendarSummary ?? null,
+        dateKey: event.start?.date ?? (event.start?.dateTime ? event.start.dateTime.slice(0, 10) : ''),
+        status,
+        options: { source: 'manual', learn: true },
+      });
+    }
+    return ok;
+  }, [learning, studyBlockOutcomes]);
+
   const handleDeleteProject = useCallback(async (id: string, options?: BehaviorLearningActionOptions) => {
     const currentProject = store.projects.find(item => item.id === id);
     await store.deleteProject(id);
@@ -752,7 +773,13 @@ export function AppShell({ user }: AppShellProps) {
             />
           )}
           {currentView === 'calendar' && (
-            <CalendarView calendar={calendarController} deadlines={deadlineStore.deadlines} />
+            <CalendarView
+              calendar={calendarController}
+              deadlines={deadlineStore.deadlines}
+              studyBlockOutcomes={studyBlockOutcomes.outcomesByEventId}
+              studyBlockOutcomesLoading={studyBlockOutcomes.isLoading}
+              onSetStudyBlockOutcome={handleSetStudyBlockOutcome}
+            />
           )}
           {currentView === 'timeline' && (
             <TimelineView

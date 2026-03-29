@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { GoogleCalendarEvent, NewGoogleCalendarEvent } from '../lib/googleCalendar';
 import { supabase } from '../lib/supabase';
+import type { StudyBlockOutcomeStatus } from '../types';
 
 type LearningSource = 'manual' | 'ai';
 type LearningAction = 'create' | 'reschedule' | 'delete';
@@ -1257,6 +1258,32 @@ export function useBehaviorLearning(userId: string) {
     });
   }, [recordAppAction, recordCalendarDelete]);
 
+  const logStudyBlockOutcome = useCallback((params: {
+    title: string;
+    calendarSummary: string | null;
+    dateKey: string;
+    status: StudyBlockOutcomeStatus;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    const actionByStatus: Record<StudyBlockOutcomeStatus, string> = {
+      completed: 'study-block-complete',
+      partial: 'study-block-partial',
+      skipped: 'study-block-skip',
+      rescheduled: 'study-block-reschedule',
+    };
+
+    recordAppAction(
+      'calendar',
+      actionByStatus[params.status],
+      params.title,
+      params.options,
+      [
+        params.calendarSummary ? `calendar:${params.calendarSummary}` : null,
+        `date:${params.dateKey}`,
+      ].filter(Boolean).join(' · '),
+    );
+  }, [recordAppAction]);
+
   const logDeadlineCreated = useCallback((params: {
     title: string;
     projectId: string | null;
@@ -1396,6 +1423,7 @@ export function useBehaviorLearning(userId: string) {
     logCalendarCreated,
     logCalendarUpdated,
     logCalendarDeleted,
+    logStudyBlockOutcome,
     logDeadlineCreated,
     logDeadlineUpdated,
     logDeadlineDeleted,

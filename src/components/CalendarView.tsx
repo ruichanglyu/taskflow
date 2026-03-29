@@ -6,8 +6,18 @@ import { CreateEventModal } from './CreateEventModal';
 import { CalendarGrid } from './CalendarGrid';
 import { cn } from '../utils/cn';
 import type { GoogleCalendarController } from '../hooks/useGoogleCalendar';
+import type { StudyBlockOutcome } from '../hooks/useStudyBlockOutcomes';
+import type { StudyBlockOutcomeStatus } from '../types';
 
 type CalendarViewMode = 'month' | 'week' | 'list';
+type StudyBlockOutcomeMap = Record<string, StudyBlockOutcome>;
+
+const STUDY_OUTCOME_OPTIONS: { status: StudyBlockOutcomeStatus; label: string }[] = [
+  { status: 'completed', label: 'Done' },
+  { status: 'partial', label: 'Partial' },
+  { status: 'skipped', label: 'Skipped' },
+  { status: 'rescheduled', label: 'Rescheduled' },
+];
 
 function parseCalendarViewMode(value: string | null): CalendarViewMode {
   return value === 'week' || value === 'list' || value === 'month' ? value : 'month';
@@ -127,10 +137,65 @@ function getEventSectionLabel(date?: { date?: string; dateTime?: string }) {
   return 'Later';
 }
 
+function normalizeText(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function normalizeCalendarSummary(value: string) {
+  return normalizeText(value).replace(/\s*\((primary|read-only|read only|owner)\)\s*$/i, '').trim();
+}
+
+function isStudyBlockLike(title?: string, calendarSummary?: string | null) {
+  const normalizedTitle = normalizeText(title ?? '');
+  const normalizedCalendar = normalizeCalendarSummary(calendarSummary ?? '');
+  return (
+    normalizedTitle.includes('study block') ||
+    normalizedCalendar.includes('study blocks') ||
+    normalizedCalendar.includes('exam prep')
+  );
+}
+
 function getEventDateKey(event: GoogleCalendarEvent): string | null {
   if (event.start?.date) return event.start.date;
   if (event.start?.dateTime) return event.start.dateTime.slice(0, 10);
   return null;
+}
+
+function hasEventEnded(event: GoogleCalendarEvent, now = new Date()) {
+  if (event.end?.dateTime) {
+    return new Date(event.end.dateTime).getTime() <= now.getTime();
+  }
+  if (event.end?.date) {
+    return new Date(`${event.end.date}T00:00:00`).getTime() <= now.getTime();
+  }
+  const dateKey = getEventDateKey(event);
+  if (!dateKey) return false;
+  return new Date(`${dateKey}T23:59:59`).getTime() <= now.getTime();
+}
+
+function getOutcomeTone(status: StudyBlockOutcomeStatus) {
+  switch (status) {
+    case 'completed':
+      return 'bg-emerald-500/12 text-emerald-300 border-emerald-500/20';
+    case 'partial':
+      return 'bg-amber-500/12 text-amber-300 border-amber-500/20';
+    case 'skipped':
+      return 'bg-rose-500/12 text-rose-300 border-rose-500/20';
+    case 'rescheduled':
+      return 'bg-sky-500/12 text-sky-300 border-sky-500/20';
+  }
+}
+
+function getOutcomeLabel(status: StudyBlockOutcomeStatus) {
+  return STUDY_OUTCOME_OPTIONS.find(option => option.status === status)?.label ?? status;
+}
+
+function OutcomeBadge({ status }: { status: StudyBlockOutcomeStatus }) {
+  return (
+    <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]', getOutcomeTone(status))}>
+      {getOutcomeLabel(status)}
+    </span>
+  );
 }
 
 function CalendarChecklist({
@@ -342,6 +407,9 @@ function CalendarMiniMonth({
 interface CalendarViewProps {
   calendar: GoogleCalendarController;
   deadlines?: import('../types').Deadline[];
+  studyBlockOutcomes: StudyBlockOutcomeMap;
+  studyBlockOutcomesLoading: boolean;
+  onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => Promise<boolean>;
 }
 
 function DayPanel({
@@ -352,6 +420,9 @@ function DayPanel({
   onEdit,
   deletingId,
   onCreateEvent,
+  studyBlockOutcomes,
+  studyBlockOutcomesLoading,
+  onSetStudyBlockOutcome,
 }: {
   dateStr: string;
   events: GoogleCalendarEvent[];
@@ -360,7 +431,12 @@ function DayPanel({
   onEdit: (event: GoogleCalendarEvent) => void;
   deletingId: string | null;
   onCreateEvent: () => void;
+  studyBlockOutcomes: StudyBlockOutcomeMap;
+  studyBlockOutcomesLoading: boolean;
+  onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => Promise<boolean>;
 }) {
+  const [savingOutcomeId, setSavingOutcomeId] = useState<string | null>(null);
+
   if (!dateStr) {
     return (
       <div className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
@@ -372,12 +448,30 @@ function DayPanel({
   }
 
   const dayDeadlines = deadlines.filter(d => d.dueDate === dateStr);
+  const reviewableStudyBlocks = events.filter(event => {
+    if (!isStudyBlockLike(event.summary, event.calendarSummary)) return false;
+    const eventDateKey = getEventDateKey(event);
+    if (eventDateKey !== dateStr) return false;
+    return hasEventEnded(event);
+  });
+  const futureStudyBlocks = events.filter(event => {
+    if (!isStudyBlockLike(event.summary, event.calendarSummary)) return false;
+    const eventDateKey = getEventDateKey(event);
+    if (eventDateKey !== dateStr) return false;
+    return !hasEventEnded(event);
+  });
   const dateLabel = new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
     year: 'numeric',
   });
+
+  const handleOutcomeClick = async (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => {
+    setSavingOutcomeId(event.id);
+    await onSetStudyBlockOutcome(event, status);
+    setSavingOutcomeId(current => (current === event.id ? null : current));
+  };
 
   return (
     <div className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
@@ -397,7 +491,87 @@ function DayPanel({
           No events this day
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
+          {(reviewableStudyBlocks.length > 0 || futureStudyBlocks.length > 0) && (
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3.5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-[var(--text-primary)]">Study review</h4>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    Mark what actually happened so future study suggestions can become more realistic.
+                  </p>
+                </div>
+                {studyBlockOutcomesLoading && (
+                  <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-faint)]">Loading</span>
+                )}
+              </div>
+
+              {reviewableStudyBlocks.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  {reviewableStudyBlocks.map(event => {
+                    const currentOutcome = studyBlockOutcomes[event.id];
+                    return (
+                      <div
+                        key={`review-${event.id}`}
+                        className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h5 className="truncate text-sm font-medium text-[var(--text-primary)]">
+                                {event.summary || 'Untitled event'}
+                              </h5>
+                              {currentOutcome && <OutcomeBadge status={currentOutcome.status} />}
+                            </div>
+                            <p className="mt-1 text-xs text-[var(--text-muted)]">
+                              {getEventTimeLabel(event.start)}
+                              {event.end?.dateTime ? ` - ${getEventTimeLabel(event.end)}` : ''}
+                              {event.calendarSummary ? ` · ${event.calendarSummary}` : ''}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {STUDY_OUTCOME_OPTIONS.map(option => {
+                            const selected = currentOutcome?.status === option.status;
+                            return (
+                              <button
+                                key={option.status}
+                                type="button"
+                                onClick={() => void handleOutcomeClick(event, option.status)}
+                                disabled={savingOutcomeId === event.id}
+                                className={cn(
+                                  'rounded-full border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
+                                  selected
+                                    ? getOutcomeTone(option.status)
+                                    : 'border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]',
+                                )}
+                              >
+                                {savingOutcomeId === event.id && selected ? 'Saving…' : option.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="mt-3 rounded-2xl border border-dashed border-[var(--border-soft)] px-3 py-4 text-xs text-[var(--text-faint)]">
+                  No study blocks are ready for review yet.
+                </div>
+              )}
+
+              {futureStudyBlocks.length > 0 && (
+                <p className="mt-3 text-xs text-[var(--text-faint)]">
+                  {futureStudyBlocks.length === 1
+                    ? 'One study block on this date can be reviewed after it ends.'
+                    : `${futureStudyBlocks.length} study blocks on this date can be reviewed after they end.`}
+                </p>
+              )}
+            </div>
+          )}
+
           {dayDeadlines.map(dl => (
             <div
               key={dl.id}
@@ -425,9 +599,12 @@ function DayPanel({
                 style={{ backgroundColor: event.calendarColor || '#818cf8' }}
               />
               <div className="min-w-0 flex-1">
-                <h4 className="text-sm font-medium text-[var(--text-primary)] truncate">
-                  {event.summary || 'Untitled event'}
-                </h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="truncate text-sm font-medium text-[var(--text-primary)]">
+                    {event.summary || 'Untitled event'}
+                  </h4>
+                  {studyBlockOutcomes[event.id] && <OutcomeBadge status={studyBlockOutcomes[event.id].status} />}
+                </div>
                 <p className="text-xs text-[var(--text-muted)]">
                   {getEventTimeLabel(event.start)}
                 </p>
@@ -867,7 +1044,13 @@ function WeekCalendarGrid({
   );
 }
 
-export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
+export function CalendarView({
+  calendar,
+  deadlines = [],
+  studyBlockOutcomes,
+  studyBlockOutcomesLoading,
+  onSetStudyBlockOutcome,
+}: CalendarViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const viewMode = useMemo<CalendarViewMode>(
     () => parseCalendarViewMode(searchParams.get('view')),
@@ -1197,6 +1380,9 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
               onDelete={id => void handleDelete(id)}
               deletingId={deletingId}
               onCreateEvent={() => handleCreateFromDate(selectedDate)}
+              studyBlockOutcomes={studyBlockOutcomes}
+              studyBlockOutcomesLoading={studyBlockOutcomesLoading}
+              onSetStudyBlockOutcome={onSetStudyBlockOutcome}
             />
           </div>
         </div>
@@ -1247,6 +1433,9 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
                 onDelete={id => void handleDelete(id)}
                 deletingId={deletingId}
                 onCreateEvent={() => handleCreateFromDate(selectedDate)}
+                studyBlockOutcomes={studyBlockOutcomes}
+                studyBlockOutcomesLoading={studyBlockOutcomesLoading}
+                onSetStudyBlockOutcome={onSetStudyBlockOutcome}
               />
             </div>
           </div>
@@ -1307,9 +1496,12 @@ export function CalendarView({ calendar, deadlines = [] }: CalendarViewProps) {
                         >
                           <div className="flex items-start justify-between gap-4">
                             <div className="min-w-0">
-                              <h4 className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                                {event.summary || 'Untitled event'}
-                              </h4>
+                              <div className="flex items-center gap-2">
+                                <h4 className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                                  {event.summary || 'Untitled event'}
+                                </h4>
+                                {studyBlockOutcomes[event.id] && <OutcomeBadge status={studyBlockOutcomes[event.id].status} />}
+                              </div>
                               <p className="mt-1 text-sm text-[var(--text-secondary)]">
                                 {getEventStartLabel(event.start)}
                               </p>

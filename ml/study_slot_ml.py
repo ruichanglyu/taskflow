@@ -38,6 +38,8 @@ def build_feature_row(
     recent_subtask_completions: int = 0,
     recent_comment_adds: int = 0,
     recent_course_activity: int = 0,
+    recent_study_block_completions: int = 0,
+    recent_study_block_skips: int = 0,
 ) -> dict:
     hour = start_minutes / 60.0
     time_sin, time_cos = cyclical_components(start_minutes)
@@ -65,6 +67,8 @@ def build_feature_row(
         "recent_subtask_completions": recent_subtask_completions,
         "recent_comment_adds": recent_comment_adds,
         "recent_course_activity": recent_course_activity,
+        "recent_study_block_completions": recent_study_block_completions,
+        "recent_study_block_skips": recent_study_block_skips,
         "calendar_summary": calendar_summary or "Unknown",
         "title": title or "Untitled",
         "is_exam_prep": int("exam prep" in normalized_calendar or "exam" in normalized_title),
@@ -234,6 +238,8 @@ def augment_examples_with_app_context(
             "recent_subtask_completions",
             "recent_comment_adds",
             "recent_course_activity",
+            "recent_study_block_completions",
+            "recent_study_block_skips",
         ]:
             enriched[column] = 0
         return enriched
@@ -250,6 +256,8 @@ def augment_examples_with_app_context(
     recent_subtask_completions: list[int] = []
     recent_comment_adds: list[int] = []
     recent_course_activity: list[int] = []
+    recent_study_block_completions: list[int] = []
+    recent_study_block_skips: list[int] = []
 
     for _, row in enriched.iterrows():
         created_at = row["created_at"]
@@ -269,10 +277,14 @@ def augment_examples_with_app_context(
         recent_subtask_completions.append(int((recent_30d & (app_actions == "subtask-complete")).sum()))
         recent_comment_adds.append(int((recent_30d & (app_actions == "comment-add")).sum()))
         recent_course_activity.append(int((recent_30d & course_mask).sum()))
+        recent_study_block_completions.append(int((recent_30d & (app_actions == "study-block-complete")).sum()))
+        recent_study_block_skips.append(int((recent_30d & (app_actions == "study-block-skip")).sum()))
 
     enriched["recent_task_completions"] = recent_task_completions
     enriched["recent_due_date_changes"] = recent_due_date_changes
     enriched["recent_subtask_completions"] = recent_subtask_completions
     enriched["recent_comment_adds"] = recent_comment_adds
     enriched["recent_course_activity"] = recent_course_activity
+    enriched["recent_study_block_completions"] = recent_study_block_completions
+    enriched["recent_study_block_skips"] = recent_study_block_skips
     return enriched

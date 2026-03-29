@@ -609,6 +609,20 @@ create table if not exists public.behavior_learning_app_events (
   created_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.study_block_outcomes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  event_id text not null,
+  calendar_id text,
+  title text not null,
+  date_key date not null,
+  status text not null check (status in ('completed', 'partial', 'skipped', 'rescheduled')),
+  notes text not null default '',
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique(user_id, event_id)
+);
+
 create index if not exists behavior_learning_schedule_events_user_id_idx
   on public.behavior_learning_schedule_events(user_id);
 create index if not exists behavior_learning_schedule_events_user_date_idx
@@ -620,10 +634,15 @@ create index if not exists behavior_learning_app_events_user_id_idx
   on public.behavior_learning_app_events(user_id);
 create index if not exists behavior_learning_app_events_user_created_idx
   on public.behavior_learning_app_events(user_id, created_at desc);
+create index if not exists study_block_outcomes_user_id_idx
+  on public.study_block_outcomes(user_id);
+create index if not exists study_block_outcomes_user_date_idx
+  on public.study_block_outcomes(user_id, date_key desc);
 
 alter table public.behavior_learning_settings enable row level security;
 alter table public.behavior_learning_schedule_events enable row level security;
 alter table public.behavior_learning_app_events enable row level security;
+alter table public.study_block_outcomes enable row level security;
 
 drop policy if exists "Users can read their own behavior_learning_settings" on public.behavior_learning_settings;
 drop policy if exists "Users can insert their own behavior_learning_settings" on public.behavior_learning_settings;
@@ -689,6 +708,28 @@ with check (auth.uid() = user_id);
 
 create policy "Users can delete their own behavior_learning_app_events"
 on public.behavior_learning_app_events for delete to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "Users can read their own study_block_outcomes" on public.study_block_outcomes;
+drop policy if exists "Users can insert their own study_block_outcomes" on public.study_block_outcomes;
+drop policy if exists "Users can update their own study_block_outcomes" on public.study_block_outcomes;
+drop policy if exists "Users can delete their own study_block_outcomes" on public.study_block_outcomes;
+
+create policy "Users can read their own study_block_outcomes"
+on public.study_block_outcomes for select to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can insert their own study_block_outcomes"
+on public.study_block_outcomes for insert to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update their own study_block_outcomes"
+on public.study_block_outcomes for update to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can delete their own study_block_outcomes"
+on public.study_block_outcomes for delete to authenticated
 using (auth.uid() = user_id);
 
 -- ============================================================

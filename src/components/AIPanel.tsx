@@ -49,6 +49,16 @@ interface ImportExecutionOptions {
   frozenCalendarDeleteTargets?: Record<string, GoogleCalendarEvent[]>;
 }
 
+interface RecentCalendarTarget {
+  id?: string;
+  calendarId?: string;
+  title: string;
+  calendarSummary?: string;
+  dateKey?: string;
+  startKey?: string;
+  updatedAt: number;
+}
+
 interface SpeechRecognitionResultLike {
   isFinal: boolean;
   0: {
@@ -95,6 +105,7 @@ const CHAT_SIDEBAR_COLLAPSED_STORAGE = 'taskflow_ai_sidebar_collapsed';
 const IMPORTED_BLOCKS_STORAGE_PREFIX = 'taskflow_ai_imported_blocks';
 const RECENT_APPLIED_CALENDAR_ACTIONS_STORAGE_PREFIX = 'taskflow_ai_recent_calendar_actions';
 const RECENT_LISTED_CALENDAR_EVENTS_STORAGE_PREFIX = 'taskflow_ai_recent_listed_calendar_events';
+const RECENT_CALENDAR_TARGETS_STORAGE_PREFIX = 'taskflow_ai_recent_calendar_targets';
 const DEFAULT_PANEL_FRAME: PanelFrame = {
   x: 0,
   y: 88,
@@ -114,6 +125,10 @@ function recentAppliedCalendarActionsStorageKey(userId: string) {
 
 function recentListedCalendarEventsStorageKey(userId: string) {
   return `${RECENT_LISTED_CALENDAR_EVENTS_STORAGE_PREFIX}:${userId}`;
+}
+
+function recentCalendarTargetsStorageKey(userId: string) {
+  return `${RECENT_CALENDAR_TARGETS_STORAGE_PREFIX}:${userId}`;
 }
 
 function loadImportedBlocks(userId: string) {
@@ -176,6 +191,51 @@ function saveRecentListedCalendarEvents(userId: string, entries: string[]) {
   } catch {
     // ignore local storage quota errors
   }
+}
+
+function loadRecentCalendarTargets(userId: string) {
+  if (typeof window === 'undefined') return [] as RecentCalendarTarget[];
+  try {
+    const raw = localStorage.getItem(recentCalendarTargetsStorageKey(userId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((value): value is RecentCalendarTarget => Boolean(value && typeof value === 'object' && typeof value.title === 'string'))
+      .slice(-40);
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentCalendarTargets(userId: string, entries: RecentCalendarTarget[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(
+      recentCalendarTargetsStorageKey(userId),
+      JSON.stringify(entries.slice(-40)),
+    );
+  } catch {
+    // ignore local storage quota errors
+  }
+}
+
+function mergeRecentCalendarTargets(existing: RecentCalendarTarget[], additions: RecentCalendarTarget[]) {
+  const merged = new Map<string, RecentCalendarTarget>();
+  for (const item of [...existing, ...additions]) {
+    const key = [
+      item.calendarId ?? '',
+      item.id ?? '',
+      normalizeDeleteCandidate(item.title),
+      normalizeCalendarCandidate(item.calendarSummary ?? ''),
+      item.dateKey ?? '',
+      item.startKey ?? '',
+    ].join('::');
+    merged.set(key, item);
+  }
+  return [...merged.values()]
+    .sort((a, b) => a.updatedAt - b.updatedAt)
+    .slice(-40);
 }
 
 function normalizeCalendarLookupValue(value: string) {
@@ -245,6 +305,35 @@ function summarizeEventAction(
   const dateKey = event.start?.date ?? event.start?.dateTime?.slice(0, 10) ?? '';
   const startLabel = event.start?.dateTime ? formatSummaryTime(event.start.dateTime) : event.start?.date ? 'All day' : '';
   return `${action.toUpperCase()}: ${title}${event.calendarSummary ? ` | calendar: ${event.calendarSummary}` : ''}${dateKey ? ` | date: ${dateKey}` : ''}${startLabel ? ` | start: ${startLabel}` : ''}`;
+}
+
+function buildRecentTargetFromEvent(event: GoogleCalendarEvent): RecentCalendarTarget {
+  return {
+    id: event.id,
+    calendarId: event.calendarId,
+    title: event.summary || 'Untitled event',
+    calendarSummary: event.calendarSummary,
+    dateKey: event.start?.date ?? event.start?.dateTime?.slice(0, 10),
+    startKey: getEventStartKey(event) || undefined,
+    updatedAt: Date.now(),
+  };
+}
+
+function buildRecentTargetFromPayload(
+  payload: NewGoogleCalendarEvent,
+  calendarId?: string,
+  calendarSummary?: string,
+  eventId?: string,
+): RecentCalendarTarget {
+  return {
+    id: eventId,
+    calendarId,
+    title: payload.summary || 'Untitled event',
+    calendarSummary,
+    dateKey: 'date' in payload.start ? payload.start.date : payload.start.dateTime?.slice(0, 10),
+    startKey: 'dateTime' in payload.start ? toTwentyFourHourKey(formatSummaryTime(payload.start.dateTime)) || undefined : undefined,
+    updatedAt: Date.now(),
+  };
 }
 
 function formatDictationElapsed(seconds: number): string {
@@ -684,6 +773,18 @@ export function AIPanel({
       : loadRecentListedCalendarEvents(userId);
     if (matchedCalendar) {
       saveRecentListedCalendarEvents(userId, recentListedCalendarEvents);
+      const matchedCalendarTargets = calendarEvents
+        .filter(event => event.calendarId === matchedCalendar.id)
+        .sort((a, b) => {
+          const aTime = a.start?.dateTime || a.start?.date || '';
+          const bTime = b.start?.dateTime || b.start?.date || '';
+          return aTime.localeCompare(bTime);
+        })
+        .map(buildRecentTargetFromEvent);
+      saveRecentCalendarTargets(
+        userId,
+        mergeRecentCalendarTargets(loadRecentCalendarTargets(userId), matchedCalendarTargets),
+      );
     }
     setPanelError(null);
     setInput('');
@@ -909,6 +1010,7 @@ export function AIPanel({
     setPanelError(null);
     let imported = 0;
     const appliedCalendarActions: string[] = [];
+    let recentCalendarTargets = loadRecentCalendarTargets(userId);
     const projectCache = new Map<string, string | null>();
     const workingTasks: Task[] = [
       ...tasks,
@@ -1066,6 +1168,14 @@ export function AIPanel({
             appliedCalendarActions.push(
               summarizePayloadAction('updated', resolved.payload, targetCalendar?.summary ?? row.calendar),
             );
+            recentCalendarTargets = mergeRecentCalendarTargets(recentCalendarTargets, [
+              buildRecentTargetFromPayload(
+                resolved.payload,
+                targetCalendarId,
+                targetCalendar?.summary ?? row.calendar,
+                replacementMatch.id,
+              ),
+            ]);
             workingCalendarEvents = workingCalendarEvents.map(event =>
               event.id === replacementMatch.id && event.calendarId === replacementMatch.calendarId
                 ? { ...nextSyntheticEvent, id: replacementMatch.id }
@@ -1075,6 +1185,13 @@ export function AIPanel({
             appliedCalendarActions.push(
               summarizePayloadAction('created', resolved.payload, targetCalendar?.summary ?? row.calendar),
             );
+            recentCalendarTargets = mergeRecentCalendarTargets(recentCalendarTargets, [
+              buildRecentTargetFromPayload(
+                resolved.payload,
+                targetCalendarId,
+                targetCalendar?.summary ?? row.calendar,
+              ),
+            ]);
             workingCalendarEvents.push(nextSyntheticEvent);
           }
         } else {
@@ -1136,6 +1253,14 @@ export function AIPanel({
           appliedCalendarActions.push(
             summarizePayloadAction('updated', payload, targetCalendar?.summary ?? row.newCalendar ?? matches[0].calendarSummary),
           );
+          recentCalendarTargets = mergeRecentCalendarTargets(recentCalendarTargets, [
+            buildRecentTargetFromPayload(
+              payload,
+              targetCalendarId,
+              targetCalendar?.summary ?? row.newCalendar ?? matches[0].calendarSummary,
+              matches[0].id,
+            ),
+          ]);
           const nextSyntheticEvent = buildSyntheticCalendarEvent(
             payload,
             targetCalendarId ?? matches[0].calendarId ?? '',
@@ -1173,7 +1298,7 @@ export function AIPanel({
         processedDeleteRows.add(deleteRequestKey);
 
         const matches = frozenCalendarDeleteTargets[deleteRequestKey]
-          ?? resolveCalendarDeleteCandidates(workingCalendarEvents, calendarCalendars, selectedCalendarId, row);
+          ?? resolveCalendarDeleteCandidates(workingCalendarEvents, calendarCalendars, selectedCalendarId, row, recentCalendarTargets);
         if (matches.length === 0) {
           skipped++;
           continue;
@@ -1189,6 +1314,10 @@ export function AIPanel({
           if (ok) {
             deleted++;
             appliedCalendarActions.push(summarizeEventAction('deleted', match));
+            recentCalendarTargets = recentCalendarTargets.filter(target => !(
+              target.id === match.id &&
+              (target.calendarId ?? '') === (match.calendarId ?? '')
+            ));
             deletedKeys.add(deleteKey);
             workingCalendarEvents = workingCalendarEvents.filter(event => !(event.id === match.id && event.calendarId === match.calendarId));
           } else {
@@ -1353,6 +1482,7 @@ export function AIPanel({
       const existingActions = loadRecentAppliedCalendarActions(userId);
       saveRecentAppliedCalendarActions(userId, [...existingActions, ...appliedCalendarActions]);
     }
+    saveRecentCalendarTargets(userId, recentCalendarTargets);
 
     setImportedBlocks(prev => new Set(prev).add(blockKey));
     return imported;
@@ -2770,14 +2900,19 @@ function resolveCalendarDeleteCandidates(
   calendars: GoogleCalendarListItem[],
   selectedCalendarId: string,
   row: ParsedImportRow,
+  recentTargets: RecentCalendarTarget[] = [],
 ) {
   const strictMatches = matchCalendarCandidates(events, calendars, row);
   if (strictMatches.length <= 1) {
+    if (strictMatches.length > 0) return strictMatches;
+  } else {
     return strictMatches;
   }
 
   const resolvedMatches = resolvePreferredCalendarCandidates(events, calendars, row);
   if (resolvedMatches.length <= 1) {
+    if (resolvedMatches.length > 0) return resolvedMatches;
+  } else {
     return resolvedMatches;
   }
 
@@ -2816,6 +2951,36 @@ function resolveCalendarDeleteCandidates(
 
   if (canDeleteDuplicatesTogether) {
     return preferredMatches;
+  }
+
+  const recentTargetMatches = recentTargets
+    .filter(target => {
+      const targetTitle = normalizeDeleteCandidate(stripTrailingCourseTag(target.title));
+      const targetCalendar = normalizeCalendarCandidate(target.calendarSummary ?? '');
+      return (
+        targetTitle === normalizedTitle &&
+        (!normalizedCalendar || targetCalendar === normalizedCalendar)
+      );
+    })
+    .flatMap(target => events.filter(event => {
+      if (target.id && target.calendarId) {
+        return event.id === target.id && event.calendarId === target.calendarId;
+      }
+      const eventTitle = normalizeDeleteCandidate(stripTrailingCourseTag(event.summary || ''));
+      const eventCalendarSummary = event.calendarSummary || getCalendarSummaryById(calendars, event.calendarId);
+      const eventCalendar = normalizeCalendarCandidate(eventCalendarSummary ?? '');
+      const eventDateKey = getEventDateKey(event) || '';
+      const eventStartKey = getEventStartKey(event) || '';
+      return (
+        eventTitle === normalizedTitle &&
+        (!normalizedCalendar || eventCalendar === normalizedCalendar) &&
+        (!target.dateKey || target.dateKey === eventDateKey) &&
+        (!target.startKey || target.startKey === eventStartKey)
+      );
+    }));
+
+  if (recentTargetMatches.length > 0) {
+    return mergeCalendarEventsByIdentity(recentTargetMatches);
   }
 
   return resolvedMatches.length === 1 ? resolvedMatches : [];
@@ -3243,6 +3408,7 @@ function ActionBundleCard({
   }, [safeBlocks, tasks]);
 
   const calendarGroups = useMemo(() => {
+    const recentCalendarTargets = loadRecentCalendarTargets(userId);
     const creates = safeBlocks
       .filter(block => block.type === 'calendar-create')
       .flatMap(block => block.rows.map(row => {
@@ -3295,7 +3461,7 @@ function ActionBundleCard({
           }
           seen.add(deleteRequestKey);
 
-          const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, selectedCalendarId, row);
+          const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, selectedCalendarId, row, recentCalendarTargets);
           deleteTargetsByKey[deleteRequestKey] = matches;
           return [{
             label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${matches.length > 1 ? ` · ${matches.length} matches` : ''}`,
@@ -3306,7 +3472,7 @@ function ActionBundleCard({
       });
 
     return { creates, updates, deletes, deleteTargetsByKey };
-  }, [calendarCalendars, calendarEvents, safeBlocks, selectedCalendarId]);
+  }, [calendarCalendars, calendarEvents, safeBlocks, selectedCalendarId, userId]);
 
   const resultSummary = useMemo(() => {
     const total = Object.values(results).reduce((sum, count) => sum + count, 0);

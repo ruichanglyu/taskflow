@@ -351,6 +351,19 @@ export function AIPanel({
 
   useEffect(() => {
     if (open) return;
+    setInput('');
+    setPendingImages([]);
+    setShowAttachmentMenu(false);
+    setPanelError(null);
+    composerDragDepthRef.current = 0;
+    setIsComposerDragActive(false);
+    speechRecognitionRef.current?.stop();
+    setIsDictating(false);
+    setDictationSeconds(0);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) return;
     composerDragDepthRef.current = 0;
     setIsComposerDragActive(false);
   }, [open]);

@@ -755,10 +755,43 @@ function stripAttachmentPayload(message: ChatMessage): ChatMessage {
   };
 }
 
+function normalizeMessageContent(content: string) {
+  return content.trim().replace(/\s+/g, ' ');
+}
+
+function dedupeConsecutiveMessages(messages: ChatMessage[]) {
+  const deduped: ChatMessage[] = [];
+
+  for (const message of messages) {
+    const normalized = stripAttachmentPayload(message);
+    const previous = deduped[deduped.length - 1];
+    if (!previous) {
+      deduped.push(normalized);
+      continue;
+    }
+
+    const isEquivalent =
+      previous.role === normalized.role &&
+      normalizeMessageContent(previous.content) === normalizeMessageContent(normalized.content) &&
+      (previous.images?.length ?? 0) === (normalized.images?.length ?? 0) &&
+      Math.abs(previous.timestamp - normalized.timestamp) <= 120_000;
+
+    if (isEquivalent) {
+      const keepCurrent = normalized.timestamp >= previous.timestamp;
+      deduped[deduped.length - 1] = keepCurrent ? normalized : previous;
+      continue;
+    }
+
+    deduped.push(normalized);
+  }
+
+  return deduped;
+}
+
 function sanitizeThread(thread: ChatThread): ChatThread {
   return {
     ...thread,
-    messages: thread.messages.map(stripAttachmentPayload),
+    messages: dedupeConsecutiveMessages(thread.messages),
   };
 }
 

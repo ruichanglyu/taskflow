@@ -25,6 +25,13 @@ interface AppBehaviorEvent {
   createdAt: string;
 }
 
+interface ParsedStudyBlockOutcomeDetail {
+  dateKey: string;
+  startMinutes: number;
+  durationMinutes: number;
+  weekday: number;
+}
+
 interface BehaviorLearningEvent {
   id: string;
   source: LearningSource;
@@ -125,6 +132,37 @@ function normalizeText(value: string) {
 
 function normalizeCalendarSummary(value: string) {
   return normalizeText(value).replace(/\s*\((primary|read-only|read only|owner)\)\s*$/i, '').trim();
+}
+
+function getDetailToken(detail: string | null | undefined, prefix: string) {
+  if (!detail) return null;
+  const token = detail
+    .split('·')
+    .map(part => part.trim())
+    .find(part => part.toLowerCase().startsWith(`${prefix.toLowerCase()}:`));
+  if (!token) return null;
+  return token.slice(prefix.length + 1).trim();
+}
+
+function parseStudyBlockOutcomeDetail(detail: string | null | undefined): ParsedStudyBlockOutcomeDetail | null {
+  const dateKey = getDetailToken(detail, 'date');
+  const startRaw = getDetailToken(detail, 'start');
+  const durationRaw = getDetailToken(detail, 'duration');
+  if (!dateKey || !startRaw || !durationRaw) return null;
+
+  const startMinutes = Number(startRaw);
+  const durationMinutes = Number(durationRaw);
+  if (!Number.isFinite(startMinutes) || !Number.isFinite(durationMinutes)) return null;
+
+  const date = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return {
+    dateKey,
+    startMinutes,
+    durationMinutes,
+    weekday: date.getDay(),
+  };
 }
 
 function isStudyBlockLike(title: string, calendarSummary?: string | null) {
@@ -359,7 +397,7 @@ async function upsertBehaviorSettings(userId: string, aiTestingMode: boolean) {
   }
 }
 
-function buildScoreMaps(events: BehaviorLearningEvent[]) {
+function buildScoreMaps(events: BehaviorLearningEvent[], appEvents: AppBehaviorEvent[] = []) {
   const weekdayScores = Array.from({ length: 7 }, () => new Map<number, number>());
   const overallScores = new Map<number, number>();
 
@@ -390,18 +428,46 @@ function buildScoreMaps(events: BehaviorLearningEvent[]) {
     }
   }
 
+  for (const event of appEvents) {
+    if (!event.countsForLearning || event.entity !== 'calendar') continue;
+    if (!event.action.startsWith('study-block-')) continue;
+
+    const parsed = parseStudyBlockOutcomeDetail(event.detail);
+    if (!parsed) continue;
+
+    if (event.action === 'study-block-complete') {
+      addScore(parsed.weekday, parsed.startMinutes, 4);
+      continue;
+    }
+
+    if (event.action === 'study-block-partial') {
+      addScore(parsed.weekday, parsed.startMinutes, 1.5);
+      continue;
+    }
+
+    if (event.action === 'study-block-skip') {
+      addScore(parsed.weekday, parsed.startMinutes, -4);
+      continue;
+    }
+
+    if (event.action === 'study-block-reschedule') {
+      addScore(parsed.weekday, parsed.startMinutes, -2.5);
+    }
+  }
+
   return { weekdayScores, overallScores };
 }
 
 function choosePreferredStartMinute(
   events: BehaviorLearningEvent[],
+  appEvents: AppBehaviorEvent[],
   dateKey: string,
   fallbackStartMinutes: number,
 ) {
   const date = new Date(`${dateKey}T00:00:00`);
   if (Number.isNaN(date.getTime())) return fallbackStartMinutes;
 
-  const { weekdayScores, overallScores } = buildScoreMaps(events);
+  const { weekdayScores, overallScores } = buildScoreMaps(events, appEvents);
   const weekday = date.getDay();
   const weekdayBuckets = weekdayScores[weekday];
   const fallbackBucket = bucketMinutes(fallbackStartMinutes);
@@ -439,6 +505,7 @@ function choosePreferredStartMinute(
 
 function scoreStudySlotFromEvents(
   events: BehaviorLearningEvent[],
+  appEvents: AppBehaviorEvent[],
   dateKey: string,
   startMinutes: number,
   durationMinutes: number,
@@ -448,7 +515,7 @@ function scoreStudySlotFromEvents(
 
   const bucket = bucketMinutes(startMinutes);
   const durationBias = durationMinutes >= 90 ? 0.2 : 0;
-  const { weekdayScores, overallScores } = buildScoreMaps(events);
+  const { weekdayScores, overallScores } = buildScoreMaps(events, appEvents);
   const weekday = date.getDay();
   const weekdayScore = weekdayScores[weekday].get(bucket) ?? 0;
   const overallScore = overallScores.get(bucket) ?? 0;
@@ -972,12 +1039,12 @@ export function useBehaviorLearning(userId: string) {
   }, [persistEvent]);
 
   const getPreferredStudyStartMinutes = useCallback((dateKey: string, fallbackStartMinutes: number) => {
-    return choosePreferredStartMinute(events, dateKey, fallbackStartMinutes);
-  }, [events]);
+    return choosePreferredStartMinute(events, appEvents, dateKey, fallbackStartMinutes);
+  }, [appEvents, events]);
 
   const preferenceSummary = useMemo(() => {
     const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const { weekdayScores } = buildScoreMaps(events);
+    const { weekdayScores } = buildScoreMaps(events, appEvents);
     return weekdayNames.map((name, weekday) => {
       const buckets = Array.from(weekdayScores[weekday].entries()).sort((a, b) => b[1] - a[1]);
       return {
@@ -986,7 +1053,7 @@ export function useBehaviorLearning(userId: string) {
         preferredStartMinutes: buckets[0]?.[1] >= 2 ? buckets[0]?.[0] ?? null : null,
       };
     });
-  }, [events]);
+  }, [appEvents, events]);
 
   const aiLearningEnabled = !aiTestingMode;
   const setAiLearningEnabled = useCallback((enabled: boolean) => {
@@ -994,8 +1061,8 @@ export function useBehaviorLearning(userId: string) {
   }, [setAiTestingMode]);
 
   const scoreStudySlot = useCallback((dateKey: string, startMinutes: number, durationMinutes: number) => {
-    return scoreStudySlotFromEvents(events, dateKey, startMinutes, durationMinutes);
-  }, [events]);
+    return scoreStudySlotFromEvents(events, appEvents, dateKey, startMinutes, durationMinutes);
+  }, [appEvents, events]);
 
   const logTaskCreated = useCallback((_: {
     title: string;
@@ -1262,6 +1329,8 @@ export function useBehaviorLearning(userId: string) {
     title: string;
     calendarSummary: string | null;
     dateKey: string;
+    startMinutes: number;
+    durationMinutes: number;
     status: StudyBlockOutcomeStatus;
     options?: BehaviorLearningActionOptions;
   }) => {
@@ -1280,6 +1349,8 @@ export function useBehaviorLearning(userId: string) {
       [
         params.calendarSummary ? `calendar:${params.calendarSummary}` : null,
         `date:${params.dateKey}`,
+        `start:${params.startMinutes}`,
+        `duration:${params.durationMinutes}`,
       ].filter(Boolean).join(' · '),
     );
   }, [recordAppAction]);

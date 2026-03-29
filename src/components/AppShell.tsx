@@ -505,11 +505,17 @@ export function AppShell({ user }: AppShellProps) {
   ) => {
     const previousStatus = studyBlockOutcomes.outcomesByEventId[event.id]?.status;
     const ok = await studyBlockOutcomes.setOutcome(event, status);
+    const start = event.start?.dateTime ? new Date(event.start.dateTime) : null;
+    const end = event.end?.dateTime ? new Date(event.end.dateTime) : null;
+    const startMinutes = start ? start.getHours() * 60 + start.getMinutes() : null;
+    const durationMinutes = start && end ? Math.max(Math.round((end.getTime() - start.getTime()) / 60000), 0) : null;
     if (ok && previousStatus !== status) {
       learning.logStudyBlockOutcome({
         title: event.summary ?? 'Untitled event',
         calendarSummary: event.calendarSummary ?? null,
         dateKey: event.start?.date ?? (event.start?.dateTime ? event.start.dateTime.slice(0, 10) : ''),
+        startMinutes: startMinutes ?? 0,
+        durationMinutes: durationMinutes ?? 0,
         status,
         options: { source: 'manual', learn: true },
       });

@@ -44,6 +44,10 @@ interface PanelFrame {
   height: number;
 }
 
+interface ImportExecutionOptions {
+  frozenCalendarDeleteTargets?: Record<string, GoogleCalendarEvent[]>;
+}
+
 interface SpeechRecognitionResultLike {
   isFinal: boolean;
   0: {
@@ -814,7 +818,7 @@ export function AIPanel({
     setPendingDeleteChat(null);
   };
 
-  const handleImport = async (block: ImportBlock, blockKey: string) => {
+  const handleImport = async (block: ImportBlock, blockKey: string, options?: ImportExecutionOptions) => {
     setPanelError(null);
     let imported = 0;
     const appliedCalendarActions: string[] = [];
@@ -1052,6 +1056,7 @@ export function AIPanel({
       let skipped = 0;
       const deletedKeys = new Set<string>();
       const processedDeleteRows = new Set<string>();
+      const frozenCalendarDeleteTargets = options?.frozenCalendarDeleteTargets ?? {};
 
       for (const row of block.rows) {
         const deleteRequestKey = buildCalendarDeleteRequestKey(row);
@@ -1060,7 +1065,8 @@ export function AIPanel({
         }
         processedDeleteRows.add(deleteRequestKey);
 
-        const matches = resolveCalendarDeleteCandidates(workingCalendarEvents, calendarCalendars, selectedCalendarId, row);
+        const matches = frozenCalendarDeleteTargets[deleteRequestKey]
+          ?? resolveCalendarDeleteCandidates(workingCalendarEvents, calendarCalendars, selectedCalendarId, row);
         if (matches.length === 0) {
           skipped++;
           continue;
@@ -2781,7 +2787,7 @@ function MessageBubble({
   calendarCalendars: GoogleCalendarListItem[];
   selectedCalendarId: string;
   importedBlocks: Set<string>;
-  onImport: (block: ImportBlock, key: string) => Promise<number>;
+  onImport: (block: ImportBlock, key: string, options?: ImportExecutionOptions) => Promise<number>;
   isStreaming: boolean;
 }) {
   if (message.role === 'user') {
@@ -2951,7 +2957,7 @@ function ActionBundleCard({
   calendarCalendars: GoogleCalendarListItem[];
   selectedCalendarId: string;
   importedBlocks: Set<string>;
-  onImport: (block: ImportBlock, key: string) => Promise<number>;
+  onImport: (block: ImportBlock, key: string, options?: ImportExecutionOptions) => Promise<number>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -2960,7 +2966,12 @@ function ActionBundleCard({
   const [actionError, setActionError] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, number>>({});
   const frozenDeleteGroupsRef = useRef<{ label: string; resolvedTitle: string; valid: boolean }[] | null>(null);
-  const frozenCalendarGroupsRef = useRef<{ creates: { label: string; valid: boolean }[]; updates: { label: string; valid: boolean; reason: string }[]; deletes: { label: string; valid: boolean; reason: string }[] } | null>(null);
+  const frozenCalendarGroupsRef = useRef<{
+    creates: { label: string; valid: boolean }[];
+    updates: { label: string; valid: boolean; reason: string }[];
+    deletes: { label: string; valid: boolean; reason: string }[];
+    deleteTargetsByKey: Record<string, GoogleCalendarEvent[]>;
+  } | null>(null);
 
   const isValidImportBlock = useCallback((block: unknown): block is ImportBlock => {
     return !!block && typeof block === 'object' && typeof (block as ImportBlock).type === 'string' && Array.isArray((block as ImportBlock).rows);
@@ -3148,6 +3159,8 @@ function ActionBundleCard({
         };
       }));
 
+    const deleteTargetsByKey: Record<string, GoogleCalendarEvent[]> = {};
+
     const deletes = safeBlocks
       .filter(block => block.type === 'calendar-delete')
       .flatMap(block => {
@@ -3160,6 +3173,7 @@ function ActionBundleCard({
           seen.add(deleteRequestKey);
 
           const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, selectedCalendarId, row);
+          deleteTargetsByKey[deleteRequestKey] = matches;
           const canDeferLookup = !row.dueDate && !row.startTime && Boolean(row.title?.trim());
           return [{
             label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${matches.length > 1 ? ` · ${matches.length} matches` : ''}`,
@@ -3169,7 +3183,7 @@ function ActionBundleCard({
         });
       });
 
-    return { creates, updates, deletes };
+    return { creates, updates, deletes, deleteTargetsByKey };
   }, [calendarCalendars, calendarEvents, safeBlocks, selectedCalendarId]);
 
   const resultSummary = useMemo(() => {
@@ -3213,7 +3227,13 @@ function ActionBundleCard({
       try {
         const nextResults: Record<string, number> = {};
         for (const entry of sortedEntries) {
-          const count = await onImport(entry.block, entry.key);
+          const count = await onImport(
+            entry.block,
+            entry.key,
+            entry.block.type === 'calendar-delete'
+              ? { frozenCalendarDeleteTargets: (frozenCalendarGroupsRef.current ?? calendarGroups).deleteTargetsByKey }
+              : undefined,
+          );
           nextResults[entry.key] = count;
         }
         setResults(prev => ({ ...prev, ...nextResults }));

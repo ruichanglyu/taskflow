@@ -309,7 +309,7 @@ export function useStudyBlockOutcomes(userId: string) {
 
   return {
     outcomes,
-    outcomesByEventId,
+    outcomesByEventId: outcomesByEventKey,
     outcomesByMatchKey,
     getOutcomeForEvent,
     isLoading,

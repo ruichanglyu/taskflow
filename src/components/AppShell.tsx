@@ -280,13 +280,23 @@ export function AppShell({ user }: AppShellProps) {
   }, [deadlineStore, learning, pushToast, store.tasks]);
 
   const handleUnlinkTask = useCallback(async (...args: Parameters<typeof deadlineStore.unlinkTask>) => {
+    const [deadlineId, taskId] = args;
+    const deadline = deadlineStore.deadlines.find(item => item.id === deadlineId);
+    const task = store.tasks.find(item => item.id === taskId);
     await deadlineStore.unlinkTask(...args);
     if (!deadlineStore.error) {
       pushToast('info', 'Task unlinked');
+      if (deadline && task) {
+        learning.logDeadlineUnlinked({
+          deadlineTitle: deadline.title,
+          taskTitle: task.title,
+          options: { source: 'manual', learn: true },
+        });
+      }
     } else {
       pushToast('error', 'Could not unlink task', deadlineStore.error);
     }
-  }, [deadlineStore, pushToast]);
+  }, [deadlineStore, learning, pushToast, store.tasks]);
 
   const handleAddTask = useCallback(async (...args: [...Parameters<typeof store.addTask>, BehaviorLearningActionOptions?]) => {
     const lastArg = args.at(-1);
@@ -337,6 +347,14 @@ export function AppShell({ user }: AppShellProps) {
     const currentTask = store.tasks.find(task => task.id === id);
     await store.updateTaskStatus(id, status);
     if (!store.error && currentTask) {
+      learning.logTaskStatusChanged({
+        title: currentTask.title,
+        projectId: currentTask.projectId,
+        dueDate: currentTask.dueDate,
+        previousStatus: currentTask.status,
+        nextStatus: status,
+        options: { source: 'manual', learn: true },
+      });
       learning.logTaskUpdated({
         title: currentTask.title,
         projectId: currentTask.projectId,
@@ -387,8 +405,96 @@ export function AppShell({ user }: AppShellProps) {
     title: string,
     _options?: BehaviorLearningActionOptions,
   ) => {
-    return store.addSubtask(taskId, title);
-  }, [store]);
+    const task = store.tasks.find(item => item.id === taskId);
+    const ok = await store.addSubtask(taskId, title);
+    if (ok && task) {
+      learning.logTaskSubtaskCreated({
+        taskTitle: task.title,
+        subtaskTitle: title,
+        projectId: task.projectId,
+        dueDate: task.dueDate,
+        options: { source: 'manual', learn: true },
+      });
+    }
+    return ok;
+  }, [learning, store]);
+
+  const handleToggleSubtask = useCallback(async (subtaskId: string, done: boolean) => {
+    const task = store.tasks.find(item => item.subtasks.some(subtask => subtask.id === subtaskId));
+    const subtask = task?.subtasks.find(item => item.id === subtaskId);
+    await store.toggleSubtask(subtaskId, done);
+    if (!store.error && task && subtask) {
+      learning.logTaskSubtaskToggled({
+        taskTitle: task.title,
+        subtaskTitle: subtask.title,
+        projectId: task.projectId,
+        dueDate: task.dueDate,
+        done,
+        options: { source: 'manual', learn: true },
+      });
+    }
+  }, [learning, store]);
+
+  const handleDeleteSubtask = useCallback(async (subtaskId: string) => {
+    const task = store.tasks.find(item => item.subtasks.some(subtask => subtask.id === subtaskId));
+    const subtask = task?.subtasks.find(item => item.id === subtaskId);
+    await store.deleteSubtask(subtaskId);
+    if (!store.error && task && subtask) {
+      learning.logTaskSubtaskDeleted({
+        taskTitle: task.title,
+        subtaskTitle: subtask.title,
+        projectId: task.projectId,
+        dueDate: task.dueDate,
+        options: { source: 'manual', learn: true },
+      });
+    }
+  }, [learning, store]);
+
+  const handleAddComment = useCallback(async (taskId: string, text: string): Promise<boolean> => {
+    const task = store.tasks.find(item => item.id === taskId);
+    const ok = await store.addComment(taskId, text);
+    if (ok && task) {
+      learning.logTaskCommentAdded({
+        taskTitle: task.title,
+        projectId: task.projectId,
+        dueDate: task.dueDate,
+        commentPreview: text.trim().slice(0, 80),
+        options: { source: 'manual', learn: true },
+      });
+    }
+    return ok;
+  }, [learning, store]);
+
+  const handleDeleteComment = useCallback(async (commentId: string) => {
+    const task = store.tasks.find(item => item.comments.some(comment => comment.id === commentId));
+    const comment = task?.comments.find(item => item.id === commentId);
+    await store.deleteComment(commentId);
+    if (!store.error && task && comment) {
+      learning.logTaskCommentDeleted({
+        taskTitle: task.title,
+        projectId: task.projectId,
+        dueDate: task.dueDate,
+        commentPreview: comment.text.trim().slice(0, 80),
+        options: { source: 'manual', learn: true },
+      });
+    }
+  }, [learning, store]);
+
+  const handleUpdateTaskDueDate = useCallback(async (id: string, dueDate: string | null): Promise<boolean> => {
+    const task = store.tasks.find(item => item.id === id);
+    const ok = await store.updateTaskDueDate(id, dueDate);
+    if (ok && task) {
+      learning.logTaskDueDateChanged({
+        title: task.title,
+        projectId: task.projectId,
+        previousDueDate: task.dueDate,
+        nextDueDate: dueDate,
+        status: task.status,
+        options: { source: 'manual', learn: true },
+      });
+    }
+    return ok;
+  }, [learning, store]);
 
   const handleDeleteProject = useCallback(async (id: string, options?: BehaviorLearningActionOptions) => {
     const currentProject = store.projects.find(item => item.id === id);
@@ -626,10 +732,10 @@ export function AppShell({ user }: AppShellProps) {
               onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteTask}
               onAddSubtask={handleAddSubtask}
-              onToggleSubtask={store.toggleSubtask}
-              onDeleteSubtask={store.deleteSubtask}
-              onAddComment={store.addComment}
-              onDeleteComment={store.deleteComment}
+              onToggleSubtask={handleToggleSubtask}
+              onDeleteSubtask={handleDeleteSubtask}
+              onAddComment={handleAddComment}
+              onDeleteComment={handleDeleteComment}
               onOpenDeadline={openDeadline}
             />
           )}
@@ -653,7 +759,7 @@ export function AppShell({ user }: AppShellProps) {
               tasks={store.tasks}
               projects={store.projects}
               deadlines={deadlineStore.deadlines}
-              onUpdateDueDate={store.updateTaskDueDate}
+              onUpdateDueDate={handleUpdateTaskDueDate}
             />
           )}
           {currentView === 'gym' && (

@@ -1032,6 +1032,151 @@ export function useBehaviorLearning(userId: string) {
     );
   }, [recordAppAction]);
 
+  const logTaskStatusChanged = useCallback((params: {
+    title: string;
+    projectId: string | null;
+    dueDate: string | null;
+    previousStatus: TaskStatusLike;
+    nextStatus: TaskStatusLike;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'task',
+      'status-change',
+      params.title,
+      params.options,
+      [
+        params.projectId ? `project:${params.projectId}` : null,
+        params.dueDate ? `due:${params.dueDate}` : null,
+        `from:${params.previousStatus}`,
+        `to:${params.nextStatus}`,
+      ].filter(Boolean).join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logTaskDueDateChanged = useCallback((params: {
+    title: string;
+    projectId: string | null;
+    previousDueDate: string | null;
+    nextDueDate: string | null;
+    status?: TaskStatusLike;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'task',
+      'due-date-change',
+      params.title,
+      params.options,
+      [
+        params.projectId ? `project:${params.projectId}` : null,
+        params.previousDueDate ? `from:${params.previousDueDate}` : 'from:none',
+        params.nextDueDate ? `to:${params.nextDueDate}` : 'to:none',
+        params.status ? `status:${params.status}` : null,
+      ].filter(Boolean).join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logTaskSubtaskCreated = useCallback((params: {
+    taskTitle: string;
+    subtaskTitle: string;
+    projectId: string | null;
+    dueDate: string | null;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'task',
+      'subtask-create',
+      params.taskTitle,
+      params.options,
+      [
+        params.projectId ? `project:${params.projectId}` : null,
+        params.dueDate ? `due:${params.dueDate}` : null,
+        `subtask:${params.subtaskTitle}`,
+      ].filter(Boolean).join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logTaskSubtaskToggled = useCallback((params: {
+    taskTitle: string;
+    subtaskTitle: string;
+    projectId: string | null;
+    dueDate: string | null;
+    done: boolean;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'task',
+      params.done ? 'subtask-complete' : 'subtask-uncomplete',
+      params.taskTitle,
+      params.options,
+      [
+        params.projectId ? `project:${params.projectId}` : null,
+        params.dueDate ? `due:${params.dueDate}` : null,
+        `subtask:${params.subtaskTitle}`,
+      ].filter(Boolean).join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logTaskSubtaskDeleted = useCallback((params: {
+    taskTitle: string;
+    subtaskTitle: string;
+    projectId: string | null;
+    dueDate: string | null;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'task',
+      'subtask-delete',
+      params.taskTitle,
+      params.options,
+      [
+        params.projectId ? `project:${params.projectId}` : null,
+        params.dueDate ? `due:${params.dueDate}` : null,
+        `subtask:${params.subtaskTitle}`,
+      ].filter(Boolean).join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logTaskCommentAdded = useCallback((params: {
+    taskTitle: string;
+    projectId: string | null;
+    dueDate: string | null;
+    commentPreview: string;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'task',
+      'comment-add',
+      params.taskTitle,
+      params.options,
+      [
+        params.projectId ? `project:${params.projectId}` : null,
+        params.dueDate ? `due:${params.dueDate}` : null,
+        `comment:${params.commentPreview}`,
+      ].filter(Boolean).join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logTaskCommentDeleted = useCallback((params: {
+    taskTitle: string;
+    projectId: string | null;
+    dueDate: string | null;
+    commentPreview: string;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'task',
+      'comment-delete',
+      params.taskTitle,
+      params.options,
+      [
+        params.projectId ? `project:${params.projectId}` : null,
+        params.dueDate ? `due:${params.dueDate}` : null,
+        `comment:${params.commentPreview}`,
+      ].filter(Boolean).join(' · '),
+    );
+  }, [recordAppAction]);
+
   const logTaskDeleted = useCallback((params: {
     title: string;
     projectId: string | null;
@@ -1196,6 +1341,14 @@ export function useBehaviorLearning(userId: string) {
     recordAppAction('deadline-link', 'create', params.deadlineTitle, params.options, `task:${params.taskTitle}`);
   }, [recordAppAction]);
 
+  const logDeadlineUnlinked = useCallback((params: {
+    deadlineTitle: string;
+    taskTitle: string;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction('deadline-link', 'delete', params.deadlineTitle, params.options, `task:${params.taskTitle}`);
+  }, [recordAppAction]);
+
   const logHabitCreated = useCallback((params: {
     title: string;
     frequency: 'daily' | 'weekly';
@@ -1232,7 +1385,14 @@ export function useBehaviorLearning(userId: string) {
     scoreStudySlot,
     logTaskCreated,
     logTaskUpdated,
+    logTaskStatusChanged,
+    logTaskDueDateChanged,
     logTaskDeleted,
+    logTaskSubtaskCreated,
+    logTaskSubtaskToggled,
+    logTaskSubtaskDeleted,
+    logTaskCommentAdded,
+    logTaskCommentDeleted,
     logCalendarCreated,
     logCalendarUpdated,
     logCalendarDeleted,
@@ -1242,6 +1402,7 @@ export function useBehaviorLearning(userId: string) {
     logProjectCreated,
     logProjectDeleted,
     logDeadlineLinked,
+    logDeadlineUnlinked,
     logHabitCreated,
     logHabitToggled,
     logHabitDeleted,

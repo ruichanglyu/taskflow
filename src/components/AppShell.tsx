@@ -602,7 +602,8 @@ export function AppShell({ user }: AppShellProps) {
     options?: BehaviorLearningActionOptions,
     existingEventOverride?: Parameters<typeof learning.logCalendarUpdated>[0],
   ) => {
-    const existingEvent = existingEventOverride ?? calendar.events.find(item => item.id === eventId);
+    const existingEvent = existingEventOverride
+      ?? calendar.events.find(item => item.id === eventId && (!calendarIdOverride || item.calendarId === calendarIdOverride));
     const ok = await calendar.updateEvent(eventId, event, calendarIdOverride, existingEvent);
     if (ok && existingEvent) {
       const calendarId = calendarIdOverride || existingEvent.calendarId || calendar.selectedCalendarId;
@@ -618,7 +619,8 @@ export function AppShell({ user }: AppShellProps) {
     options?: BehaviorLearningActionOptions,
     existingEventOverride?: Parameters<typeof learning.logCalendarDeleted>[0],
   ) => {
-    const existingEvent = existingEventOverride ?? calendar.events.find(item => item.id === eventId);
+    const existingEvent = existingEventOverride
+      ?? calendar.events.find(item => item.id === eventId && (!calendarIdOverride || item.calendarId === calendarIdOverride));
     const ok = await calendar.deleteEvent(eventId, calendarIdOverride);
     if (ok && existingEvent) {
       learning.logCalendarDeleted(existingEvent, options);
@@ -630,8 +632,13 @@ export function AppShell({ user }: AppShellProps) {
     ...calendar,
     createEvent: (event: Parameters<typeof calendar.createEvent>[0], calendarIdOverride?: Parameters<typeof calendar.createEvent>[1]) =>
       handleCreateCalendarEvent(event, calendarIdOverride, { source: 'manual', learn: true }),
-    updateEvent: (eventId: string, event: Parameters<typeof calendar.updateEvent>[1], calendarIdOverride?: Parameters<typeof calendar.updateEvent>[2]) =>
-      handleUpdateCalendarEvent(eventId, event, calendarIdOverride, { source: 'manual', learn: true }),
+    updateEvent: (
+      eventId: string,
+      event: Parameters<typeof calendar.updateEvent>[1],
+      calendarIdOverride?: Parameters<typeof calendar.updateEvent>[2],
+      existingEventOverride?: Parameters<typeof learning.logCalendarUpdated>[0],
+    ) =>
+      handleUpdateCalendarEvent(eventId, event, calendarIdOverride, { source: 'manual', learn: true }, existingEventOverride),
     deleteEvent: (eventId: string, calendarIdOverride?: Parameters<typeof calendar.deleteEvent>[1]) =>
       handleDeleteCalendarEvent(eventId, calendarIdOverride, { source: 'manual', learn: true }),
   }), [calendar, handleCreateCalendarEvent, handleDeleteCalendarEvent, handleUpdateCalendarEvent]);

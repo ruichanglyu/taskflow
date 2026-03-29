@@ -60,6 +60,10 @@ function buildCalendarEventIdentity(event: GoogleCalendarEvent) {
   return `${event.calendarId || ''}::${event.id || ''}::${event.summary || ''}::${startValue}::${endValue}`;
 }
 
+function eventMatchesIdentity(event: GoogleCalendarEvent, eventId: string, calendarId?: string) {
+  return event.id === eventId && (calendarId ? event.calendarId === calendarId : true);
+}
+
 function dedupeCalendarEvents(events: GoogleCalendarEvent[]) {
   const byIdentity = new Map<string, GoogleCalendarEvent>();
   for (const event of events) {
@@ -435,7 +439,8 @@ export function useGoogleCalendar(userId: string) {
     calendarIdOverride?: string,
     existingEventOverride?: GoogleCalendarEvent,
   ): Promise<boolean> => {
-    const existingEvent = existingEventOverride ?? events.find(existing => existing.id === eventId);
+    const existingEvent = existingEventOverride
+      ?? events.find(existing => eventMatchesIdentity(existing, eventId, calendarIdOverride));
     const targetCalendarId =
       calendarIdOverride ||
       existingEvent?.calendarId ||
@@ -508,8 +513,8 @@ export function useGoogleCalendar(userId: string) {
 
         setEvents(prev =>
           [
-            ...prev.filter(existing => !(existing.id === eventId && existing.calendarId === sourceCalendarId)),
-            finalEvent,
+            ...prev.filter(existing => !eventMatchesIdentity(existing, eventId, sourceCalendarId)),
+            ...(visibleCalendarIdsRef.current.includes(targetCalendarId) ? [finalEvent] : []),
           ].sort((a, b) => {
             const aTime = a.start?.dateTime || a.start?.date || '';
             const bTime = b.start?.dateTime || b.start?.date || '';
@@ -524,7 +529,7 @@ export function useGoogleCalendar(userId: string) {
       setEvents(prev =>
         prev
           .map(existing =>
-            existing.id === eventId
+            eventMatchesIdentity(existing, eventId, existingEvent.calendarId)
               ? {
                   ...existing,
                   ...updated,
@@ -550,7 +555,7 @@ export function useGoogleCalendar(userId: string) {
   const deleteEvent = useCallback(async (eventId: string, calendarIdOverride?: string): Promise<boolean> => {
     const targetCalendarId =
       calendarIdOverride ||
-      events.find(existing => existing.id === eventId)?.calendarId ||
+      events.find(existing => eventMatchesIdentity(existing, eventId, calendarIdOverride))?.calendarId ||
       selectedCalendarId;
     if (!accessToken || !targetCalendarId) return false;
 
@@ -558,7 +563,7 @@ export function useGoogleCalendar(userId: string) {
 
     try {
       await deleteGoogleCalendarEvent(accessToken, targetCalendarId, eventId);
-      setEvents(prev => prev.filter(e => e.id !== eventId));
+      setEvents(prev => prev.filter(existing => !eventMatchesIdentity(existing, eventId, targetCalendarId)));
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete event.');

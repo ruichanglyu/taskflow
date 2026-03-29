@@ -52,6 +52,10 @@ function buildOutcomeMatchKey(params: {
   return `${params.dateKey}::${normalizeText(params.title)}::${params.calendarId ?? ''}`;
 }
 
+function buildOutcomeEventKey(eventId: string, calendarId?: string | null) {
+  return `${calendarId ?? ''}::${eventId}`;
+}
+
 function buildOutcomeMatchKeyFromEvent(event: GoogleCalendarEvent) {
   const dateKey = eventDateKey(event);
   if (!event.id || !dateKey || !event.summary) return null;
@@ -159,10 +163,55 @@ export function useStudyBlockOutcomes(userId: string) {
     };
   }, [userId]);
 
-  const outcomesByEventId = useMemo(
+  useEffect(() => {
+    if (!supabase || !remoteAvailable) return;
+
+    const channel = supabase
+      .channel(`study_block_outcomes:${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'study_block_outcomes',
+          filter: `user_id=eq.${userId}`,
+        },
+        payload => {
+          setOutcomes(prev => {
+            let next = prev;
+            if (payload.eventType === 'DELETE') {
+              const deletedRow = payload.old as Partial<StudyBlockOutcomeRow>;
+              next = prev.filter(item => item.id !== deletedRow.id);
+            } else {
+              const row = payload.new as StudyBlockOutcomeRow;
+              const mapped = mapRow(row);
+              const mappedEventKey = buildOutcomeEventKey(mapped.eventId, mapped.calendarId);
+              const mappedMatchKey = buildOutcomeMatchKeyFromOutcome(mapped);
+              next = [
+                mapped,
+                ...prev.filter(item => (
+                  item.id !== mapped.id &&
+                  buildOutcomeEventKey(item.eventId, item.calendarId) !== mappedEventKey &&
+                  buildOutcomeMatchKeyFromOutcome(item) !== mappedMatchKey
+                )),
+              ].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+            }
+            saveToStorage(userId, next);
+            return next;
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [remoteAvailable, userId]);
+
+  const outcomesByEventKey = useMemo(
     () =>
       outcomes.reduce<Record<string, StudyBlockOutcome>>((acc, outcome) => {
-        acc[outcome.eventId] = outcome;
+        acc[buildOutcomeEventKey(outcome.eventId, outcome.calendarId)] = outcome;
         return acc;
       }, {}),
     [outcomes],
@@ -179,11 +228,11 @@ export function useStudyBlockOutcomes(userId: string) {
 
   const getOutcomeForEvent = useCallback((event: GoogleCalendarEvent) => {
     if (!event.id) return undefined;
-    const direct = outcomesByEventId[event.id];
+    const direct = outcomesByEventKey[buildOutcomeEventKey(event.id, event.calendarId)];
     if (direct) return direct;
     const matchKey = buildOutcomeMatchKeyFromEvent(event);
     return matchKey ? outcomesByMatchKey[matchKey] : undefined;
-  }, [outcomesByEventId, outcomesByMatchKey]);
+  }, [outcomesByEventKey, outcomesByMatchKey]);
 
   const setOutcome = useCallback(async (
     event: GoogleCalendarEvent,
@@ -209,12 +258,13 @@ export function useStudyBlockOutcomes(userId: string) {
     };
 
     const previousOutcomes = outcomes;
+    const nextEventKey = buildOutcomeEventKey(next.eventId, next.calendarId);
     const nextMatchKey = buildOutcomeMatchKeyFromOutcome(next);
     const merged = [
       next,
       ...outcomes.filter(item => (
         item.id !== next.id &&
-        item.eventId !== event.id &&
+        buildOutcomeEventKey(item.eventId, item.calendarId) !== nextEventKey &&
         buildOutcomeMatchKeyFromOutcome(item) !== nextMatchKey
       )),
     ].sort(

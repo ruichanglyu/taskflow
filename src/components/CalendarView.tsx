@@ -1186,7 +1186,7 @@ export function CalendarView({
 
   const handleSaveEvent = async (event: import('../lib/googleCalendar').NewGoogleCalendarEvent, calendarId?: string) => {
     const ok = editingEvent
-      ? await calendar.updateEvent(editingEvent.id, event, editingEvent.calendarId)
+      ? await calendar.updateEvent(editingEvent.id, event, calendarId ?? editingEvent.calendarId, editingEvent)
       : await calendar.createEvent(event, calendarId);
     if (ok) {
       setWeekDraftPreview(null);

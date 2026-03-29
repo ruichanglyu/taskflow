@@ -233,6 +233,7 @@ function buildSystemPrompt(data: {
   selectedCalendarId?: string;
   habits?: { id: string; title: string; frequency: string; doneToday: boolean; streak: number }[];
   recentAppliedCalendarActions?: string[];
+  recentListedCalendarEvents?: string[];
 }): string {
   const today = new Date().toISOString().split('T')[0];
 
@@ -371,6 +372,11 @@ ${data.recentAppliedCalendarActions && data.recentAppliedCalendarActions.length 
   ? data.recentAppliedCalendarActions.map(line => `- ${line}`).join('\n')
   : '(none)'}
 
+RECENT LISTED CALENDAR EVENTS:
+${data.recentListedCalendarEvents && data.recentListedCalendarEvents.length > 0
+  ? data.recentListedCalendarEvents.map(line => `- ${line}`).join('\n')
+  : '(none)'}
+
 CONNECTED CALENDARS:
 ${calendarsSummary}
 
@@ -500,8 +506,9 @@ SCHEDULING RULES (CRITICAL — you MUST follow these when creating calendar even
 - Import blocks are suggested changes only until the user clicks Apply. Do not say you already created, updated, deleted, removed, or linked something unless the user explicitly confirmed those changes were applied.
 - Do not assume earlier suggested changes exist. Only treat the data listed in USER'S DATA as real unless the user explicitly says they already applied a suggestion.
 - If the user refers to “the ones you just created/updated/deleted,” use the RECENT APPLIED AI CALENDAR ACTIONS section above as the source of truth for what was actually applied.
-- When deleting or updating recently applied calendar events, include the exact calendar, date, and start time whenever those details are available from RECENT APPLIED AI CALENDAR ACTIONS or LOADED CALENDAR EVENTS.
-- If the user asks to delete, reschedule, or move calendar events that you just listed from LOADED CALENDAR EVENTS, you MUST reuse those exact event details in the import block. Include one calendar row per real event with the exact title, calendar, date, and start time. Do not emit vague deletes like just a title when you already know the exact matching events.
+- If the user refers to “the ones you just listed/showed/found,” use the RECENT LISTED CALENDAR EVENTS section above as the source of truth for those exact events.
+- When deleting or updating recently applied calendar events, include the exact calendar, date, and start time whenever those details are available from RECENT APPLIED AI CALENDAR ACTIONS, RECENT LISTED CALENDAR EVENTS, or LOADED CALENDAR EVENTS.
+- If the user asks to delete, reschedule, or move calendar events that you just listed from LOADED CALENDAR EVENTS or RECENT LISTED CALENDAR EVENTS, you MUST reuse those exact event details in the import block. Include one calendar row per real event with the exact title, calendar, date, and start time. Do not emit vague deletes like just a title when you already know the exact matching events.
 - If the user says "delete them", "move them", "change them", or "reschedule them" after you just enumerated real calendar events, interpret "them" as those exact listed events and preserve the exact dates/start times in the import block.
 
 STRICT RESPONSE RULES FOR NORMAL CHAT:

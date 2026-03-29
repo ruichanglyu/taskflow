@@ -93,6 +93,7 @@ const CHAT_SIDEBAR_WIDTH_STORAGE = 'taskflow_ai_sidebar_width';
 const CHAT_SIDEBAR_COLLAPSED_STORAGE = 'taskflow_ai_sidebar_collapsed';
 const IMPORTED_BLOCKS_STORAGE_PREFIX = 'taskflow_ai_imported_blocks';
 const RECENT_APPLIED_CALENDAR_ACTIONS_STORAGE_PREFIX = 'taskflow_ai_recent_calendar_actions';
+const RECENT_LISTED_CALENDAR_EVENTS_STORAGE_PREFIX = 'taskflow_ai_recent_listed_calendar_events';
 const DEFAULT_PANEL_FRAME: PanelFrame = {
   x: 0,
   y: 88,
@@ -108,6 +109,10 @@ function importedBlocksStorageKey(userId: string) {
 
 function recentAppliedCalendarActionsStorageKey(userId: string) {
   return `${RECENT_APPLIED_CALENDAR_ACTIONS_STORAGE_PREFIX}:${userId}`;
+}
+
+function recentListedCalendarEventsStorageKey(userId: string) {
+  return `${RECENT_LISTED_CALENDAR_EVENTS_STORAGE_PREFIX}:${userId}`;
 }
 
 function loadImportedBlocks(userId: string) {
@@ -146,6 +151,70 @@ function saveRecentAppliedCalendarActions(userId: string, entries: string[]) {
   } catch {
     // ignore storage failures
   }
+}
+
+function loadRecentListedCalendarEvents(userId: string) {
+  if (typeof window === 'undefined') return [] as string[];
+  try {
+    const raw = localStorage.getItem(recentListedCalendarEventsStorageKey(userId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentListedCalendarEvents(userId: string, entries: string[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(
+      recentListedCalendarEventsStorageKey(userId),
+      JSON.stringify(entries.slice(-25)),
+    );
+  } catch {
+    // ignore local storage quota errors
+  }
+}
+
+function normalizeCalendarLookupValue(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ').replace(/\s+calendar$/, '');
+}
+
+function messageLooksLikeCalendarListingRequest(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    /(find|list|show|what|which)/.test(normalized) &&
+    /(event|events)/.test(normalized) &&
+    /(calendar|under|in|from)/.test(normalized)
+  );
+}
+
+function findCalendarMention(message: string, calendars: GoogleCalendarListItem[]) {
+  const normalizedMessage = normalizeCalendarLookupValue(message);
+  return calendars.find(calendar => {
+    const summary = normalizeCalendarLookupValue(calendar.summary);
+    return summary.length > 0 && normalizedMessage.includes(summary);
+  });
+}
+
+function formatRecentListedCalendarEvent(event: GoogleCalendarEvent, calendars: GoogleCalendarListItem[]) {
+  const calendarSummary = event.calendarSummary
+    || calendars.find(calendar => calendar.id === event.calendarId)?.summary
+    || 'Unknown calendar';
+  const dateKey = getEventDateKey(event) || 'unknown-date';
+  const startLabel = event.start?.date
+    ? 'All day'
+    : event.start?.dateTime
+      ? new Date(event.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      : 'Unknown time';
+  const endLabel = event.end?.dateTime
+    ? new Date(event.end.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : event.end?.date
+      ? 'All day'
+      : '';
+  const timeLabel = endLabel && endLabel !== startLabel ? `${startLabel} – ${endLabel}` : startLabel;
+  return `${event.summary || 'Untitled event'} · ${calendarSummary} · ${dateKey} · ${timeLabel}`;
 }
 
 function formatSummaryTime(dateTime?: string) {
@@ -599,6 +668,22 @@ export function AIPanel({
     setShowAttachmentMenu(false);
     const msg = input.trim() || (pendingImages.length ? 'What do you see in this image?' : '');
     const images = pendingImages.length ? [...pendingImages] : undefined;
+    const matchedCalendar = messageLooksLikeCalendarListingRequest(msg)
+      ? findCalendarMention(msg, calendarCalendars)
+      : null;
+    const recentListedCalendarEvents = matchedCalendar
+      ? calendarEvents
+          .filter(event => event.calendarId === matchedCalendar.id)
+          .sort((a, b) => {
+            const aTime = a.start?.dateTime || a.start?.date || '';
+            const bTime = b.start?.dateTime || b.start?.date || '';
+            return aTime.localeCompare(bTime);
+          })
+          .map(event => formatRecentListedCalendarEvent(event, calendarCalendars))
+      : loadRecentListedCalendarEvents(userId);
+    if (matchedCalendar) {
+      saveRecentListedCalendarEvents(userId, recentListedCalendarEvents);
+    }
     setPanelError(null);
     setInput('');
     setPendingImages([]);
@@ -615,6 +700,7 @@ export function AIPanel({
       selectedCalendarId,
       habits,
       recentAppliedCalendarActions: loadRecentAppliedCalendarActions(userId),
+      recentListedCalendarEvents,
     }, images);
   }, [input, pendingImages, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises, calendarEvents, calendarCalendars, selectedCalendarId, habits, userId]);
 

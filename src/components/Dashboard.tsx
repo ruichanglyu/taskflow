@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Clock, AlertCircle, TrendingUp, FolderKanban, ListTodo, BarChart3, Target } from 'lucide-react';
 import type { GoogleCalendarEvent } from '../lib/googleCalendar';
 import type { StudyBlockOutcome } from '../hooks/useStudyBlockOutcomes';
@@ -15,6 +15,7 @@ interface DashboardProps {
   getStudyBlockOutcome: (event: GoogleCalendarEvent) => StudyBlockOutcome | undefined;
   studyBlockOutcomesLoading: boolean;
   onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => Promise<boolean>;
+  onStudyReviewPromptShown?: (count: number) => void;
 }
 
 const STUDY_OUTCOME_OPTIONS: { status: StudyBlockOutcomeStatus; label: string }[] = [
@@ -125,8 +126,10 @@ export function Dashboard({
   getStudyBlockOutcome,
   studyBlockOutcomesLoading,
   onSetStudyBlockOutcome,
+  onStudyReviewPromptShown,
 }: DashboardProps) {
   const [savingOutcomeId, setSavingOutcomeId] = useState<string | null>(null);
+  const lastPromptKeyRef = useRef<string>('');
   const todo = tasks.filter(t => t.status === 'todo');
   const inProgress = tasks.filter(t => t.status === 'in-progress');
   const done = tasks.filter(t => t.status === 'done');
@@ -207,6 +210,15 @@ export function Dashboard({
     const todayKey = new Date().toISOString().slice(0, 10);
     return pendingStudyReview.filter(event => getEventDateKey(event) === todayKey).length;
   }, [pendingStudyReview]);
+
+  useEffect(() => {
+    if (!onStudyReviewPromptShown || pendingStudyReview.length === 0) return;
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const promptKey = `${todayKey}:${pendingStudyReview.length}:${pendingStudyReview.map(event => event.id).join(',')}`;
+    if (lastPromptKeyRef.current === promptKey) return;
+    lastPromptKeyRef.current = promptKey;
+    onStudyReviewPromptShown(pendingStudyReview.length);
+  }, [onStudyReviewPromptShown, pendingStudyReview]);
 
   const handleOutcomeClick = async (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => {
     setSavingOutcomeId(event.id);

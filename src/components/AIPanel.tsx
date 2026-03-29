@@ -439,6 +439,9 @@ interface AIPanelProps {
   aiLearningEnabled: boolean;
   onAiLearningEnabledChange: (enabled: boolean) => void;
   scoreStudySlot: (dateKey: string, startMinutes: number, durationMinutes: number) => number;
+  behaviorSummary?: string;
+  onAiPromptSubmitted?: (prompt: string, hasImages: boolean) => void;
+  onAiActionsApplied?: (blockType: string, appliedCount: number, skippedCount: number) => void;
   // Callbacks for imports
   onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence, status?: TaskStatus, options?: BehaviorLearningActionOptions) => Promise<string | null>;
   onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence; status?: TaskStatus }, options?: BehaviorLearningActionOptions) => Promise<boolean>;
@@ -459,7 +462,7 @@ interface AIPanelProps {
 export function AIPanel({
   open, onClose, userId,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
-  calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot,
+  calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot, behaviorSummary, onAiPromptSubmitted, onAiActionsApplied,
   onAddTask, onUpdateTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
   onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
   habits, onAddHabit, onToggleHabit, onDeleteHabit,
@@ -787,6 +790,7 @@ export function AIPanel({
       );
     }
     setPanelError(null);
+    onAiPromptSubmitted?.(msg, Boolean(images?.length));
     setInput('');
     setPendingImages([]);
     await sendMessage(msg, {
@@ -803,8 +807,9 @@ export function AIPanel({
       habits,
       recentAppliedCalendarActions: loadRecentAppliedCalendarActions(userId),
       recentListedCalendarEvents,
+      behaviorSummary,
     }, images);
-  }, [input, pendingImages, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises, calendarEvents, calendarCalendars, selectedCalendarId, habits, userId]);
+  }, [input, pendingImages, isStreaming, sendMessage, tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises, calendarEvents, calendarCalendars, selectedCalendarId, habits, userId, onAiPromptSubmitted, behaviorSummary]);
 
   const appendImageFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return false;
@@ -1009,6 +1014,7 @@ export function AIPanel({
   const handleImport = async (block: ImportBlock, blockKey: string, options?: ImportExecutionOptions) => {
     setPanelError(null);
     let imported = 0;
+    let skippedForLog = 0;
     const appliedCalendarActions: string[] = [];
     let recentCalendarTargets = loadRecentCalendarTargets(userId);
     const projectCache = new Map<string, string | null>();
@@ -1070,6 +1076,7 @@ export function AIPanel({
         }
       }
 
+      skippedForLog = skipped;
       if (skipped > 0) {
         setPanelError(
           skipped === 1
@@ -1110,6 +1117,7 @@ export function AIPanel({
             : `Skipped ${skipped} updates because tasks were ambiguous, missing, or failed to update.`,
         );
       }
+      skippedForLog = skipped;
     } else if (block.type === 'calendar-create') {
       let created = 0;
       let skipped = 0;
@@ -1200,6 +1208,7 @@ export function AIPanel({
       }
 
       imported = created;
+      skippedForLog = skipped;
       if (skipped > 0) {
         setPanelError(
           skipped === 1
@@ -1276,6 +1285,7 @@ export function AIPanel({
       }
 
       imported = updated;
+      skippedForLog = skipped;
       if (skipped > 0) {
         setPanelError(
           skipped === 1
@@ -1331,6 +1341,7 @@ export function AIPanel({
       }
 
       imported = deleted;
+      skippedForLog = skipped;
       if (skipped > 0) {
         setPanelError(
           skipped === 1
@@ -1370,6 +1381,7 @@ export function AIPanel({
       }
 
       imported = linked;
+      skippedForLog = skipped;
       if (skipped > 0) {
         setPanelError(
           skipped === 1
@@ -1387,6 +1399,7 @@ export function AIPanel({
         return tt === parentTitle || ts === parentTitle || tt === parentStripped || ts === parentStripped;
       });
       if (!parentTask) {
+        skippedForLog = block.rows.length;
         setPanelError(
           `Could not find parent task "${block.parentTaskTitle}". Subtasks were not created. ` +
           `Make sure the parent task exists first, then try again.`
@@ -1396,6 +1409,7 @@ export function AIPanel({
           block.rows.map(row => onAddSubtask(parentTask.id, row.title, aiLearningOptions))
         );
         imported += subtaskResults.filter(Boolean).length;
+        skippedForLog = subtaskResults.length - subtaskResults.filter(Boolean).length;
       }
     } else if (block.type === 'tasks') {
       // Resolve all project IDs first (may create projects), then insert all tasks in parallel
@@ -1436,9 +1450,14 @@ export function AIPanel({
           workingTasks.push(newTask);
         }
       }
+      skippedForLog = taskResults.length - imported;
     } else if (block.type === 'deadlines') {
+      let skipped = 0;
       for (const row of block.rows) {
-        if (!row.dueDate) continue;
+        if (!row.dueDate) {
+          skipped++;
+          continue;
+        }
         const projectId = await resolveProject(row.course);
         const type = (['assignment', 'exam', 'quiz', 'lab', 'project', 'other'].includes(row.type ?? '') ? row.type : 'other') as DeadlineType;
         const status = (['not-started', 'in-progress', 'done', 'missed'].includes(row.status ?? '') ? row.status : 'not-started') as DeadlineStatus;
@@ -1453,29 +1472,40 @@ export function AIPanel({
           aiLearningOptions,
         );
         if (ok) imported++;
+        else skipped++;
       }
+      skippedForLog = skipped;
     } else if (block.type === 'habits-create') {
       for (const row of block.rows) {
         const freq = (row.frequency === 'weekly' ? 'weekly' : 'daily') as 'daily' | 'weekly';
         await onAddHabit(row.title, freq, aiLearningOptions);
         imported++;
       }
+      skippedForLog = Math.max(0, block.rows.length - imported);
     } else if (block.type === 'habits-complete') {
+      let skipped = 0;
       for (const row of block.rows) {
         const habit = habits.find(h => h.title.toLowerCase() === row.title.toLowerCase());
         if (habit && !habit.doneToday) {
           await onToggleHabit(habit.id, aiLearningOptions);
           imported++;
+        } else {
+          skipped++;
         }
       }
+      skippedForLog = skipped;
     } else if (block.type === 'habits-delete') {
+      let skipped = 0;
       for (const row of block.rows) {
         const habit = habits.find(h => h.title.toLowerCase() === row.title.toLowerCase());
         if (habit) {
           await onDeleteHabit(habit.id, aiLearningOptions);
           imported++;
+        } else {
+          skipped++;
         }
       }
+      skippedForLog = skipped;
     }
 
     if (appliedCalendarActions.length > 0) {
@@ -1483,6 +1513,7 @@ export function AIPanel({
       saveRecentAppliedCalendarActions(userId, [...existingActions, ...appliedCalendarActions]);
     }
     saveRecentCalendarTargets(userId, recentCalendarTargets);
+    onAiActionsApplied?.(block.type, imported, skippedForLog);
 
     setImportedBlocks(prev => new Set(prev).add(blockKey));
     return imported;

@@ -742,6 +742,10 @@ export function AppShell({ user }: AppShellProps) {
               getStudyBlockOutcome={studyBlockOutcomes.getOutcomeForEvent}
               studyBlockOutcomesLoading={studyBlockOutcomes.isLoading}
               onSetStudyBlockOutcome={handleSetStudyBlockOutcome}
+              onStudyReviewPromptShown={(count) => learning.logStudyReviewPromptShown({
+                count,
+                options: { source: 'manual', learn: true },
+              })}
             />
           )}
           {currentView === 'deadlines' && (
@@ -925,6 +929,18 @@ export function AppShell({ user }: AppShellProps) {
         aiLearningEnabled={learning.aiLearningEnabled}
         onAiLearningEnabledChange={learning.setAiLearningEnabled}
         scoreStudySlot={learning.scoreStudySlot}
+        behaviorSummary={learning.behaviorInsights.summary}
+        onAiPromptSubmitted={(prompt, hasImages) => learning.logAiPromptSubmitted({
+          prompt,
+          hasImages,
+          options: { source: 'manual', learn: true },
+        })}
+        onAiActionsApplied={(blockType, appliedCount, skippedCount) => learning.logAiActionsApplied({
+          blockType,
+          appliedCount,
+          skippedCount,
+          options: { source: 'manual', learn: true },
+        })}
         habits={habits.habits}
         onAddHabit={handleAddHabit}
         onToggleHabit={handleToggleHabit}

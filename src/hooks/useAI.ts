@@ -234,6 +234,7 @@ function buildSystemPrompt(data: {
   habits?: { id: string; title: string; frequency: string; doneToday: boolean; streak: number }[];
   recentAppliedCalendarActions?: string[];
   recentListedCalendarEvents?: string[];
+  behaviorSummary?: string;
 }): string {
   const today = new Date().toISOString().split('T')[0];
 
@@ -382,6 +383,9 @@ ${calendarsSummary}
 
 LOADED CALENDAR EVENTS:
 ${upcomingCalendarSummary}
+
+BEHAVIOR INSIGHTS:
+${data.behaviorSummary?.trim() || '(not enough behavior history yet)'}
 
 ROUTINES (daily/weekly habits):
 ${data.habits && data.habits.length > 0

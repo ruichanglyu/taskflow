@@ -7,7 +7,7 @@ import { isStudyBlockLikeEvent } from '../utils/studyBlockDetection';
 type LearningSource = 'manual' | 'ai';
 type LearningAction = 'create' | 'reschedule' | 'delete';
 type TaskStatusLike = 'todo' | 'in-progress' | 'done' | 'not-started' | 'missed';
-type AppBehaviorEntity = 'task' | 'deadline' | 'project' | 'habit' | 'deadline-link' | 'calendar';
+type AppBehaviorEntity = 'task' | 'deadline' | 'project' | 'habit' | 'deadline-link' | 'calendar' | 'ai' | 'study-review';
 export type BehaviorLearningSeedPreset = 'early-bird' | 'normal-grinder' | 'night-owl';
 
 export interface BehaviorLearningActionOptions {
@@ -31,6 +31,18 @@ interface ParsedStudyBlockOutcomeDetail {
   startMinutes: number;
   durationMinutes: number;
   weekday: number;
+}
+
+interface ParsedTaskDueDetail {
+  dueDate: string | null;
+  previousDueDate: string | null;
+  nextDueDate: string | null;
+  previousStatus: string | null;
+  nextStatus: string | null;
+}
+
+interface BehaviorInsightSummary {
+  summary: string;
 }
 
 interface BehaviorLearningEvent {
@@ -158,6 +170,24 @@ function parseStudyBlockOutcomeDetail(detail: string | null | undefined): Parsed
   };
 }
 
+function parseTaskDueDetail(detail: string | null | undefined): ParsedTaskDueDetail {
+  return {
+    dueDate: getDetailToken(detail, 'due'),
+    previousDueDate: getDetailToken(detail, 'from'),
+    nextDueDate: getDetailToken(detail, 'to'),
+    previousStatus: getDetailToken(detail, 'from'),
+    nextStatus: getDetailToken(detail, 'to'),
+  };
+}
+
+function parseTaskStatusDetail(detail: string | null | undefined) {
+  return {
+    dueDate: getDetailToken(detail, 'due'),
+    previousStatus: getDetailToken(detail, 'from'),
+    nextStatus: getDetailToken(detail, 'to'),
+  };
+}
+
 function parseTimedPayload(payload: NewGoogleCalendarEvent, calendarId?: string | null, calendarSummary?: string | null): TimedBehaviorSnapshot | null {
   if (!('dateTime' in payload.start) || !('dateTime' in payload.end)) return null;
 
@@ -207,6 +237,29 @@ function parseTimedCalendarEvent(event: GoogleCalendarEvent): TimedBehaviorSnaps
 function bucketMinutes(value: number) {
   const bucket = Math.round(value / 15) * 15;
   return Math.max(0, Math.min(bucket, 23 * 60 + 45));
+}
+
+function formatMinutesLabel(totalMinutes: number) {
+  const safe = Math.max(0, Math.min(totalMinutes, 23 * 60 + 59));
+  const hours = Math.floor(safe / 60);
+  const minutes = safe % 60;
+  const meridiem = hours >= 12 ? 'PM' : 'AM';
+  const displayHour = hours % 12 === 0 ? 12 : hours % 12;
+  return `${displayHour}:${String(minutes).padStart(2, '0')} ${meridiem}`;
+}
+
+function getTimeWindowLabel(startMinutes: number) {
+  if (startMinutes < 12 * 60) return 'morning';
+  if (startMinutes < 17 * 60) return 'afternoon';
+  if (startMinutes < 21 * 60) return 'evening';
+  return 'late night';
+}
+
+function daysBetween(dateA: string, dateB: string) {
+  const a = new Date(`${dateA}T00:00:00`);
+  const b = new Date(`${dateB}T00:00:00`);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
 }
 
 function loadEventsFromStorage(userId: string): BehaviorLearningEvent[] {
@@ -503,6 +556,161 @@ function scoreStudySlotFromEvents(
   const weekdayScore = weekdayScores[weekday].get(bucket) ?? 0;
   const overallScore = overallScores.get(bucket) ?? 0;
   return weekdayScore * 1.6 + overallScore * 0.5 + durationBias;
+}
+
+function buildBehaviorInsightSummary(
+  events: BehaviorLearningEvent[],
+  appEvents: AppBehaviorEvent[],
+): BehaviorInsightSummary {
+  const learningEvents = events.filter(event => event.countsForLearning);
+  const learningAppEvents = appEvents.filter(event => event.countsForLearning);
+  const recentStudyOutcomes = learningAppEvents.filter(event => event.entity === 'calendar' && event.action.startsWith('study-block-'));
+  const completedOutcomes = recentStudyOutcomes.filter(event => event.action === 'study-block-complete');
+  const partialOutcomes = recentStudyOutcomes.filter(event => event.action === 'study-block-partial');
+  const skippedOutcomes = recentStudyOutcomes.filter(event => event.action === 'study-block-skip');
+  const rescheduledOutcomes = recentStudyOutcomes.filter(event => event.action === 'study-block-reschedule');
+
+  const windowScores = new Map<string, number>();
+  recentStudyOutcomes.forEach(event => {
+    const parsed = parseStudyBlockOutcomeDetail(event.detail);
+    if (!parsed) return;
+    const bucket = getTimeWindowLabel(parsed.startMinutes);
+    const delta =
+      event.action === 'study-block-complete' ? 2 :
+      event.action === 'study-block-partial' ? 0.75 :
+      event.action === 'study-block-skip' ? -2 :
+      -1;
+    windowScores.set(bucket, (windowScores.get(bucket) ?? 0) + delta);
+  });
+  const strongestWindow = [...windowScores.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const weakestWindow = [...windowScores.entries()].sort((a, b) => a[1] - b[1])[0]?.[0] ?? null;
+
+  let laterReschedules = 0;
+  let earlierReschedules = 0;
+  let otherDayReschedules = 0;
+  learningEvents.forEach(event => {
+    if (event.action !== 'reschedule' || event.previousStartMinutes === null || event.previousDateKey === null) return;
+    if (event.previousDateKey !== event.dateKey) otherDayReschedules += 1;
+    const diff = event.startMinutes - event.previousStartMinutes;
+    if (diff > 0) laterReschedules += 1;
+    if (diff < 0) earlierReschedules += 1;
+  });
+
+  const plannedByDate = new Map<string, number>();
+  learningEvents.forEach(event => {
+    if (event.action === 'create' || event.action === 'reschedule') {
+      plannedByDate.set(event.dateKey, (plannedByDate.get(event.dateKey) ?? 0) + 1);
+    }
+  });
+
+  const completedByDate = new Map<string, number>();
+  recentStudyOutcomes.forEach(event => {
+    const parsed = parseStudyBlockOutcomeDetail(event.detail);
+    if (!parsed) return;
+    const value = event.action === 'study-block-complete' ? 1 : event.action === 'study-block-partial' ? 0.5 : 0;
+    completedByDate.set(parsed.dateKey, (completedByDate.get(parsed.dateKey) ?? 0) + value);
+  });
+
+  let overloadedDayCount = 0;
+  let overloadedDayCompletionAverage = 0;
+  let manageableDayCompletionAverage = 0;
+  let overloadedDaysSeen = 0;
+  let manageableDaysSeen = 0;
+  [...plannedByDate.entries()].forEach(([dateKey, planned]) => {
+    const completed = completedByDate.get(dateKey) ?? 0;
+    if (planned >= 3) {
+      overloadedDayCount += 1;
+      overloadedDaysSeen += 1;
+      overloadedDayCompletionAverage += completed;
+    } else {
+      manageableDaysSeen += 1;
+      manageableDayCompletionAverage += completed;
+    }
+  });
+  overloadedDayCompletionAverage = overloadedDaysSeen > 0 ? overloadedDayCompletionAverage / overloadedDaysSeen : 0;
+  manageableDayCompletionAverage = manageableDaysSeen > 0 ? manageableDayCompletionAverage / manageableDaysSeen : 0;
+
+  const completionDates = [...new Set(completedOutcomes
+    .map(event => parseStudyBlockOutcomeDetail(event.detail)?.dateKey)
+    .filter((value): value is string => Boolean(value))
+    .sort(),
+  )];
+  let currentStudyStreak = 0;
+  let longestStudyStreak = 0;
+  let previousDate: string | null = null;
+  completionDates.forEach(dateKey => {
+    if (!previousDate) {
+      currentStudyStreak = 1;
+      longestStudyStreak = 1;
+      previousDate = dateKey;
+      return;
+    }
+    const diff = daysBetween(previousDate, dateKey);
+    currentStudyStreak = diff === 1 ? currentStudyStreak + 1 : 1;
+    longestStudyStreak = Math.max(longestStudyStreak, currentStudyStreak);
+    previousDate = dateKey;
+  });
+
+  const taskDoneEvents = learningAppEvents.filter(event => event.entity === 'task' && event.action === 'status-change');
+  const taskStartedEvents = learningAppEvents.filter(event => event.entity === 'task' && event.action === 'status-change');
+  let doneEarly = 0;
+  let doneOnTime = 0;
+  let doneLate = 0;
+  let startedEarly = 0;
+  let startedLastMinute = 0;
+  taskDoneEvents.forEach(event => {
+    const statusDetail = parseTaskStatusDetail(event.detail);
+    if (statusDetail.nextStatus !== 'done' || !statusDetail.dueDate) return;
+    const completionDate = event.createdAt.slice(0, 10);
+    const diff = daysBetween(completionDate, statusDetail.dueDate);
+    if (diff === null) return;
+    if (diff > 0) doneEarly += 1;
+    else if (diff === 0) doneOnTime += 1;
+    else doneLate += 1;
+  });
+  taskStartedEvents.forEach(event => {
+    const statusDetail = parseTaskStatusDetail(event.detail);
+    if (statusDetail.nextStatus !== 'in-progress' || !statusDetail.dueDate) return;
+    const startDate = event.createdAt.slice(0, 10);
+    const diff = daysBetween(startDate, statusDetail.dueDate);
+    if (diff === null) return;
+    if (diff >= 2) startedEarly += 1;
+    else startedLastMinute += 1;
+  });
+
+  const aiPromptCount = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'prompt-submit').length;
+  const aiApplyCount = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'actions-apply').length;
+  const aiPromptAcceptance = aiPromptCount > 0 ? Math.round((aiApplyCount / aiPromptCount) * 100) : null;
+
+  const lines = [
+    `Study outcomes tracked: ${completedOutcomes.length} completed, ${partialOutcomes.length} partial, ${skippedOutcomes.length} skipped, ${rescheduledOutcomes.length} marked rescheduled.`,
+    plannedByDate.size > 0
+      ? `Plan realism: ${[...plannedByDate.values()].reduce((sum, value) => sum + value, 0)} planned study blocks versus ${Math.round([...completedByDate.values()].reduce((sum, value) => sum + value, 0) * 10) / 10} completed-equivalent blocks.`
+      : 'Plan realism: not enough study scheduling history yet.',
+    strongestWindow
+      ? `Time-of-day pattern: best results are trending toward ${strongestWindow}${weakestWindow && weakestWindow !== strongestWindow ? `, while ${weakestWindow} is weaker` : ''}.`
+      : 'Time-of-day pattern: not enough outcome history yet.',
+    laterReschedules || earlierReschedules || otherDayReschedules
+      ? `Reschedule pattern: ${laterReschedules} moved later, ${earlierReschedules} moved earlier, ${otherDayReschedules} moved to another day.`
+      : 'Reschedule pattern: not enough reschedule history yet.',
+    overloadedDayCount > 0 || manageableDaysSeen > 0
+      ? `Workload tolerance: days with 3+ planned blocks average ${overloadedDayCompletionAverage.toFixed(1)} completions; lighter days average ${manageableDayCompletionAverage.toFixed(1)}.`
+      : 'Workload tolerance: not enough daily workload history yet.',
+    longestStudyStreak > 0
+      ? `Study consistency: longest completion streak is ${longestStudyStreak} day${longestStudyStreak === 1 ? '' : 's'}.`
+      : 'Study consistency: no completed study streaks recorded yet.',
+    taskStartedEvents.length > 0
+      ? `Deadline approach: ${startedEarly} task starts happened 2+ days before the due date, ${startedLastMinute} started within the last day.`
+      : 'Deadline approach: not enough task-start history yet.',
+    taskDoneEvents.length > 0
+      ? `Task completion timing: ${doneEarly} finished early, ${doneOnTime} on the due date, ${doneLate} after the due date.`
+      : 'Task completion timing: not enough task completion history yet.',
+    aiPromptCount > 0
+      ? `AI engagement: ${aiApplyCount} applied suggestion bundles across ${aiPromptCount} prompts${aiPromptAcceptance !== null ? ` (${aiPromptAcceptance}% apply rate)` : ''}.`
+      : 'AI engagement: no AI prompt history tracked yet.',
+  ];
+
+  return { summary: lines.join('\n') };
 }
 
 function appendBehaviorEvent(
@@ -973,7 +1181,7 @@ export function useBehaviorLearning(userId: string) {
     if (!isStudyBlockLikeEvent({
       title,
       calendarSummary,
-      description: updates.description ?? event.description,
+      description: payload.description ?? previousEvent.description,
     })) return;
     if (!nextSnapshot) return;
 
@@ -1058,6 +1266,8 @@ export function useBehaviorLearning(userId: string) {
   const scoreStudySlot = useCallback((dateKey: string, startMinutes: number, durationMinutes: number) => {
     return scoreStudySlotFromEvents(events, appEvents, dateKey, startMinutes, durationMinutes);
   }, [appEvents, events]);
+
+  const behaviorInsights = useMemo(() => buildBehaviorInsightSummary(events, appEvents), [appEvents, events]);
 
   const logTaskCreated = useCallback((_: {
     title: string;
@@ -1263,7 +1473,19 @@ export function useBehaviorLearning(userId: string) {
     calendarSummary?: string | null,
     options?: BehaviorLearningActionOptions,
   ) => {
-    recordAppAction('calendar', 'create', payload.summary, options, calendarSummary ?? null);
+    const snapshot = parseTimedPayload(payload, null, calendarSummary ?? null);
+    recordAppAction(
+      'calendar',
+      'create',
+      payload.summary,
+      options,
+      [
+        calendarSummary ? `calendar:${calendarSummary}` : null,
+        snapshot?.dateKey ? `date:${snapshot.dateKey}` : null,
+        snapshot ? `start:${snapshot.startMinutes}` : null,
+        snapshot ? `duration:${snapshot.durationMinutes}` : null,
+      ].filter(Boolean).join(' · ') || null,
+    );
     recordCalendarCreate(payload, {
       source: options?.source ?? 'manual',
       calendarSummary,
@@ -1277,14 +1499,6 @@ export function useBehaviorLearning(userId: string) {
     calendarSummary?: string | null,
     options?: BehaviorLearningActionOptions,
   ) => {
-    recordAppAction(
-      'calendar',
-      'update',
-      payload.summary ?? previousEvent.summary ?? 'Untitled event',
-      options,
-      calendarSummary ?? previousEvent.calendarSummary ?? null,
-    );
-
     const mergedPayload: NewGoogleCalendarEvent = {
       summary: payload.summary ?? previousEvent.summary ?? 'Untitled event',
       ...(payload.description !== undefined || previousEvent.description ? { description: payload.description ?? previousEvent.description ?? undefined } : {}),
@@ -1301,6 +1515,20 @@ export function useBehaviorLearning(userId: string) {
       ),
     };
 
+    const nextSnapshot = parseTimedPayload(mergedPayload, previousEvent.calendarId, calendarSummary ?? previousEvent.calendarSummary);
+    recordAppAction(
+      'calendar',
+      'update',
+      payload.summary ?? previousEvent.summary ?? 'Untitled event',
+      options,
+      [
+        calendarSummary ?? previousEvent.calendarSummary ? `calendar:${calendarSummary ?? previousEvent.calendarSummary}` : null,
+        nextSnapshot?.dateKey ? `date:${nextSnapshot.dateKey}` : null,
+        nextSnapshot ? `start:${nextSnapshot.startMinutes}` : null,
+        nextSnapshot ? `duration:${nextSnapshot.durationMinutes}` : null,
+      ].filter(Boolean).join(' · ') || null,
+    );
+
     recordCalendarUpdate(previousEvent, mergedPayload, {
       source: options?.source ?? 'manual',
       calendarId: previousEvent.calendarId,
@@ -1313,7 +1541,19 @@ export function useBehaviorLearning(userId: string) {
     event: GoogleCalendarEvent,
     options?: BehaviorLearningActionOptions,
   ) => {
-    recordAppAction('calendar', 'delete', event.summary ?? 'Untitled event', options, event.calendarSummary ?? null);
+    const snapshot = parseTimedCalendarEvent(event);
+    recordAppAction(
+      'calendar',
+      'delete',
+      event.summary ?? 'Untitled event',
+      options,
+      [
+        event.calendarSummary ? `calendar:${event.calendarSummary}` : null,
+        snapshot?.dateKey ? `date:${snapshot.dateKey}` : null,
+        snapshot ? `start:${snapshot.startMinutes}` : null,
+        snapshot ? `duration:${snapshot.durationMinutes}` : null,
+      ].filter(Boolean).join(' · ') || null,
+    );
     recordCalendarDelete(event, {
       source: options?.source ?? 'manual',
       countsForLearning: shouldLearn(options),
@@ -1465,6 +1705,54 @@ export function useBehaviorLearning(userId: string) {
     recordAppAction('habit', 'delete', params.title, params.options, null);
   }, [recordAppAction]);
 
+  const logAiPromptSubmitted = useCallback((params: {
+    prompt: string;
+    hasImages?: boolean;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'ai',
+      'prompt-submit',
+      params.prompt.trim().slice(0, 80) || '(empty prompt)',
+      params.options,
+      [
+        `length:${params.prompt.trim().length}`,
+        params.hasImages ? 'images:true' : null,
+      ].filter(Boolean).join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logAiActionsApplied = useCallback((params: {
+    blockType: string;
+    appliedCount: number;
+    skippedCount?: number;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'ai',
+      'actions-apply',
+      params.blockType,
+      params.options,
+      [
+        `applied:${params.appliedCount}`,
+        params.skippedCount !== undefined ? `skipped:${params.skippedCount}` : null,
+      ].filter(Boolean).join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logStudyReviewPromptShown = useCallback((params: {
+    count: number;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'study-review',
+      'prompt-shown',
+      'End-of-day study review',
+      params.options,
+      `count:${params.count}`,
+    );
+  }, [recordAppAction]);
+
   return {
     aiTestingMode,
     aiLearningEnabled,
@@ -1475,6 +1763,7 @@ export function useBehaviorLearning(userId: string) {
     appBehaviorEvents: appEvents,
     getPreferredStudyStartMinutes,
     preferenceSummary,
+    behaviorInsights,
     scoreStudySlot,
     logTaskCreated,
     logTaskUpdated,
@@ -1500,6 +1789,9 @@ export function useBehaviorLearning(userId: string) {
     logHabitCreated,
     logHabitToggled,
     logHabitDeleted,
+    logAiPromptSubmitted,
+    logAiActionsApplied,
+    logStudyReviewPromptShown,
     recordCalendarCreate,
     recordCalendarUpdate,
     recordCalendarDelete,

@@ -727,7 +727,15 @@ export function AppShell({ user }: AppShellProps) {
           ) : (
             <>
           {currentView === 'dashboard' && (
-            <Dashboard tasks={store.tasks} projects={store.projects} deadlines={deadlineStore.deadlines} />
+            <Dashboard
+              tasks={store.tasks}
+              projects={store.projects}
+              deadlines={deadlineStore.deadlines}
+              calendarEvents={calendar.events}
+              studyBlockOutcomes={studyBlockOutcomes.outcomesByEventId}
+              studyBlockOutcomesLoading={studyBlockOutcomes.isLoading}
+              onSetStudyBlockOutcome={handleSetStudyBlockOutcome}
+            />
           )}
           {currentView === 'deadlines' && (
             <DeadlinesPage

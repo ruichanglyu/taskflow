@@ -1,12 +1,97 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { CheckCircle2, Clock, AlertCircle, TrendingUp, FolderKanban, ListTodo, BarChart3, Target } from 'lucide-react';
-import { Task, Project, Deadline } from '../types';
+import type { GoogleCalendarEvent } from '../lib/googleCalendar';
+import type { StudyBlockOutcome } from '../hooks/useStudyBlockOutcomes';
+import { Task, Project, Deadline, StudyBlockOutcomeStatus } from '../types';
 import { cn } from '../utils/cn';
 
 interface DashboardProps {
   tasks: Task[];
   projects: Project[];
   deadlines?: Deadline[];
+  calendarEvents: GoogleCalendarEvent[];
+  studyBlockOutcomes: Record<string, StudyBlockOutcome>;
+  studyBlockOutcomesLoading: boolean;
+  onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => Promise<boolean>;
+}
+
+const STUDY_OUTCOME_OPTIONS: { status: StudyBlockOutcomeStatus; label: string }[] = [
+  { status: 'completed', label: 'Done' },
+  { status: 'partial', label: 'Partial' },
+  { status: 'skipped', label: 'Skipped' },
+  { status: 'rescheduled', label: 'Rescheduled' },
+];
+
+function normalizeText(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function normalizeCalendarSummary(value: string) {
+  return normalizeText(value).replace(/\s*\((primary|read-only|read only|owner)\)\s*$/i, '').trim();
+}
+
+function isStudyBlockLike(title?: string, calendarSummary?: string | null) {
+  const normalizedTitle = normalizeText(title ?? '');
+  const normalizedCalendar = normalizeCalendarSummary(calendarSummary ?? '');
+  return (
+    normalizedTitle.includes('study block') ||
+    normalizedCalendar.includes('study blocks') ||
+    normalizedCalendar.includes('exam prep')
+  );
+}
+
+function getEventDateKey(event: GoogleCalendarEvent): string | null {
+  if (event.start?.date) return event.start.date;
+  if (event.start?.dateTime) return event.start.dateTime.slice(0, 10);
+  return null;
+}
+
+function hasEventEnded(event: GoogleCalendarEvent, now = new Date()) {
+  if (event.end?.dateTime) {
+    return new Date(event.end.dateTime).getTime() <= now.getTime();
+  }
+  if (event.end?.date) {
+    return new Date(`${event.end.date}T00:00:00`).getTime() <= now.getTime();
+  }
+  const dateKey = getEventDateKey(event);
+  if (!dateKey) return false;
+  return new Date(`${dateKey}T23:59:59`).getTime() <= now.getTime();
+}
+
+function getEventTimeLabel(date?: { date?: string; dateTime?: string }) {
+  if (date?.date) return 'All day';
+  if (date?.dateTime) {
+    return new Date(date.dateTime).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+  return '';
+}
+
+function getOutcomeTone(status: StudyBlockOutcomeStatus) {
+  switch (status) {
+    case 'completed':
+      return 'bg-emerald-500/12 text-emerald-300 border-emerald-500/20';
+    case 'partial':
+      return 'bg-amber-500/12 text-amber-300 border-amber-500/20';
+    case 'skipped':
+      return 'bg-rose-500/12 text-rose-300 border-rose-500/20';
+    case 'rescheduled':
+      return 'bg-sky-500/12 text-sky-300 border-sky-500/20';
+  }
+}
+
+function getOutcomeLabel(status: StudyBlockOutcomeStatus) {
+  return STUDY_OUTCOME_OPTIONS.find(option => option.status === status)?.label ?? status;
+}
+
+function OutcomeBadge({ status }: { status: StudyBlockOutcomeStatus }) {
+  return (
+    <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]', getOutcomeTone(status))}>
+      {getOutcomeLabel(status)}
+    </span>
+  );
 }
 
 function SummaryPill({ label, value, pulse }: { label: string; value: string; pulse?: boolean }) {
@@ -47,7 +132,16 @@ function MiniBar({ value, max, color }: { value: number; max: number; color: str
   );
 }
 
-export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
+export function Dashboard({
+  tasks,
+  projects,
+  deadlines = [],
+  calendarEvents,
+  studyBlockOutcomes,
+  studyBlockOutcomesLoading,
+  onSetStudyBlockOutcome,
+}: DashboardProps) {
+  const [savingOutcomeId, setSavingOutcomeId] = useState<string | null>(null);
   const todo = tasks.filter(t => t.status === 'todo');
   const inProgress = tasks.filter(t => t.status === 'in-progress');
   const done = tasks.filter(t => t.status === 'done');
@@ -113,6 +207,38 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
     return 'text-[var(--text-faint)]';
   };
 
+  const pendingStudyReview = useMemo(() => {
+    const now = new Date();
+    return calendarEvents
+      .filter(event => {
+        if (!event.id) return false;
+        if (!isStudyBlockLike(event.summary, event.calendarSummary)) return false;
+        if (!hasEventEnded(event, now)) return false;
+        if (studyBlockOutcomes[event.id]) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const aDate = getEventDateKey(a) ?? '';
+        const bDate = getEventDateKey(b) ?? '';
+        if (aDate !== bDate) return aDate.localeCompare(bDate);
+        const aStart = a.start?.dateTime ? new Date(a.start.dateTime).getTime() : 0;
+        const bStart = b.start?.dateTime ? new Date(b.start.dateTime).getTime() : 0;
+        return aStart - bStart;
+      })
+      .slice(0, 6);
+  }, [calendarEvents, studyBlockOutcomes]);
+
+  const pendingTodayStudyReviewCount = useMemo(() => {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    return pendingStudyReview.filter(event => getEventDateKey(event) === todayKey).length;
+  }, [pendingStudyReview]);
+
+  const handleOutcomeClick = async (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => {
+    setSavingOutcomeId(event.id);
+    await onSetStudyBlockOutcome(event, status);
+    setSavingOutcomeId(current => (current === event.id ? null : current));
+  };
+
   return (
     <div className="space-y-6">
       <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-5 shadow-sm">
@@ -129,6 +255,73 @@ export function Dashboard({ tasks, projects, deadlines = [] }: DashboardProps) {
           </div>
         </div>
       </div>
+
+      {pendingStudyReview.length > 0 && (
+        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-emerald-400" />
+                <h3 className="text-sm font-semibold text-[var(--text-primary)]">End-of-day study review</h3>
+              </div>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                {pendingTodayStudyReviewCount > 0
+                  ? `You had ${pendingTodayStudyReviewCount} study block${pendingTodayStudyReviewCount === 1 ? '' : 's'} today that still need a quick outcome.`
+                  : `You have ${pendingStudyReview.length} past study block${pendingStudyReview.length === 1 ? '' : 's'} that still need an outcome.`}
+              </p>
+            </div>
+            {studyBlockOutcomesLoading && (
+              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-faint)]">Loading</span>
+            )}
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {pendingStudyReview.map(event => {
+              const dateKey = getEventDateKey(event);
+              const dateLabel = dateKey
+                ? new Date(`${dateKey}T00:00:00`).toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                  })
+                : 'Unknown day';
+              return (
+                <div key={event.id} className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3.5">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="truncate text-sm font-medium text-[var(--text-primary)]">
+                          {event.summary || 'Untitled event'}
+                        </h4>
+                        {studyBlockOutcomes[event.id] && <OutcomeBadge status={studyBlockOutcomes[event.id].status} />}
+                      </div>
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">
+                        {dateLabel} · {getEventTimeLabel(event.start)}
+                        {event.end?.dateTime ? ` - ${getEventTimeLabel(event.end)}` : ''}
+                        {event.calendarSummary ? ` · ${event.calendarSummary}` : ''}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {STUDY_OUTCOME_OPTIONS.map(option => (
+                        <button
+                          key={option.status}
+                          type="button"
+                          onClick={() => void handleOutcomeClick(event, option.status)}
+                          disabled={savingOutcomeId === event.id}
+                          className="rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {savingOutcomeId === event.id ? 'Saving…' : option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

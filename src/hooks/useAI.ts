@@ -497,7 +497,7 @@ LINKING RULES:
 
 SCHEDULING RULES (CRITICAL — you MUST follow these when creating calendar events):
 - The LOADED CALENDAR EVENTS section above shows each day's BUSY times and FREE slots with durations.
-- You MUST ONLY schedule new events during FREE slots. NEVER schedule during BUSY times, even if the user does not explicitly remind you about conflicts.
+- You MUST ONLY place new or updated timed events during FREE slots. NEVER schedule or move a timed event into BUSY time, even if the user does not explicitly remind you about conflicts.
 - For each requested day, keep the day/cadence the user asked for whenever possible and adjust the TIME within that same day before you consider skipping the day.
 - For each day, pick a FREE slot that is long enough for the requested duration. Different days will have different free times — use different times per day.
 - If no FREE slot on a day is long enough, skip that day and tell the user.

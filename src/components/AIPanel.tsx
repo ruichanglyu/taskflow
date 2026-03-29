@@ -1098,7 +1098,7 @@ export function AIPanel({
 
       for (const row of block.rows) {
         const matches = resolvePreferredCalendarCandidates(workingCalendarEvents, calendarCalendars, row);
-        const payload = buildCalendarEventPayload(row, 'update');
+        let payload = buildCalendarEventPayload(row, 'update');
 
         if (matches.length !== 1 || !payload) {
           skipped++;
@@ -1108,6 +1108,26 @@ export function AIPanel({
         const targetCalendarId = row.newCalendar
           ? calendarCalendars.find(item => normalizeCalendarCandidate(item.summary) === normalizeCalendarCandidate(row.newCalendar || ''))?.id
           : matches[0].calendarId;
+
+        const targetCalendarSummary = row.newCalendar
+          ? calendarCalendars.find(item => item.id === targetCalendarId)?.summary ?? row.newCalendar
+          : matches[0].calendarSummary;
+
+        const updateResolution = maybeResolveCalendarUpdateConflict(
+          row,
+          payload,
+          workingCalendarEvents,
+          matches[0],
+          targetCalendarSummary,
+          scoreStudySlot,
+        );
+
+        if (!updateResolution.payload) {
+          skipped++;
+          continue;
+        }
+
+        payload = updateResolution.payload;
 
         const ok = await onUpdateCalendarEvent(matches[0].id, payload, targetCalendarId, aiLearningOptions, matches[0]);
         if (ok) {
@@ -2526,6 +2546,24 @@ function maybeResolveCalendarCreateConflict(
   }
 
   return { payload: null, adjusted: false };
+}
+
+function maybeResolveCalendarUpdateConflict(
+  row: ParsedImportRow,
+  payload: NewGoogleCalendarEvent,
+  events: GoogleCalendarEvent[],
+  existingEvent: GoogleCalendarEvent,
+  calendarSummary?: string,
+  scoreStudySlot?: (dateKey: string, startMinutes: number, durationMinutes: number) => number,
+) {
+  const remainingEvents = events.filter(event => !(event.id === existingEvent.id && event.calendarId === existingEvent.calendarId));
+  return maybeResolveCalendarCreateConflict(
+    row,
+    payload,
+    remainingEvents,
+    calendarSummary,
+    scoreStudySlot,
+  );
 }
 
 function buildSyntheticCalendarEvent(

@@ -45,6 +45,8 @@ interface BehaviorInsightSummary {
   summary: string;
 }
 
+type InsightConfidence = 'low' | 'medium' | 'high';
+
 interface BehaviorLearningEvent {
   id: string;
   source: LearningSource;
@@ -253,6 +255,12 @@ function getTimeWindowLabel(startMinutes: number) {
   if (startMinutes < 17 * 60) return 'afternoon';
   if (startMinutes < 21 * 60) return 'evening';
   return 'late night';
+}
+
+function classifyConfidence(sampleSize: number, spread = 0) {
+  if (sampleSize >= 10 && spread >= 4) return 'high' as InsightConfidence;
+  if (sampleSize >= 5 && spread >= 2) return 'medium' as InsightConfidence;
+  return 'low' as InsightConfidence;
 }
 
 function daysBetween(dateA: string, dateB: string) {
@@ -584,6 +592,9 @@ function buildBehaviorInsightSummary(
   });
   const strongestWindow = [...windowScores.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
   const weakestWindow = [...windowScores.entries()].sort((a, b) => a[1] - b[1])[0]?.[0] ?? null;
+  const sortedWindowScores = [...windowScores.entries()].sort((a, b) => b[1] - a[1]);
+  const timeWindowSpread = sortedWindowScores.length >= 2 ? sortedWindowScores[0][1] - sortedWindowScores[1][1] : Math.abs(sortedWindowScores[0]?.[1] ?? 0);
+  const timeWindowConfidence = classifyConfidence(recentStudyOutcomes.length, timeWindowSpread);
 
   let laterReschedules = 0;
   let earlierReschedules = 0;
@@ -641,6 +652,8 @@ function buildBehaviorInsightSummary(
   });
   overloadedDayCompletionAverage = overloadedDaysSeen > 0 ? overloadedDayCompletionAverage / overloadedDaysSeen : 0;
   manageableDayCompletionAverage = manageableDaysSeen > 0 ? manageableDayCompletionAverage / manageableDaysSeen : 0;
+  const workloadSpread = manageableDayCompletionAverage - overloadedDayCompletionAverage;
+  const workloadConfidence = classifyConfidence(overloadedDaysSeen + manageableDaysSeen, Math.abs(workloadSpread));
 
   const completionDates = [...new Set(completedOutcomes
     .map(event => parseStudyBlockOutcomeDetail(event.detail)?.dateKey)
@@ -689,6 +702,10 @@ function buildBehaviorInsightSummary(
     if (diff >= 2) startedEarly += 1;
     else startedLastMinute += 1;
   });
+  const deadlineApproachSpread = Math.abs(startedEarly - startedLastMinute);
+  const deadlineApproachConfidence = classifyConfidence(taskStartedEvents.length, deadlineApproachSpread);
+  const taskTimingSpread = Math.max(doneEarly, doneOnTime, doneLate) - Math.min(doneEarly, doneOnTime, doneLate);
+  const taskTimingConfidence = classifyConfidence(taskDoneEvents.length, taskTimingSpread);
 
   const dueDateChangeEvents = learningAppEvents.filter(event => event.entity === 'task' && event.action === 'due-date-change');
   let dueDatesMovedLater = 0;
@@ -701,6 +718,7 @@ function buildBehaviorInsightSummary(
     if (diff > 0) dueDatesMovedLater += 1;
     else dueDatesMovedEarlier += 1;
   });
+  const dueDateDriftConfidence = classifyConfidence(dueDateChangeEvents.length, Math.abs(dueDatesMovedLater - dueDatesMovedEarlier));
 
   const aiPromptCount = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'prompt-submit').length;
   const aiApplyCount = learningAppEvents.filter(event => event.entity === 'ai' && event.action === 'actions-apply').length;
@@ -714,40 +732,83 @@ function buildBehaviorInsightSummary(
     .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
     .map(([view, count]) => `${view} (${count})`);
+  const aiEngagementConfidence = classifyConfidence(aiPromptCount, Math.abs(aiApplyCount - (aiPromptCount - aiApplyCount)));
 
-  const lines = [
+  const lines: string[] = [
     `Study outcomes tracked: ${completedOutcomes.length} completed, ${partialOutcomes.length} partial, ${skippedOutcomes.length} skipped, ${rescheduledOutcomes.length} marked rescheduled.`,
-    plannedByDate.size > 0
-      ? `Plan realism: ${[...plannedByDate.values()].reduce((sum, value) => sum + value, 0)} planned study blocks versus ${Math.round([...completedByDate.values()].reduce((sum, value) => sum + value, 0) * 10) / 10} completed-equivalent blocks.`
-      : 'Plan realism: not enough study scheduling history yet.',
-    strongestWindow
-      ? `Time-of-day pattern: best results are trending toward ${strongestWindow}${weakestWindow && weakestWindow !== strongestWindow ? `, while ${weakestWindow} is weaker` : ''}.`
-      : 'Time-of-day pattern: not enough outcome history yet.',
-    laterReschedules || earlierReschedules || otherDayReschedules
-      ? `Reschedule pattern: ${laterReschedules} moved later, ${earlierReschedules} moved earlier, ${otherDayReschedules} moved to another day.`
-      : 'Reschedule pattern: not enough reschedule history yet.',
-    overloadedDayCount > 0 || manageableDaysSeen > 0
-      ? `Workload tolerance: days with 3+ planned blocks average ${overloadedDayCompletionAverage.toFixed(1)} completions; lighter days average ${manageableDayCompletionAverage.toFixed(1)}.`
-      : 'Workload tolerance: not enough daily workload history yet.',
-    recentStudyOutcomes.length > 0
-      ? `Study review follow-through: ${sameDayOutcomeResponses} outcomes were logged the same day, ${laterOutcomeResponses} were logged later.`
-      : 'Study review follow-through: no study review responses logged yet.',
-    longestStudyStreak > 0
-      ? `Study consistency: longest completion streak is ${longestStudyStreak} day${longestStudyStreak === 1 ? '' : 's'}.`
-      : 'Study consistency: no completed study streaks recorded yet.',
-    taskStartedEvents.length > 0
-      ? `Deadline approach: ${startedEarly} task starts happened 2+ days before the due date, ${startedLastMinute} started within the last day.`
-      : 'Deadline approach: not enough task-start history yet.',
-    taskDoneEvents.length > 0
-      ? `Task completion timing: ${doneEarly} finished early, ${doneOnTime} on the due date, ${doneLate} after the due date.`
-      : 'Task completion timing: not enough task completion history yet.',
-    dueDateChangeEvents.length > 0
-      ? `Deadline drift: ${dueDatesMovedLater} due dates were pushed later, ${dueDatesMovedEarlier} were pulled earlier.`
-      : 'Deadline drift: no due-date changes logged yet.',
-    aiPromptCount > 0
-      ? `AI engagement: ${aiApplyCount} applied suggestion bundles across ${aiPromptCount} prompts${aiPromptAcceptance !== null ? ` (${aiPromptAcceptance}% apply rate)` : ''}; AI panel opened ${aiPanelOpenCount} times${topViews.length > 0 ? `, most visited views: ${topViews.join(', ')}` : ''}.`
-      : 'AI engagement: no AI prompt history tracked yet.',
   ];
+
+  if (plannedByDate.size >= 3) {
+    lines.push(`Plan realism: ${[...plannedByDate.values()].reduce((sum, value) => sum + value, 0)} planned study blocks versus ${Math.round([...completedByDate.values()].reduce((sum, value) => sum + value, 0) * 10) / 10} completed-equivalent blocks.`);
+  } else {
+    lines.push('Plan realism: still learning from your recent study scheduling history.');
+  }
+
+  if (timeWindowConfidence === 'high') {
+    lines.push(`Time-of-day pattern: strong signal toward ${strongestWindow}${weakestWindow && weakestWindow !== strongestWindow ? `, while ${weakestWindow} is noticeably weaker` : ''}.`);
+  } else if (timeWindowConfidence === 'medium') {
+    lines.push(`Time-of-day pattern: early signal that ${strongestWindow} may fit better${weakestWindow && weakestWindow !== strongestWindow ? ` than ${weakestWindow}` : ''}.`);
+  } else {
+    lines.push('Time-of-day pattern: still learning which study window is strongest for you.');
+  }
+
+  if (laterReschedules || earlierReschedules || otherDayReschedules) {
+    lines.push(`Reschedule pattern: ${laterReschedules} moved later, ${earlierReschedules} moved earlier, ${otherDayReschedules} moved to another day.`);
+  } else {
+    lines.push('Reschedule pattern: not enough reschedule history yet.');
+  }
+
+  if (workloadConfidence === 'high') {
+    lines.push(`Workload tolerance: strong signal that days with 3+ planned blocks average ${overloadedDayCompletionAverage.toFixed(1)} completions, versus ${manageableDayCompletionAverage.toFixed(1)} on lighter days.`);
+  } else if (workloadConfidence === 'medium') {
+    lines.push(`Workload tolerance: there is some signal that lighter days average ${manageableDayCompletionAverage.toFixed(1)} completions, versus ${overloadedDayCompletionAverage.toFixed(1)} on heavier days.`);
+  } else {
+    lines.push('Workload tolerance: still learning how much you can realistically get through in one day.');
+  }
+
+  if (recentStudyOutcomes.length >= 4) {
+    lines.push(`Study review follow-through: ${sameDayOutcomeResponses} outcomes were logged the same day, ${laterOutcomeResponses} were logged later.`);
+  } else {
+    lines.push('Study review follow-through: still learning how quickly you confirm study outcomes.');
+  }
+
+  if (longestStudyStreak > 0) {
+    lines.push(`Study consistency: longest completion streak is ${longestStudyStreak} day${longestStudyStreak === 1 ? '' : 's'}.`);
+  } else {
+    lines.push('Study consistency: no completed study streaks recorded yet.');
+  }
+
+  if (deadlineApproachConfidence === 'high') {
+    lines.push(`Deadline approach: strong signal that ${startedEarly} task starts happened 2+ days before the due date, while ${startedLastMinute} started within the last day.`);
+  } else if (deadlineApproachConfidence === 'medium') {
+    lines.push(`Deadline approach: some signal from recent tasks shows ${startedEarly} early starts versus ${startedLastMinute} last-minute starts.`);
+  } else {
+    lines.push('Deadline approach: still learning how early you usually begin tasks.');
+  }
+
+  if (taskTimingConfidence === 'high') {
+    lines.push(`Task completion timing: strong signal from completed tasks shows ${doneEarly} finished early, ${doneOnTime} on the due date, ${doneLate} after the due date.`);
+  } else if (taskTimingConfidence === 'medium') {
+    lines.push(`Task completion timing: some signal from completed tasks shows ${doneEarly} early, ${doneOnTime} on-time, and ${doneLate} late finishes.`);
+  } else {
+    lines.push('Task completion timing: still learning how your completed tasks line up with due dates.');
+  }
+
+  if (dueDateDriftConfidence === 'high') {
+    lines.push(`Deadline drift: strong signal that ${dueDatesMovedLater} due dates were pushed later, versus ${dueDatesMovedEarlier} pulled earlier.`);
+  } else if (dueDateDriftConfidence === 'medium') {
+    lines.push(`Deadline drift: some recent due-date changes skew ${dueDatesMovedLater} later versus ${dueDatesMovedEarlier} earlier.`);
+  } else {
+    lines.push('Deadline drift: still learning whether your due dates tend to move later or earlier.');
+  }
+
+  if (aiEngagementConfidence === 'high') {
+    lines.push(`AI engagement: strong signal from ${aiPromptCount} prompts with ${aiApplyCount} applied suggestion bundles${aiPromptAcceptance !== null ? ` (${aiPromptAcceptance}% apply rate)` : ''}; AI panel opened ${aiPanelOpenCount} times${topViews.length > 0 ? `, most visited views: ${topViews.join(', ')}` : ''}.`);
+  } else if (aiEngagementConfidence === 'medium') {
+    lines.push(`AI engagement: early signal from ${aiPromptCount} prompts and ${aiApplyCount} applied suggestion bundles${aiPromptAcceptance !== null ? ` (${aiPromptAcceptance}% apply rate)` : ''}.`);
+  } else {
+    lines.push('AI engagement: still learning how often AI suggestions turn into applied changes.');
+  }
 
   return { summary: lines.join('\n') };
 }

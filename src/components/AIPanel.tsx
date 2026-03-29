@@ -87,6 +87,7 @@ type PanelInteraction =
 const PANEL_FRAME_STORAGE = 'taskflow_ai_panel_frame';
 const CHAT_SIDEBAR_WIDTH_STORAGE = 'taskflow_ai_sidebar_width';
 const CHAT_SIDEBAR_COLLAPSED_STORAGE = 'taskflow_ai_sidebar_collapsed';
+const IMPORTED_BLOCKS_STORAGE_PREFIX = 'taskflow_ai_imported_blocks';
 const DEFAULT_PANEL_FRAME: PanelFrame = {
   x: 0,
   y: 88,
@@ -95,6 +96,24 @@ const DEFAULT_PANEL_FRAME: PanelFrame = {
 };
 const DEFAULT_CHAT_SIDEBAR_WIDTH = 184;
 const DEFAULT_CHAT_SIDEBAR_COLLAPSED = false;
+
+function importedBlocksStorageKey(userId: string) {
+  return `${IMPORTED_BLOCKS_STORAGE_PREFIX}:${userId}`;
+}
+
+function loadImportedBlocks(userId: string) {
+  if (typeof window === 'undefined') return new Set<string>();
+
+  try {
+    const raw = localStorage.getItem(importedBlocksStorageKey(userId));
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set<string>();
+    return new Set(parsed.filter((value): value is string => typeof value === 'string'));
+  } catch {
+    return new Set<string>();
+  }
+}
 
 function formatDictationElapsed(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -278,7 +297,7 @@ export function AIPanel({
       window.removeEventListener('focus', handleFocus);
     };
   }, [userId]);
-  const [importedBlocks, setImportedBlocks] = useState<Set<string>>(new Set());
+  const [importedBlocks, setImportedBlocks] = useState<Set<string>>(() => loadImportedBlocks(userId));
   const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([]);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
@@ -312,6 +331,20 @@ export function AIPanel({
     source: 'ai',
     learn: aiLearningEnabled,
   }), [aiLearningEnabled]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(importedBlocksStorageKey(userId), JSON.stringify([...importedBlocks]));
+    } catch {
+      // ignore storage failures
+    }
+  }, [importedBlocks, userId]);
+
+  useEffect(() => {
+    setImportedBlocks(loadImportedBlocks(userId));
+  }, [userId]);
+
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
     const el = messagesScrollRef.current;
     if (!el) return;
@@ -3026,6 +3059,21 @@ function ActionBundleCard({
     return total;
   }, [results]);
 
+  const requestedSummaryTotal = useMemo(() => (
+    summary.tasks +
+    summary.updates +
+    summary.deadlines +
+    summary.subtasks +
+    summary.links +
+    summary.deletes +
+    summary.calendarCreates +
+    summary.calendarUpdates +
+    summary.calendarDeletes +
+    summary.habitsCreate +
+    summary.habitsComplete +
+    summary.habitsDelete
+  ), [summary]);
+
   const handleApply = () => {
     if (hasDeletes && !confirmDelete) {
       setExpanded(true);
@@ -3087,7 +3135,11 @@ function ActionBundleCard({
             </div>
             <div>
               <p className="text-sm font-medium text-[var(--text-primary)]">
-                {allDone ? `Applied ${resultSummary} changes` : applying ? 'Applying changes…' : 'Suggested changes'}
+                {allDone
+                  ? `Applied ${resultSummary || requestedSummaryTotal} changes`
+                  : applying
+                    ? 'Applying changes…'
+                    : 'Suggested changes'}
               </p>
               <p className="text-[11px] text-[var(--text-faint)]">
                 {[summary.tasks ? `${summary.tasks} task${summary.tasks === 1 ? '' : 's'}` : null,

@@ -119,6 +119,11 @@ function getEventTimeLabel(date?: { date?: string; dateTime?: string }) {
   return '';
 }
 
+function getCalendarEventRenderKey(event: GoogleCalendarEvent) {
+  const startValue = event.start?.dateTime || event.start?.date || '';
+  return `${event.calendarId || ''}:${event.id || ''}:${startValue}`;
+}
+
 function getEventSectionLabel(date?: { date?: string; dateTime?: string }) {
   if (date?.date) {
     return new Date(`${date.date}T00:00:00`).toLocaleDateString('en-US', {
@@ -367,8 +372,8 @@ function CalendarMiniMonth({
       </div>
 
       <div className="grid grid-cols-7 gap-y-1 text-center text-[10px] font-medium text-[var(--text-faint)]">
-        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(day => (
-          <div key={day} className="py-1">
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+          <div key={`${day}-${index}`} className="py-1">
             {day}
           </div>
         ))}
@@ -591,7 +596,7 @@ function DayPanel({
           ))}
           {events.map(event => (
             <div
-              key={event.id}
+              key={getCalendarEventRenderKey(event)}
               className="group flex items-start gap-3 rounded-2xl bg-[var(--surface-muted)] p-3"
             >
               <div
@@ -853,7 +858,7 @@ function WeekCalendarGrid({
               <div className="space-y-1">
                 {dayEvents.slice(0, 2).map(event => (
                   <div
-                    key={event.id}
+                    key={getCalendarEventRenderKey(event)}
                     className="flex items-center gap-1.5 truncate rounded-md px-1.5 py-1 text-[10px] font-medium text-[var(--text-secondary)]"
                   >
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: event.calendarColor || '#818cf8' }} />
@@ -1005,7 +1010,7 @@ function WeekCalendarGrid({
 
                   return (
                     <button
-                      key={event.id}
+                      key={getCalendarEventRenderKey(event)}
                       type="button"
                       onClick={e => {
                         onSelectDate(key);
@@ -1491,7 +1496,7 @@ export function CalendarView({
                     <div className="mt-3 space-y-3">
                       {events.map(event => (
                         <article
-                          key={event.id}
+                          key={getCalendarEventRenderKey(event)}
                           className="group rounded-2xl bg-[var(--surface-muted)] p-4"
                         >
                           <div className="flex items-start justify-between gap-4">

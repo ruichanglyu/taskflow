@@ -1051,8 +1051,15 @@ export function AIPanel({
       let deleted = 0;
       let skipped = 0;
       const deletedKeys = new Set<string>();
+      const processedDeleteRows = new Set<string>();
 
       for (const row of block.rows) {
+        const deleteRequestKey = buildCalendarDeleteRequestKey(row);
+        if (processedDeleteRows.has(deleteRequestKey)) {
+          continue;
+        }
+        processedDeleteRows.add(deleteRequestKey);
+
         const matches = resolveCalendarDeleteCandidates(workingCalendarEvents, calendarCalendars, selectedCalendarId, row);
         if (matches.length === 0) {
           skipped++;
@@ -2685,6 +2692,15 @@ function resolveCalendarDeleteCandidates(
   return resolvedMatches.length === 1 ? resolvedMatches : [];
 }
 
+function buildCalendarDeleteRequestKey(row: ParsedImportRow) {
+  return [
+    normalizeDeleteCandidate(stripTrailingCourseTag(row.title || '')),
+    normalizeCalendarCandidate(row.calendar || ''),
+    row.dueDate?.trim() || '',
+    toTwentyFourHourKey(row.startTime) || '',
+  ].join('::');
+}
+
 /** Extracts a course name from a trailing bracket tag like "Study for Exam [CS 1332]" → "CS 1332" */
 function extractCourseFromTitle(title: string): string | undefined {
   const match = title.match(/\[([^\]]+)\]\s*$/);
@@ -3134,15 +3150,24 @@ function ActionBundleCard({
 
     const deletes = safeBlocks
       .filter(block => block.type === 'calendar-delete')
-      .flatMap(block => block.rows.map(row => {
-        const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, selectedCalendarId, row);
-        const canDeferLookup = !row.dueDate && !row.startTime && Boolean(row.title?.trim());
-        return {
-          label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${matches.length > 1 ? ` · ${matches.length} matches` : ''}`,
-          valid: matches.length > 0 || canDeferLookup,
-          reason: matches.length === 0 && !canDeferLookup ? 'event not found' : '',
-        };
-      }));
+      .flatMap(block => {
+        const seen = new Set<string>();
+        return block.rows.flatMap(row => {
+          const deleteRequestKey = buildCalendarDeleteRequestKey(row);
+          if (seen.has(deleteRequestKey)) {
+            return [];
+          }
+          seen.add(deleteRequestKey);
+
+          const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, selectedCalendarId, row);
+          const canDeferLookup = !row.dueDate && !row.startTime && Boolean(row.title?.trim());
+          return [{
+            label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${matches.length > 1 ? ` · ${matches.length} matches` : ''}`,
+            valid: matches.length > 0 || canDeferLookup,
+            reason: matches.length === 0 && !canDeferLookup ? 'event not found' : '',
+          }];
+        });
+      });
 
     return { creates, updates, deletes };
   }, [calendarCalendars, calendarEvents, safeBlocks, selectedCalendarId]);

@@ -54,6 +54,20 @@ function getDefaultCalendarRange() {
   });
 }
 
+function buildCalendarEventIdentity(event: GoogleCalendarEvent) {
+  const startValue = event.start?.dateTime || event.start?.date || '';
+  const endValue = event.end?.dateTime || event.end?.date || '';
+  return `${event.calendarId || ''}::${event.id || ''}::${event.summary || ''}::${startValue}::${endValue}`;
+}
+
+function dedupeCalendarEvents(events: GoogleCalendarEvent[]) {
+  const byIdentity = new Map<string, GoogleCalendarEvent>();
+  for (const event of events) {
+    byIdentity.set(buildCalendarEventIdentity(event), event);
+  }
+  return [...byIdentity.values()];
+}
+
 export function useGoogleCalendar(userId: string) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [hasHydratedStoredToken, setHasHydratedStoredToken] = useState(false);
@@ -171,8 +185,8 @@ export function useGoogleCalendar(userId: string) {
       })
     );
 
-    const mergedEvents = eventGroups
-      .flat()
+    const mergedEvents = dedupeCalendarEvents(eventGroups
+      .flat())
       .sort((a, b) => {
         const aTime = a.start?.dateTime || a.start?.date || '';
         const bTime = b.start?.dateTime || b.start?.date || '';

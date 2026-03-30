@@ -1949,9 +1949,9 @@ export function AIPanel({
               chatSidebarCollapsed ? 'overflow-hidden' : 'overflow-visible',
             )}
             style={{
-              width: chatSidebarCollapsed ? 44 : chatSidebarWidth,
-              minWidth: chatSidebarCollapsed ? 44 : chatSidebarWidth,
-              maxWidth: chatSidebarCollapsed ? 44 : chatSidebarWidth,
+              width: chatSidebarCollapsed ? 52 : chatSidebarWidth,
+              minWidth: chatSidebarCollapsed ? 52 : chatSidebarWidth,
+              maxWidth: chatSidebarCollapsed ? 52 : chatSidebarWidth,
             }}
           >
             {/* Top: Collapse toggle */}
@@ -2034,32 +2034,8 @@ export function AIPanel({
             {/* Chat list */}
             <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5">
               {chatSidebarCollapsed ? (
-                <div className="space-y-0.5">
-                  {threads.map(chat => {
-                    const active = chat.id === currentChatId;
-                    return (
-                      <button
-                        key={chat.id}
-                        onClick={() => {
-                          stopStreaming();
-                          selectChat(chat.id);
-                          setPanelError(null);
-                          cancelRenameChat();
-                          setPendingDeleteChat(null);
-                          requestAnimationFrame(() => inputRef.current?.focus());
-                        }}
-                        className={cn(
-                          'flex h-8 w-full items-center justify-center rounded-lg text-[11px] font-medium transition',
-                          active
-                            ? 'bg-[var(--accent-soft)]/30 text-[var(--accent)]'
-                            : 'text-[var(--text-secondary)] hover:bg-[var(--surface-muted)]',
-                        )}
-                        title={chat.title}
-                      >
-                        {chat.title.slice(0, 2)}
-                      </button>
-                    );
-                  })}
+                <div className="flex h-full items-start justify-center pt-1">
+                  <div className="h-1.5 w-1.5 rounded-full bg-[var(--text-faint)]/40" />
                 </div>
               ) : (
                 <div className="space-y-0.5">

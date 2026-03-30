@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 
 export interface Habit {
@@ -17,7 +17,8 @@ export function useHabits(userId: string | null) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Memoize today so it doesn't change on every render and cause infinite re-fetches
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const loadHabits = useCallback(async () => {
     if (!userId || !supabase) return;

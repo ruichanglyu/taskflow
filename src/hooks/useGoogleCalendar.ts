@@ -75,6 +75,7 @@ function dedupeCalendarEvents(events: GoogleCalendarEvent[]) {
 export function useGoogleCalendar(userId: string) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [hasHydratedStoredToken, setHasHydratedStoredToken] = useState(false);
+  const [hasHydratedStoredCalendars, setHasHydratedStoredCalendars] = useState(false);
   const [calendars, setCalendars] = useState<GoogleCalendarListItem[]>([]);
   const [selectedCalendarId, setSelectedCalendarId] = useState<string>('');
   const [visibleCalendarIds, setVisibleCalendarIds] = useState<string[]>([]);
@@ -96,20 +97,19 @@ export function useGoogleCalendar(userId: string) {
     if (storedCalendarId) {
       setSelectedCalendarId(storedCalendarId);
     }
-  }, [calendarStorageKey]);
-
-  useEffect(() => {
     const storedVisible = localStorage.getItem(visibleCalendarsStorageKey);
-    if (!storedVisible) return;
-    try {
-      const parsed = JSON.parse(storedVisible);
-      if (Array.isArray(parsed)) {
-        setVisibleCalendarIds(parsed.filter((value): value is string => typeof value === 'string'));
+    if (storedVisible) {
+      try {
+        const parsed = JSON.parse(storedVisible);
+        if (Array.isArray(parsed)) {
+          setVisibleCalendarIds(parsed.filter((value): value is string => typeof value === 'string'));
+        }
+      } catch {
+        // ignore malformed local state
       }
-    } catch {
-      // ignore malformed local state
     }
-  }, [visibleCalendarsStorageKey]);
+    setHasHydratedStoredCalendars(true);
+  }, [calendarStorageKey, visibleCalendarsStorageKey]);
 
   useEffect(() => {
     const storedToken = localStorage.getItem(tokenStorageKey);
@@ -138,9 +138,10 @@ export function useGoogleCalendar(userId: string) {
   }, [calendarStorageKey, selectedCalendarId]);
 
   useEffect(() => {
+    if (!hasHydratedStoredCalendars) return;
     localStorage.setItem(visibleCalendarsStorageKey, JSON.stringify(visibleCalendarIds));
     visibleCalendarIdsRef.current = visibleCalendarIds;
-  }, [visibleCalendarIds, visibleCalendarsStorageKey]);
+  }, [hasHydratedStoredCalendars, visibleCalendarIds, visibleCalendarsStorageKey]);
 
   useEffect(() => {
     if (accessToken) {

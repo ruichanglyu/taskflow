@@ -501,6 +501,9 @@ LINKING RULES:
 - Never say a task is linked just because the task title or course name looks similar to a deadline.
 - If the user asks to link a task to a deadline, use the \`deadline-links\` import block so the app can create the real \`deadline_tasks\` link.
 - If you create a task that should be linked, include \`import:tasks\` and \`import:deadline-links\` in the same response.
+- If the user asks you to create tasks for existing exams, quizzes, labs, projects, assignments, or deadlines, treat linking as part of the same job whenever there is one clear matching deadline per task. In that case, include the \`import:tasks\` block and the matching \`import:deadline-links\` block in the same response by default.
+- When some of those matches are ambiguous but others are clear, do not guess. Ask a short follow-up such as whether they want you to link only the clear matches or create the tasks without links.
+- When every intended link is ambiguous, ask before creating unlinked prep tasks if linking appears to be an important part of the request.
 - If you do not emit an \`import:deadline-links\` block, then you must not claim the task is linked.
 - If the user asks to "link", "attach", "connect", or "match" a task to a deadline, do NOT fake it by renaming the task.
 - When linking is requested, prefer a single \`import:deadline-links\` block and avoid creating a duplicate task unless the user explicitly asked for a new task.
@@ -511,7 +514,9 @@ LINKING RULES:
 
 SCHEDULING RULES (CRITICAL — you MUST follow these when creating calendar events):
 - The LOADED CALENDAR EVENTS section above shows each day's BUSY times and FREE slots with durations.
-- You MUST ONLY place new or updated timed events during FREE slots. NEVER schedule or move a timed event into BUSY time, even if the user does not explicitly remind you about conflicts.
+- Use FREE slots for flexible scheduling requests such as study blocks, focus blocks, or when the user asks you to find a time that fits around their schedule.
+- If the user gives an exact time for a real event they want on the calendar, or clearly asks to place it at that specific time, you may schedule it there even if it overlaps existing events. In that case, briefly warn them about the overlap instead of silently changing the time.
+- Only auto-adjust times to avoid conflicts when the request is flexible. Do not move a fixed explicit event to a different time unless the user asks you to find another time.
 - For each requested day, keep the day/cadence the user asked for whenever possible and adjust the TIME within that same day before you consider skipping the day.
 - For each day, pick a FREE slot that is long enough for the requested duration. Different days will have different free times — use different times per day.
 - If no FREE slot on a day is long enough, skip that day and tell the user.
@@ -796,10 +801,32 @@ function normalizeMessageContent(content: string) {
   return content.trim().replace(/\s+/g, ' ');
 }
 
+function messageRoleSortWeight(role: ChatMessage['role']) {
+  switch (role) {
+    case 'system':
+      return 0;
+    case 'user':
+      return 1;
+    case 'assistant':
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function sortMessagesChronologically(messages: ChatMessage[]) {
+  return [...messages].sort((a, b) => {
+    if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+    const roleDiff = messageRoleSortWeight(a.role) - messageRoleSortWeight(b.role);
+    if (roleDiff !== 0) return roleDiff;
+    return a.id.localeCompare(b.id);
+  });
+}
+
 function dedupeConsecutiveMessages(messages: ChatMessage[]) {
   const deduped: ChatMessage[] = [];
 
-  for (const message of messages) {
+  for (const message of sortMessagesChronologically(messages)) {
     const normalized = stripAttachmentPayload(message);
     const previous = deduped[deduped.length - 1];
     if (!previous) {
@@ -930,7 +957,7 @@ function loadSavedThreads(userId: string): ChatThread[] {
                   })
                   .filter(Boolean) as ChatMessage[]
               : [];
-            return { id, title, createdAt, updatedAt, messages };
+            return { id, title, createdAt, updatedAt, messages: sortMessagesChronologically(messages) };
           })
           .filter(Boolean) as ChatThread[];
         if (threads.length > 0) return dedupeEquivalentThreads(threads);
@@ -958,6 +985,22 @@ function saveThreads(userId: string, threads: ChatThread[]) {
     const toSave = dedupeEquivalentThreads(threads.map(sanitizeThread));
     localStorage.setItem(chatStorage(userId), JSON.stringify(toSave));
   } catch { /* storage full — ignore */ }
+}
+
+function buildInitialChatState(userId: string) {
+  const initialThreads = loadSavedThreads(userId);
+  let initialChatId = initialThreads[0]?.id ?? makeNewThread().id;
+  try {
+    const saved = localStorage.getItem(activeChatStorage(userId));
+    if (saved && initialThreads.some(thread => thread.id === saved)) {
+      initialChatId = saved;
+    }
+  } catch { /* ignore */ }
+
+  return {
+    threads: initialThreads,
+    activeChatId: initialChatId,
+  };
 }
 
 function parseRemoteImages(images: unknown): ImageAttachment[] | undefined {
@@ -995,7 +1038,7 @@ function parseRemoteThreads(
       title: row.title || 'New chat',
       createdAt: Date.parse(row.created_at) || Date.now(),
       updatedAt: Date.parse(row.updated_at) || Date.now(),
-      messages: (messagesByThread.get(row.id) ?? []).sort((a, b) => a.timestamp - b.timestamp),
+      messages: sortMessagesChronologically(messagesByThread.get(row.id) ?? []),
     }))
     .sort((a, b) => b.updatedAt - a.updatedAt));
 }
@@ -1161,18 +1204,7 @@ async function saveRemoteThreads(userId: string, threads: ChatThread[]): Promise
 export function useAI(userId: string) {
   const initialStateRef = useRef<{ threads: ChatThread[]; activeChatId: string } | null>(null);
   if (!initialStateRef.current) {
-    const initialThreads = loadSavedThreads(userId);
-    let initialChatId = initialThreads[0]?.id ?? makeNewThread().id;
-    try {
-      const saved = localStorage.getItem(activeChatStorage(userId));
-      if (saved && initialThreads.some(thread => thread.id === saved)) {
-        initialChatId = saved;
-      }
-    } catch { /* ignore */ }
-    initialStateRef.current = {
-      threads: initialThreads,
-      activeChatId: initialChatId,
-    };
+    initialStateRef.current = buildInitialChatState(userId);
   }
 
   const [threads, setThreads] = useState<ChatThread[]>(() => initialStateRef.current?.threads ?? [makeNewThread()]);
@@ -1186,6 +1218,22 @@ export function useAI(userId: string) {
   const remoteSyncSignatureRef = useRef('');
   const remoteSaveRequestedRef = useRef(false);
   const remoteSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    const nextState = buildInitialChatState(userId);
+    initialStateRef.current = nextState;
+    threadsRef.current = nextState.threads;
+    activeChatIdRef.current = nextState.activeChatId;
+    remoteSyncSignatureRef.current = '';
+    remoteSaveRequestedRef.current = false;
+    setThreads(nextState.threads);
+    setActiveChatId(nextState.activeChatId);
+    setHasHydratedRemoteChats(false);
+    setError(null);
+    setIsStreaming(false);
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }, [userId]);
 
   useEffect(() => {
     threadsRef.current = threads;
@@ -1299,7 +1347,7 @@ export function useAI(userId: string) {
 
   const updateThread = useCallback((threadId: string, updater: (thread: ChatThread) => ChatThread) => {
     setThreads(prev => prev.map(thread => thread.id === threadId ? updater(thread) : thread));
-  }, []);
+  }, [userId]);
 
   const stopStreaming = useCallback(() => {
     abortRef.current?.abort();
@@ -1384,11 +1432,13 @@ export function useAI(userId: string) {
       activeChatIdRef.current = fresh.id;
     }
 
+    const userTimestamp = Date.now();
+
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
       content: userMessage,
-      timestamp: Date.now(),
+      timestamp: userTimestamp,
       images: images?.length ? images : undefined,
     };
 
@@ -1396,7 +1446,7 @@ export function useAI(userId: string) {
       id: crypto.randomUUID(),
       role: 'assistant',
       content: '*Thinking...*',
-      timestamp: Date.now(),
+      timestamp: userTimestamp + 1,
     };
 
     const nextTitle = thread.title === 'New chat' || thread.messages.length === 0
@@ -1472,7 +1522,7 @@ export function useAI(userId: string) {
       setIsStreaming(false);
       abortRef.current = null;
     }
-  }, []);
+  }, [userId]);
 
   return {
     threads: orderedThreads,

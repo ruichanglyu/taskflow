@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, FolderOpen, Target, X, ArrowRight, Clock3, ListTodo, Search, CalendarClock, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, FolderOpen, Target, X, ArrowRight, Clock3, ListTodo, Search, CalendarClock, AlertTriangle, Palette } from 'lucide-react';
 import { Task, Project, Deadline } from '../types';
 import { cn } from '../utils/cn';
 
@@ -9,12 +9,15 @@ interface ProjectListProps {
   deadlines: Deadline[];
   initialProjectId?: string | null;
   onAddProject: (name: string, description: string) => Promise<string | null> | void;
+  onUpdateProject: (id: string, updates: { name?: string; description?: string; color?: string }) => Promise<boolean> | boolean;
   onDeleteProject: (id: string) => void;
   onOpenTasks?: (projectId: string) => void;
   onOpenDeadlines?: (projectId: string) => void;
 }
 
 type CourseSort = 'urgency' | 'alphabetical';
+
+const COURSE_COLOR_OPTIONS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
 
 function startOfToday() {
   const now = new Date();
@@ -26,9 +29,10 @@ function deadlineDate(deadline: Deadline) {
   return new Date(`${deadline.dueDate}T00:00:00`);
 }
 
-export function ProjectList({ projects, tasks, deadlines, initialProjectId = null, onAddProject, onDeleteProject, onOpenTasks, onOpenDeadlines }: ProjectListProps) {
+export function ProjectList({ projects, tasks, deadlines, initialProjectId = null, onAddProject, onUpdateProject, onDeleteProject, onOpenTasks, onOpenDeadlines }: ProjectListProps) {
   const [showForm, setShowForm] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
+  const [colorMenuProjectId, setColorMenuProjectId] = useState<string | null>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState<Project | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -208,6 +212,17 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
                 </div>
                 <button
                   type="button"
+                  onClick={e => {
+                    e.stopPropagation();
+                    setColorMenuProjectId(current => current === project.id ? null : project.id);
+                  }}
+                  className="p-1 text-[var(--text-faint)] opacity-100 transition-all hover:text-[var(--text-primary)] md:opacity-0 md:group-hover:opacity-100"
+                  aria-label={`Change ${project.name} color`}
+                >
+                  <Palette size={14} />
+                </button>
+                <button
+                  type="button"
                   onClick={e => { e.stopPropagation(); setConfirmDeleteProject(project); }}
                   className="p-1 text-[var(--text-faint)] opacity-100 transition-all hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
                   aria-label={`Delete ${project.name}`}
@@ -215,6 +230,48 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
                   <Trash2 size={14} />
                 </button>
               </div>
+
+              {colorMenuProjectId === project.id && (
+                <div
+                  className="mt-4 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs font-medium uppercase tracking-[0.18em] text-[var(--text-faint)]">Course color</p>
+                    <button
+                      type="button"
+                      onClick={() => setColorMenuProjectId(null)}
+                      className="text-xs text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {COURSE_COLOR_OPTIONS.map(color => {
+                      const selected = color.toLowerCase() === project.color.toLowerCase();
+                      return (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={async () => {
+                            if (selected) return;
+                            const ok = await onUpdateProject(project.id, { color });
+                            if (ok) {
+                              setColorMenuProjectId(null);
+                            }
+                          }}
+                          className={cn(
+                            'h-8 w-8 rounded-full border-2 transition hover:scale-105',
+                            selected ? 'border-[var(--text-primary)] shadow-sm' : 'border-transparent'
+                          )}
+                          style={{ backgroundColor: color }}
+                          aria-label={`Set ${project.name} color`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4">
                 <div className="mb-2 flex justify-between text-xs text-[var(--text-faint)]">

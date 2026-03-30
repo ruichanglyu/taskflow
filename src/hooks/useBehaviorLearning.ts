@@ -843,10 +843,6 @@ function appendBehaviorEvent(
   return next.slice(-250);
 }
 
-function shouldLearn(options?: BehaviorLearningActionOptions) {
-  return options?.learn !== false;
-}
-
 function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
@@ -1159,6 +1155,11 @@ export function useBehaviorLearning(userId: string) {
     broadcastBehaviorUpdate(userId);
   }, [userId]);
 
+  const shouldCountForLearning = useCallback((options?: BehaviorLearningActionOptions) => {
+    if (aiTestingMode) return false;
+    return options?.learn !== false;
+  }, [aiTestingMode]);
+
   const clearBehaviorHistory = useCallback(() => {
     setEvents([]);
     setAppEvents([]);
@@ -1247,7 +1248,7 @@ export function useBehaviorLearning(userId: string) {
     options?: BehaviorLearningActionOptions,
     detail?: string | null,
   ) => {
-    const countsForLearning = shouldLearn(options);
+    const countsForLearning = shouldCountForLearning(options);
     persistAppEvent({
       id: crypto.randomUUID(),
       source: options?.source ?? 'manual',
@@ -1258,7 +1259,7 @@ export function useBehaviorLearning(userId: string) {
       countsForLearning,
       createdAt: new Date().toISOString(),
     });
-  }, [persistAppEvent]);
+  }, [persistAppEvent, shouldCountForLearning]);
 
   const recordCalendarCreate = useCallback((
     payload: NewGoogleCalendarEvent,
@@ -1616,9 +1617,9 @@ export function useBehaviorLearning(userId: string) {
     recordCalendarCreate(payload, {
       source: options?.source ?? 'manual',
       calendarSummary,
-      countsForLearning: shouldLearn(options),
+      countsForLearning: shouldCountForLearning(options),
     });
-  }, [recordAppAction, recordCalendarCreate]);
+  }, [recordAppAction, recordCalendarCreate, shouldCountForLearning]);
 
   const logCalendarUpdated = useCallback((
     previousEvent: GoogleCalendarEvent,
@@ -1660,9 +1661,9 @@ export function useBehaviorLearning(userId: string) {
       source: options?.source ?? 'manual',
       calendarId: previousEvent.calendarId,
       calendarSummary: calendarSummary ?? previousEvent.calendarSummary,
-      countsForLearning: shouldLearn(options),
+      countsForLearning: shouldCountForLearning(options),
     });
-  }, [recordAppAction, recordCalendarUpdate]);
+  }, [recordAppAction, recordCalendarUpdate, shouldCountForLearning]);
 
   const logCalendarDeleted = useCallback((
     event: GoogleCalendarEvent,
@@ -1683,9 +1684,9 @@ export function useBehaviorLearning(userId: string) {
     );
     recordCalendarDelete(event, {
       source: options?.source ?? 'manual',
-      countsForLearning: shouldLearn(options),
+      countsForLearning: shouldCountForLearning(options),
     });
-  }, [recordAppAction, recordCalendarDelete]);
+  }, [recordAppAction, recordCalendarDelete, shouldCountForLearning]);
 
   const logStudyBlockOutcome = useCallback((params: {
     title: string;

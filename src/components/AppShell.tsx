@@ -153,38 +153,38 @@ export function AppShell({ user }: AppShellProps) {
     await supabase.auth.refreshSession();
   }, []);
 
-  const navigateHard = useCallback((to: string) => {
-    if (window.location.pathname + window.location.search === to) return;
-    window.location.assign(to);
-  }, []);
+  const navigateInApp = useCallback((to: string) => {
+    if (location.pathname + location.search === to) return;
+    navigate(to);
+  }, [location.pathname, location.search, navigate]);
 
   const handleViewChange = useCallback((view: View) => {
-    navigateHard(VIEW_PATHS[view]);
-  }, [navigateHard]);
+    navigateInApp(VIEW_PATHS[view]);
+  }, [navigateInApp]);
 
   const openCourse = useCallback((projectId: string) => {
-    navigateHard(`/courses?project=${encodeURIComponent(projectId)}`);
-  }, [navigateHard]);
+    navigateInApp(`/courses?project=${encodeURIComponent(projectId)}`);
+  }, [navigateInApp]);
 
   const openCourseTasks = useCallback((projectId: string) => {
-    navigateHard(`/tasks?project=${encodeURIComponent(projectId)}`);
-  }, [navigateHard]);
+    navigateInApp(`/tasks?project=${encodeURIComponent(projectId)}`);
+  }, [navigateInApp]);
 
   const openCourseDeadlines = useCallback((projectId: string) => {
-    navigateHard(`/deadlines?course=${encodeURIComponent(projectId)}`);
-  }, [navigateHard]);
+    navigateInApp(`/deadlines?course=${encodeURIComponent(projectId)}`);
+  }, [navigateInApp]);
 
   const openDeadline = useCallback((deadlineId: string) => {
     const deadline = deadlineStore.deadlines.find(item => item.id === deadlineId);
     const params = new URLSearchParams();
     params.set('deadline', deadlineId);
     if (deadline?.projectId) params.set('course', deadline.projectId);
-    navigateHard(`/deadlines?${params.toString()}`);
-  }, [deadlineStore.deadlines, navigateHard]);
+    navigateInApp(`/deadlines?${params.toString()}`);
+  }, [deadlineStore.deadlines, navigateInApp]);
 
   useEffect(() => {
     learning.logViewOpened(currentView, { source: 'manual', learn: true });
-  }, [currentView, learning]);
+  }, [currentView, learning.logViewOpened]);
 
   const handleAddDeadline = useCallback(async (...args: [...Parameters<typeof deadlineStore.addDeadline>, BehaviorLearningActionOptions?]) => {
     const lastArg = args.at(-1);
@@ -544,6 +544,17 @@ export function AppShell({ user }: AppShellProps) {
     }
   }, [learning, store, pushToast]);
 
+  const handleUpdateProject = useCallback(async (id: string, updates: { name?: string; description?: string; color?: string }) => {
+    const ok = await store.updateProject(id, updates);
+    if (!ok) {
+      pushToast('error', 'Could not update course', store.error ?? 'Please try again.');
+      return false;
+    }
+
+    pushToast('success', updates.color ? 'Course color updated' : 'Course updated');
+    return true;
+  }, [store, pushToast]);
+
   const handleAddHabit = useCallback(async (
     title: string,
     frequency: 'daily' | 'weekly' = 'daily',
@@ -819,6 +830,7 @@ export function AppShell({ user }: AppShellProps) {
                   deadlines={deadlineStore.deadlines}
                   initialProjectId={projectFocusId}
                   onAddProject={handleAddProject}
+                  onUpdateProject={handleUpdateProject}
                   onDeleteProject={handleDeleteProject}
                   onOpenTasks={openCourseTasks}
                   onOpenDeadlines={openCourseDeadlines}
@@ -962,6 +974,7 @@ export function AppShell({ user }: AppShellProps) {
         onAddTask={handleAddTask}
         onUpdateTask={handleUpdateTask}
         onAddDeadline={handleAddDeadline}
+        onUpdateDeadline={handleUpdateDeadline}
         onAddProject={handleAddProject}
         onAddSubtask={handleAddSubtask}
         onDeleteTask={handleDeleteTask}

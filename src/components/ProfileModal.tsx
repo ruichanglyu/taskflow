@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Camera, Check, AlertCircle, Download, Eye, EyeOff, Mail, Lock, User as UserIcon, Calendar, Sparkles, Trash2, Moon, Sunrise, Sunset, Fingerprint, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
+import { X, Camera, Check, AlertCircle, Download, Eye, EyeOff, Mail, Lock, User as UserIcon, Calendar, Sparkles, Trash2, Moon, Sunrise, Sunset, Fingerprint, ZoomIn, ZoomOut, RotateCw, ChevronDown } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';
@@ -101,6 +101,7 @@ export function ProfileModal({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showCurrentPw, setShowCurrentPw] = useState(false);
   const [showNewPw, setShowNewPw] = useState(false);
+  const [learnedOpen, setLearnedOpen] = useState(false);
 
   const clearMessage = () => setMessage(null);
 
@@ -289,6 +290,8 @@ export function ProfileModal({
     month: 'long',
     year: 'numeric',
   });
+
+  const behaviorLines = behaviorSummary.split('\n').filter(Boolean);
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'profile', label: 'Profile' },
@@ -628,7 +631,7 @@ export function ProfileModal({
                     <div>
                       <h3 className="text-sm font-semibold text-[var(--text-primary)]">AI behavior learning</h3>
                       <p className="mt-1 text-xs text-[var(--text-faint)]">
-                        When enabled, the AI learns from your actions to give better suggestions. Turn off while testing.
+                        When enabled, new actions count toward learning. When turned off, TaskFlow stays in testing mode and new actions are excluded from learning.
                       </p>
                     </div>
                     <button
@@ -639,7 +642,7 @@ export function ProfileModal({
                         'relative h-[24px] w-[42px] shrink-0 rounded-full transition-colors',
                         aiLearningEnabled ? 'bg-emerald-400' : 'bg-[var(--text-faint)]/30'
                       )}
-                      title={aiLearningEnabled ? 'Learning is on' : 'Learning is off (testing mode)'}
+                      title={aiLearningEnabled ? 'Learning is on' : 'Testing mode is on'}
                     >
                       <span
                         className={cn(
@@ -652,34 +655,57 @@ export function ProfileModal({
                 </div>
 
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
-                  <div className="mb-3 flex items-center gap-2">
-                    <Sparkles size={14} className="text-[var(--accent)]" />
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">What TaskFlow has learned</h3>
-                  </div>
-                  <div className="space-y-2">
-                    {behaviorSummary.split('\n').filter(Boolean).map(line => (
-                      <div
-                        key={line}
-                        className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text-secondary)]"
-                      >
-                        {line}
+                  <button
+                    type="button"
+                    onClick={() => setLearnedOpen(open => !open)}
+                    className="flex w-full items-start justify-between gap-3 text-left"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Sparkles size={14} className="text-[var(--accent)]" />
+                        <h3 className="text-sm font-semibold text-[var(--text-primary)]">What TaskFlow has learned</h3>
                       </div>
-                    ))}
-                  </div>
-                  {proactivePrompts.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {proactivePrompts.map(prompt => (
-                        <button
-                          key={prompt}
-                          onClick={() => {
-                            onUseBehaviorPrompt(prompt);
-                            onClose();
-                          }}
-                          className="rounded-full border border-[var(--accent)]/25 bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-medium text-[var(--accent)] transition hover:border-[var(--accent)]/45"
+                      <p className="mt-1 text-xs text-[var(--text-faint)]">
+                        {behaviorLines.length > 0
+                          ? `View ${behaviorLines.length} learning signals and any proactive suggestions.`
+                          : 'No learning signals yet.'}
+                      </p>
+                    </div>
+                    <ChevronDown
+                      size={16}
+                      className={cn(
+                        'mt-0.5 shrink-0 text-[var(--text-faint)] transition-transform',
+                        learnedOpen && 'rotate-180',
+                      )}
+                    />
+                  </button>
+
+                  {learnedOpen && (
+                    <div className="mt-4 space-y-2">
+                      {behaviorLines.map(line => (
+                        <div
+                          key={line}
+                          className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text-secondary)]"
                         >
-                          {prompt}
-                        </button>
+                          {line}
+                        </div>
                       ))}
+                      {proactivePrompts.length > 0 && (
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {proactivePrompts.map(prompt => (
+                            <button
+                              key={prompt}
+                              onClick={() => {
+                                onUseBehaviorPrompt(prompt);
+                                onClose();
+                              }}
+                              className="rounded-full border border-[var(--accent)]/25 bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-medium text-[var(--accent)] transition hover:border-[var(--accent)]/45"
+                            >
+                              {prompt}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

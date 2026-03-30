@@ -541,6 +541,15 @@ interface AIPanelProps {
   onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence, status?: TaskStatus, options?: BehaviorLearningActionOptions) => Promise<string | null>;
   onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence; status?: TaskStatus }, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onAddDeadline: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus, options?: BehaviorLearningActionOptions) => Promise<boolean>;
+  onUpdateDeadline: (id: string, updates: {
+    title?: string;
+    projectId?: string | null;
+    status?: DeadlineStatus;
+    type?: DeadlineType;
+    dueDate?: string;
+    dueTime?: string | null;
+    notes?: string;
+  }) => Promise<boolean>;
   onAddProject: (name: string, description: string, options?: BehaviorLearningActionOptions) => Promise<string | null>;
   onAddSubtask: (taskId: string, title: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onDeleteTask: (taskId: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
@@ -558,7 +567,7 @@ export function AIPanel({
   open, onClose, userId,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
   calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot, behaviorSummary, draftPrompt, onDraftPromptConsumed, onAiPromptSubmitted, onAiActionsApplied, onAiSuggestionAccepted, onAiSuggestionEdited, onAiSuggestionRejected, onStudyBlockLinkedTarget, onStudySlotCandidatesLogged,
-  onAddTask, onUpdateTask, onAddDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
+  onAddTask, onUpdateTask, onAddDeadline, onUpdateDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
   onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
   habits, onAddHabit, onToggleHabit, onDeleteHabit,
 }: AIPanelProps) {
@@ -1150,6 +1159,9 @@ export function AIPanel({
       }
     }
 
+    const replacementCandidateEvents: GoogleCalendarEvent[] = [...workingCalendarEvents];
+    const consumedReplacementKeys = new Set<string>();
+
     // Resolve course name → projectId, create if needed
     const resolveProject = async (courseName?: string): Promise<string | null> => {
       if (!courseName) return null;
@@ -1287,7 +1299,10 @@ export function AIPanel({
 
         const replacementMatch = isStudyBlockAutoScheduleTarget(row, targetCalendar?.summary ?? row.calendar)
           ? findStudyBlockReplacementCandidate(
-            workingCalendarEvents,
+            replacementCandidateEvents.filter(event => {
+              const key = `${event.calendarId ?? ''}:${event.id}`;
+              return !consumedReplacementKeys.has(key);
+            }),
             calendarCalendars,
             targetCalendarId,
             row,
@@ -1309,6 +1324,7 @@ export function AIPanel({
             targetCalendar?.backgroundColor,
           );
           if (replacementMatch) {
+            consumedReplacementKeys.add(`${replacementMatch.calendarId ?? ''}:${replacementMatch.id}`);
             appliedCalendarActions.push(
               summarizePayloadAction('updated', resolved.payload, targetCalendar?.summary ?? row.calendar),
             );
@@ -1696,19 +1712,33 @@ export function AIPanel({
         const projectId = await resolveProject(row.course);
         const type = (['assignment', 'exam', 'quiz', 'lab', 'project', 'other'].includes(row.type ?? '') ? row.type : 'other') as DeadlineType;
         const status = (['not-started', 'in-progress', 'done', 'missed'].includes(row.status ?? '') ? row.status : 'not-started') as DeadlineStatus;
-        const ok = await onAddDeadline(
-          row.title,
-          projectId,
-          type,
-          row.dueDate,
-          row.dueTime ?? null,
-          row.notes ?? '',
-          status,
-          aiLearningOptions,
-        );
+        const matches = matchDeadlineCandidates(deadlines, projects, row.title, row.course);
+        const ok = matches.length === 1
+          ? await onUpdateDeadline(matches[0].id, {
+              title: row.title,
+              projectId,
+              type,
+              dueDate: row.dueDate,
+              dueTime: row.dueTime ?? null,
+              notes: row.notes ?? '',
+              status,
+            })
+          : await onAddDeadline(
+              row.title,
+              projectId,
+              type,
+              row.dueDate,
+              row.dueTime ?? null,
+              row.notes ?? '',
+              status,
+              aiLearningOptions,
+            );
         if (ok) {
           imported++;
           onAiSuggestionAccepted?.(block.type, 1);
+          if (matches.length === 1) {
+            onAiSuggestionEdited?.(block.type, 1);
+          }
         } else skipped++;
       }
       skippedForLog = skipped;
@@ -2162,6 +2192,7 @@ export function AIPanel({
                     {messages.map(msg => (
                       <MessageBubble
                         key={msg.id}
+                        userId={userId}
                         message={msg}
                         tasks={tasks}
                         deadlines={deadlines}
@@ -3028,25 +3059,13 @@ function maybeResolveCalendarCreateConflict(
     return timedDetails.startMinutes < busy.endMinutes && timedDetails.endMinutes > busy.startMinutes;
   });
 
-  if (!hasConflict) {
-    return {
-      payload,
-      adjusted: false,
-      dateKey: timedDetails.dateKey,
-      requestedStartMinutes: timedDetails.startMinutes,
-      durationMinutes: timedDetails.durationMinutes,
-      selectedStartMinutes: timedDetails.startMinutes,
-      candidates: nextSlot?.candidates ?? [],
-    };
-  }
-
   return {
-    payload: null,
+    payload,
     adjusted: false,
     dateKey: timedDetails.dateKey,
     requestedStartMinutes: timedDetails.startMinutes,
     durationMinutes: timedDetails.durationMinutes,
-    selectedStartMinutes: null,
+    selectedStartMinutes: timedDetails.startMinutes,
     candidates: nextSlot?.candidates ?? [],
   };
 }
@@ -3429,6 +3448,7 @@ function matchDeadlineCandidates(deadlines: Deadline[], projects: Project[], raw
 
 // --- Message Bubble ---
 function MessageBubble({
+  userId,
   message,
   tasks,
   deadlines,
@@ -3440,6 +3460,7 @@ function MessageBubble({
   onImport,
   isStreaming,
 }: {
+  userId: string;
   message: ChatMessage;
   tasks: Task[];
   deadlines: Deadline[];
@@ -3527,6 +3548,7 @@ function MessageBubble({
           {!isStreaming && importBlocks.length > 0 && (
             <ActionBundleCard
               messageId={message.id}
+              userId={userId}
               blocks={importBlocks}
               tasks={tasks}
               deadlines={deadlines}
@@ -3599,6 +3621,7 @@ function renderContentWithBlocks(content: string, importBlocks: ImportBlock[]): 
 
 function ActionBundleCard({
   messageId,
+  userId,
   blocks,
   tasks,
   deadlines,
@@ -3610,6 +3633,7 @@ function ActionBundleCard({
   onImport,
 }: {
   messageId: string;
+  userId: string;
   blocks: ImportBlock[];
   tasks: Task[];
   deadlines: Deadline[];

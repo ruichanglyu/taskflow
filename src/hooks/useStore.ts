@@ -534,6 +534,38 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, projects.length, tasks, userId]);
 
+  const updateProject = useCallback(async (id: string, updates: { name?: string; description?: string; color?: string }): Promise<boolean> => {
+    if (!supabase) return false;
+
+    setError(null);
+
+    try {
+      const dbUpdates: Record<string, unknown> = {};
+      if (updates.name !== undefined) dbUpdates.name = updates.name;
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (updates.color !== undefined) dbUpdates.color = updates.color;
+
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update(dbUpdates)
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      if (updateError) throw updateError;
+
+      setProjects(prev => {
+        const nextProjects = prev.map(project => project.id === id ? { ...project, ...updates } : project);
+        persistLocalSnapshot(nextProjects, tasks);
+        return nextProjects;
+      });
+
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update project.');
+      return false;
+    }
+  }, [persistLocalSnapshot, tasks, userId]);
+
   const deleteProject = useCallback(async (id: string) => {
     if (!supabase) return;
 
@@ -711,5 +743,5 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, projects, userId]);
 
-  return { tasks, projects, isLoading, error, clearError, loadData, addTask, updateTask, updateTaskStatus, deleteTask, addProject, deleteProject, addSubtask, toggleSubtask, deleteSubtask, addComment, deleteComment, updateTaskDueDate };
+  return { tasks, projects, isLoading, error, clearError, loadData, addTask, updateTask, updateTaskStatus, deleteTask, addProject, updateProject, deleteProject, addSubtask, toggleSubtask, deleteSubtask, addComment, deleteComment, updateTaskDueDate };
 }

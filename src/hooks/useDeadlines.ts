@@ -42,6 +42,32 @@ interface DeadlineTaskRow {
   task_id: string;
 }
 
+async function loadUserDeadlines(userId: string) {
+  if (!supabase) return { data: [] as DeadlineRow[], error: null };
+
+  const filtered = await supabase
+    .from('deadlines')
+    .select(DEADLINE_SELECT)
+    .eq('user_id', userId)
+    .order('due_date', { ascending: true });
+
+  if (!filtered.error) {
+    return { data: (filtered.data ?? []) as DeadlineRow[], error: null };
+  }
+
+  const fallback = await supabase
+    .from('deadlines')
+    .select(DEADLINE_SELECT)
+    .order('due_date', { ascending: true });
+
+  if (fallback.error) {
+    return { data: [] as DeadlineRow[], error: filtered.error };
+  }
+
+  console.warn('Falling back to RLS-scoped deadlines load without explicit user_id filter.', filtered.error);
+  return { data: (fallback.data ?? []) as DeadlineRow[], error: null };
+}
+
 function mapDeadline(row: DeadlineRow, linkedTaskIds: string[] = []): Deadline {
   return {
     id: row.id,
@@ -86,11 +112,7 @@ export function useDeadlines(userId: string) {
     setError(null);
 
     try {
-      const { data: deadlineRows, error: dlError } = await supabase
-        .from('deadlines')
-        .select(DEADLINE_SELECT)
-        .eq('user_id', userId)
-        .order('due_date', { ascending: true });
+      const { data: deadlineRows, error: dlError } = await loadUserDeadlines(userId);
       if (dlError) throw dlError;
 
       const deadlineIds = (deadlineRows ?? []).map((row: DeadlineRow) => row.id);

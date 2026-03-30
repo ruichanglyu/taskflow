@@ -115,6 +115,37 @@ function getStoredSnapshot<T>(baseKey: string, userId: string): T | null {
   return loadFromStorage<T | null>(baseKey, null);
 }
 
+async function loadUserScopedRows<Row>(
+  table: 'projects' | 'tasks',
+  select: string,
+  userId: string,
+  orderColumn: string,
+) {
+  if (!supabase) return { data: [] as Row[], error: null };
+
+  const filtered = await supabase
+    .from(table)
+    .select(select)
+    .eq('user_id', userId)
+    .order(orderColumn, { ascending: false });
+
+  if (!filtered.error) {
+    return { data: (filtered.data ?? []) as Row[], error: null };
+  }
+
+  const fallback = await supabase
+    .from(table)
+    .select(select)
+    .order(orderColumn, { ascending: false });
+
+  if (fallback.error) {
+    return { data: [] as Row[], error: filtered.error };
+  }
+
+  console.warn(`Falling back to RLS-scoped ${table} load without explicit user_id filter.`, filtered.error);
+  return { data: (fallback.data ?? []) as Row[], error: null };
+}
+
 // Seed data
 const seedProjects: Project[] = [
   { id: 'p1', name: 'Website Redesign', description: 'Revamp the company website with modern design', color: '#6366f1', createdAt: new Date(Date.now() - 7 * 86400000).toISOString(), canvasCourseId: null },
@@ -164,16 +195,18 @@ export function useStore(userId: string) {
 
     try {
       const [{ data: projectRows, error: projectError }, { data: taskRows, error: taskError }] = await Promise.all([
-        supabase
-          .from('projects')
-          .select('id, name, description, color, created_at, canvas_course_id')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('tasks')
-          .select('id, title, description, status, priority, project_id, created_at, due_date, recurrence')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false }),
+        loadUserScopedRows<ProjectRow>(
+          'projects',
+          'id, name, description, color, created_at, canvas_course_id',
+          userId,
+          'created_at',
+        ),
+        loadUserScopedRows<TaskRow>(
+          'tasks',
+          'id, title, description, status, priority, project_id, created_at, due_date, recurrence',
+          userId,
+          'created_at',
+        ),
       ]);
 
       if (projectError) throw projectError;

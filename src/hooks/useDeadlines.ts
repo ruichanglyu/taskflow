@@ -102,8 +102,20 @@ export function useDeadlines(userId: string) {
           .select('deadline_id, task_id')
           .in('deadline_id', deadlineIds);
 
-        if (linkError) throw linkError;
-        linkRows = (data ?? []) as DeadlineTaskRow[];
+        if (linkError) {
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('deadline_tasks')
+            .select('deadline_id, task_id');
+
+          if (fallbackError) {
+            console.warn('Failed to load linked deadline tasks, continuing without links.', fallbackError);
+          } else {
+            const deadlineIdSet = new Set(deadlineIds);
+            linkRows = ((fallbackData ?? []) as DeadlineTaskRow[]).filter(link => deadlineIdSet.has(link.deadline_id));
+          }
+        } else {
+          linkRows = (data ?? []) as DeadlineTaskRow[];
+        }
       }
 
       const linksByDeadline = new Map<string, string[]>();

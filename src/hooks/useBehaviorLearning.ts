@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GoogleCalendarEvent, NewGoogleCalendarEvent } from '../lib/googleCalendar';
 import { supabase } from '../lib/supabase';
 import type { StudyBlockOutcomeStatus } from '../types';
@@ -1107,19 +1107,23 @@ export function useBehaviorLearning(userId: string) {
     };
   }, [userId]);
 
+  // Circuit breaker: stop remote writes after constraint/schema errors to avoid hammering the DB
+  const remoteDisabledRef = useRef(false);
+
   const persistEvent = useCallback((event: BehaviorLearningEvent) => {
     setEvents(previous => {
       const next = appendBehaviorEvent(previous, event);
       saveEventsToStorage(userId, next);
       return next;
     });
-    if (supabase) {
+    if (supabase && !remoteDisabledRef.current) {
       void (async () => {
         const { error } = await supabase
           .from('behavior_learning_schedule_events')
           .insert(mapEventToScheduleRow(userId, event));
         if (error) {
           console.warn('[BehaviorLearning] Failed to persist schedule event', error, event);
+          if (error.code === '23514' || error.code === '42P01') remoteDisabledRef.current = true;
         }
       })();
     }
@@ -1132,13 +1136,14 @@ export function useBehaviorLearning(userId: string) {
       saveAppEventsToStorage(userId, next);
       return next;
     });
-    if (supabase) {
+    if (supabase && !remoteDisabledRef.current) {
       void (async () => {
         const { error } = await supabase
           .from('behavior_learning_app_events')
           .insert(mapAppEventToRow(userId, event));
         if (error) {
           console.warn('[BehaviorLearning] Failed to persist app event', error, event);
+          if (error.code === '23514' || error.code === '42P01') remoteDisabledRef.current = true;
         }
       })();
     }

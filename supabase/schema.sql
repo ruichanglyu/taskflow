@@ -601,7 +601,7 @@ create table if not exists public.behavior_learning_app_events (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   source text not null check (source in ('manual', 'ai')),
-  entity text not null check (entity in ('task', 'deadline', 'project', 'habit', 'deadline-link', 'calendar')),
+  entity text not null check (entity in ('task', 'deadline', 'project', 'habit', 'deadline-link', 'calendar', 'ai', 'study-review', 'study-block')),
   action text not null,
   title text not null,
   detail text,

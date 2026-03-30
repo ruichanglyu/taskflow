@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { CanvasConnection, DeadlineSource, DeadlineType, Project } from '../types';
 import { supabase } from '../lib/supabase';
 import {
@@ -87,6 +88,8 @@ function parseDueDate(dueAt: string): { date: string; time: string | null } {
 // --- Main hook ---
 
 export function useCanvas(userId: string, existingProjects: Project[]) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [connection, setConnection] = useState<CanvasConnection | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -105,15 +108,13 @@ export function useCanvas(userId: string, existingProjects: Project[]) {
 
   // Handle OAuth callback: check URL for ?canvas_code=...&canvas_state=...
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(location.search);
     const code = params.get('canvas_code');
     const stateStr = params.get('canvas_state');
 
     if (!code || !stateStr) return;
 
-    // Clean the URL immediately
-    const cleanUrl = window.location.pathname;
-    window.history.replaceState({}, '', cleanUrl);
+    navigate(location.pathname, { replace: true });
 
     // Exchange the code for tokens
     (async () => {
@@ -125,7 +126,7 @@ export function useCanvas(userId: string, existingProjects: Project[]) {
         setError(err instanceof Error ? err.message : 'Canvas OAuth failed');
       }
     })();
-  }, []);
+  }, [location.pathname, location.search, navigate]);
 
   const disconnect = useCallback(async () => {
     setError(null);

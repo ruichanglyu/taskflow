@@ -2,6 +2,25 @@ import { useState, useEffect, useCallback } from 'react';
 import { Deadline, DeadlineSource, DeadlineStatus, DeadlineType } from '../types';
 import { supabase } from '../lib/supabase';
 
+const STORAGE_KEY_DEADLINES = 'taskflow_deadlines';
+
+function loadFromStorage<T>(key: string, fallback: T): T {
+  try {
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveToStorage<T>(key: string, data: T): void {
+  localStorage.setItem(key, JSON.stringify(data));
+}
+
+function getStorageKey(baseKey: string, userId: string): string {
+  return `${baseKey}:${userId}`;
+}
+
 interface DeadlineRow {
   id: string;
   project_id: string | null;
@@ -45,9 +64,15 @@ function mapDeadline(row: DeadlineRow, linkedTaskIds: string[] = []): Deadline {
 const DEADLINE_SELECT = 'id, project_id, title, status, type, due_date, due_time, notes, created_at, source_type, source_id, source_url, source_synced_at';
 
 export function useDeadlines(userId: string) {
-  const [deadlines, setDeadlines] = useState<Deadline[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const storageKey = getStorageKey(STORAGE_KEY_DEADLINES, userId);
+  const initialDeadlines = loadFromStorage<Deadline[]>(storageKey, []);
+  const [deadlines, setDeadlines] = useState<Deadline[]>(() => initialDeadlines);
+  const [isLoading, setIsLoading] = useState(() => initialDeadlines.length === 0);
   const [error, setError] = useState<string | null>(null);
+
+  const persistSnapshot = useCallback((nextDeadlines: Deadline[]) => {
+    saveToStorage(storageKey, nextDeadlines);
+  }, [storageKey]);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -57,38 +82,46 @@ export function useDeadlines(userId: string) {
       return;
     }
 
-    setIsLoading(true);
+    setIsLoading(initialDeadlines.length === 0);
     setError(null);
 
     try {
-      const [{ data: deadlineRows, error: dlError }, { data: linkRows, error: linkError }] = await Promise.all([
-        supabase
-          .from('deadlines')
-          .select(DEADLINE_SELECT)
-          .eq('user_id', userId)
-          .order('due_date', { ascending: true }),
-        supabase
-          .from('deadline_tasks')
-          .select('deadline_id, task_id'),
-      ]);
-
+      const { data: deadlineRows, error: dlError } = await supabase
+        .from('deadlines')
+        .select(DEADLINE_SELECT)
+        .eq('user_id', userId)
+        .order('due_date', { ascending: true });
       if (dlError) throw dlError;
-      if (linkError) throw linkError;
+
+      const deadlineIds = (deadlineRows ?? []).map((row: DeadlineRow) => row.id);
+      let linkRows: DeadlineTaskRow[] = [];
+
+      if (deadlineIds.length > 0) {
+        const { data, error: linkError } = await supabase
+          .from('deadline_tasks')
+          .select('deadline_id, task_id')
+          .in('deadline_id', deadlineIds);
+
+        if (linkError) throw linkError;
+        linkRows = (data ?? []) as DeadlineTaskRow[];
+      }
 
       const linksByDeadline = new Map<string, string[]>();
-      for (const link of (linkRows ?? []) as DeadlineTaskRow[]) {
+      for (const link of linkRows) {
         const list = linksByDeadline.get(link.deadline_id) ?? [];
         list.push(link.task_id);
         linksByDeadline.set(link.deadline_id, list);
       }
 
-      setDeadlines((deadlineRows ?? []).map((row: DeadlineRow) => mapDeadline(row, linksByDeadline.get(row.id) ?? [])));
+      const nextDeadlines = (deadlineRows ?? []).map((row: DeadlineRow) => mapDeadline(row, linksByDeadline.get(row.id) ?? []));
+      setDeadlines(nextDeadlines);
+      persistSnapshot(nextDeadlines);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load deadlines.');
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, [initialDeadlines.length, persistSnapshot, userId]);
 
   useEffect(() => {
     void loadDeadlines();
@@ -134,6 +167,7 @@ export function useDeadlines(userId: string) {
       setDeadlines(prev => {
         const next = [...prev, mapDeadline(data)];
         next.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+        persistSnapshot(next);
         return next;
       });
       return true;
@@ -178,6 +212,7 @@ export function useDeadlines(userId: string) {
       setDeadlines(prev => {
         const next = prev.map(d => d.id === id ? { ...d, ...updates } : d);
         next.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+        persistSnapshot(next);
         return next;
       });
       return true;
@@ -199,11 +234,15 @@ export function useDeadlines(userId: string) {
 
       if (deleteError) throw deleteError;
 
-      setDeadlines(prev => prev.filter(d => d.id !== id));
+      setDeadlines(prev => {
+        const next = prev.filter(d => d.id !== id);
+        persistSnapshot(next);
+        return next;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete deadline.');
     }
-  }, [userId]);
+  }, [persistSnapshot, userId]);
 
   const deleteAllDeadlines = useCallback(async (): Promise<boolean> => {
     if (!supabase) return false;
@@ -217,12 +256,13 @@ export function useDeadlines(userId: string) {
       if (deleteError) throw deleteError;
 
       setDeadlines([]);
+      persistSnapshot([]);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete all deadlines.');
       return false;
     }
-  }, [userId]);
+  }, [persistSnapshot, userId]);
 
   const linkTask = useCallback(async (deadlineId: string, taskId: string): Promise<boolean> => {
     if (!supabase) return false;
@@ -235,14 +275,18 @@ export function useDeadlines(userId: string) {
       if (insertError) throw insertError;
 
       setDeadlines(prev =>
-        prev.map(d => d.id === deadlineId ? { ...d, linkedTaskIds: [...d.linkedTaskIds, taskId] } : d)
+        {
+          const next = prev.map(d => d.id === deadlineId ? { ...d, linkedTaskIds: [...d.linkedTaskIds, taskId] } : d);
+          persistSnapshot(next);
+          return next;
+        }
       );
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to link task.');
       return false;
     }
-  }, []);
+  }, [persistSnapshot]);
 
   const unlinkTask = useCallback(async (deadlineId: string, taskId: string) => {
     if (!supabase) return;
@@ -257,12 +301,16 @@ export function useDeadlines(userId: string) {
       if (deleteError) throw deleteError;
 
       setDeadlines(prev =>
-        prev.map(d => d.id === deadlineId ? { ...d, linkedTaskIds: d.linkedTaskIds.filter(id => id !== taskId) } : d)
+        {
+          const next = prev.map(d => d.id === deadlineId ? { ...d, linkedTaskIds: d.linkedTaskIds.filter(id => id !== taskId) } : d);
+          persistSnapshot(next);
+          return next;
+        }
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to unlink task.');
     }
-  }, []);
+  }, [persistSnapshot]);
 
   return {
     deadlines,

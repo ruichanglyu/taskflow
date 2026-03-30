@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { LogOut, Menu, Search, CheckCircle2, AlertCircle, X, Sparkles, CheckCheck } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { View } from '../types';
 import { cn } from '../utils/cn';
 import { useStore } from '../hooks/useStore';
@@ -176,17 +176,6 @@ export function AppShell({ user }: AppShellProps) {
     if (deadline?.projectId) params.set('course', deadline.projectId);
     navigate(`/deadlines?${params.toString()}`);
   }, [deadlineStore.deadlines, navigate]);
-
-  useEffect(() => {
-    if (location.pathname === '/') {
-      navigate('/dashboard', { replace: true });
-      return;
-    }
-
-    if (!Object.values(VIEW_PATHS).includes(location.pathname as View extends never ? never : string)) {
-      navigate('/dashboard', { replace: true });
-    }
-  }, [location.pathname, navigate]);
 
   useEffect(() => {
     learning.logViewOpened(currentView, { source: 'manual', learn: true });
@@ -652,6 +641,8 @@ export function AppShell({ user }: AppShellProps) {
       handleDeleteCalendarEvent(eventId, calendarIdOverride, { source: 'manual', learn: true }),
   }), [calendar, handleCreateCalendarEvent, handleDeleteCalendarEvent, handleUpdateCalendarEvent]);
 
+  const showBackgroundSyncBanner = store.isLoading && (store.tasks.length > 0 || store.projects.length > 0);
+
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text-primary)]">
       <Sidebar
@@ -738,132 +729,161 @@ export function AppShell({ user }: AppShellProps) {
             </div>
           )}
 
-          {store.isLoading && (
+          {showBackgroundSyncBanner && (
             <div className="mb-4 flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-muted)]">
               <CheckCheck size={16} className="text-[var(--accent)]" />
               Syncing your workspace in the background...
             </div>
           )}
-          <div key={`${location.pathname}?${location.search}`}>
-          {currentView === 'dashboard' && (
-            <Dashboard
-              tasks={store.tasks}
-              projects={store.projects}
-              deadlines={deadlineStore.deadlines}
-              calendarEvents={calendar.events}
-              studyBlockOutcomes={studyBlockOutcomes.outcomesByEventId}
-              getStudyBlockOutcome={studyBlockOutcomes.getOutcomeForEvent}
-              studyBlockOutcomesLoading={studyBlockOutcomes.isLoading}
-              onSetStudyBlockOutcome={handleSetStudyBlockOutcome}
-              onStudyReviewPromptShown={(count) => learning.logStudyReviewPromptShown({
-                count,
-                options: { source: 'manual', learn: true },
-              })}
-              behaviorSummary={learning.behaviorInsights.summary}
-              proactivePrompts={learning.behaviorInsights.proactivePrompts}
-              onUseBehaviorPrompt={openAiWithPrompt}
+          <Routes>
+            <Route
+              path="/"
+              element={<Navigate to="/dashboard" replace />}
             />
-          )}
-          {currentView === 'deadlines' && (
-            <DeadlinesPage
-              deadlines={deadlineStore.deadlines}
-              projects={store.projects}
-              tasks={store.tasks}
-              initialCourseFilter={currentView === 'deadlines' ? deadlineCourseFilterId : null}
-              initialDetailId={currentView === 'deadlines' ? deadlineFocusId : null}
-              onAdd={handleAddDeadline}
-              onAddProject={handleAddProject}
-              onUpdate={handleUpdateDeadline}
-              onDelete={handleDeleteDeadline}
-              onDeleteAll={handleDeleteAllDeadlines}
-              onLinkTask={handleLinkTask}
-              onUnlinkTask={handleUnlinkTask}
-              onCreateTask={async (title, desc, projId, dueDate) => handleAddTask(title, desc, 'medium', projId, dueDate, 'none')}
-              onNavigateToCourse={openCourse}
-              onNavigateToTasks={openCourseTasks}
+            <Route
+              path="/dashboard"
+              element={
+                <Dashboard
+                  tasks={store.tasks}
+                  projects={store.projects}
+                  deadlines={deadlineStore.deadlines}
+                  calendarEvents={calendar.events}
+                  studyBlockOutcomes={studyBlockOutcomes.outcomesByEventId}
+                  getStudyBlockOutcome={studyBlockOutcomes.getOutcomeForEvent}
+                  studyBlockOutcomesLoading={studyBlockOutcomes.isLoading}
+                  onSetStudyBlockOutcome={handleSetStudyBlockOutcome}
+                  onStudyReviewPromptShown={(count) => learning.logStudyReviewPromptShown({
+                    count,
+                    options: { source: 'manual', learn: true },
+                  })}
+                  behaviorSummary={learning.behaviorInsights.summary}
+                  proactivePrompts={learning.behaviorInsights.proactivePrompts}
+                  onUseBehaviorPrompt={openAiWithPrompt}
+                />
+              }
             />
-          )}
-          {currentView === 'tasks' && (
-            <TaskBoard
-              tasks={store.tasks}
-              projects={store.projects}
-              deadlines={deadlineStore.deadlines}
-              initialProjectFilter={currentView === 'tasks' ? taskProjectFilterId : 'all'}
-              onAddTask={handleAddTask}
-              onUpdateStatus={handleUpdateTaskStatus}
-              onUpdateTask={handleUpdateTask}
-              onDeleteTask={handleDeleteTask}
-              onAddSubtask={handleAddSubtask}
-              onToggleSubtask={handleToggleSubtask}
-              onDeleteSubtask={handleDeleteSubtask}
-              onAddComment={handleAddComment}
-              onDeleteComment={handleDeleteComment}
-              onOpenDeadline={openDeadline}
+            <Route
+              path="/deadlines"
+              element={
+                <DeadlinesPage
+                  deadlines={deadlineStore.deadlines}
+                  projects={store.projects}
+                  tasks={store.tasks}
+                  initialCourseFilter={deadlineCourseFilterId}
+                  initialDetailId={deadlineFocusId}
+                  onAdd={handleAddDeadline}
+                  onAddProject={handleAddProject}
+                  onUpdate={handleUpdateDeadline}
+                  onDelete={handleDeleteDeadline}
+                  onDeleteAll={handleDeleteAllDeadlines}
+                  onLinkTask={handleLinkTask}
+                  onUnlinkTask={handleUnlinkTask}
+                  onCreateTask={async (title, desc, projId, dueDate) => handleAddTask(title, desc, 'medium', projId, dueDate, 'none')}
+                  onNavigateToCourse={openCourse}
+                  onNavigateToTasks={openCourseTasks}
+                />
+              }
             />
-          )}
-          {currentView === 'projects' && (
-            <ProjectList
-              projects={store.projects}
-              tasks={store.tasks}
-              deadlines={deadlineStore.deadlines}
-              initialProjectId={currentView === 'projects' ? projectFocusId : null}
-              onAddProject={handleAddProject}
-              onDeleteProject={handleDeleteProject}
-              onOpenTasks={openCourseTasks}
-              onOpenDeadlines={openCourseDeadlines}
+            <Route
+              path="/tasks"
+              element={
+                <TaskBoard
+                  tasks={store.tasks}
+                  projects={store.projects}
+                  deadlines={deadlineStore.deadlines}
+                  initialProjectFilter={taskProjectFilterId}
+                  onAddTask={handleAddTask}
+                  onUpdateStatus={handleUpdateTaskStatus}
+                  onUpdateTask={handleUpdateTask}
+                  onDeleteTask={handleDeleteTask}
+                  onAddSubtask={handleAddSubtask}
+                  onToggleSubtask={handleToggleSubtask}
+                  onDeleteSubtask={handleDeleteSubtask}
+                  onAddComment={handleAddComment}
+                  onDeleteComment={handleDeleteComment}
+                  onOpenDeadline={openDeadline}
+                />
+              }
             />
-          )}
-          {currentView === 'calendar' && (
-            <CalendarView
-              calendar={calendarController}
-              deadlines={deadlineStore.deadlines}
-              studyBlockOutcomes={studyBlockOutcomes.outcomesByEventId}
-              getStudyBlockOutcome={studyBlockOutcomes.getOutcomeForEvent}
-              studyBlockOutcomesLoading={studyBlockOutcomes.isLoading}
-              onSetStudyBlockOutcome={handleSetStudyBlockOutcome}
+            <Route
+              path="/courses"
+              element={
+                <ProjectList
+                  projects={store.projects}
+                  tasks={store.tasks}
+                  deadlines={deadlineStore.deadlines}
+                  initialProjectId={projectFocusId}
+                  onAddProject={handleAddProject}
+                  onDeleteProject={handleDeleteProject}
+                  onOpenTasks={openCourseTasks}
+                  onOpenDeadlines={openCourseDeadlines}
+                />
+              }
             />
-          )}
-          {currentView === 'timeline' && (
-            <TimelineView
-              tasks={store.tasks}
-              projects={store.projects}
-              deadlines={deadlineStore.deadlines}
-              onUpdateDueDate={handleUpdateTaskDueDate}
+            <Route
+              path="/calendar"
+              element={
+                <CalendarView
+                  calendar={calendarController}
+                  deadlines={deadlineStore.deadlines}
+                  studyBlockOutcomes={studyBlockOutcomes.outcomesByEventId}
+                  getStudyBlockOutcome={studyBlockOutcomes.getOutcomeForEvent}
+                  studyBlockOutcomesLoading={studyBlockOutcomes.isLoading}
+                  onSetStudyBlockOutcome={handleSetStudyBlockOutcome}
+                />
+              }
             />
-          )}
-          {currentView === 'gym' && (
-            <GymPage
-              plans={gym.plans}
-              dayTemplates={gym.dayTemplates}
-              exercises={gym.exercises}
-              dayExercises={gym.dayExercises}
-              sessions={gym.sessions}
-              exerciseLogs={gym.exerciseLogs}
-              setLogs={gym.setLogs}
-              activePlan={gym.activePlan}
-              activeSession={gym.activeSession}
-              onAddPlan={gym.addPlan}
-              onUpdatePlan={gym.updatePlan}
-              onDeletePlan={gym.deletePlan}
-              onAddDayTemplate={gym.addDayTemplate}
-              onUpdateDayTemplate={gym.updateDayTemplate}
-              onDeleteDayTemplate={gym.deleteDayTemplate}
-              onAddExercise={gym.addExercise}
-              onUpdateExercise={gym.updateExercise}
-              onDeleteExercise={gym.deleteExercise}
-              onAddDayExercise={gym.addDayExercise}
-              onUpdateDayExercise={gym.updateDayExercise}
-              onDeleteDayExercise={gym.deleteDayExercise}
-              onStartSession={gym.startSession}
-              onCompleteSession={gym.completeSession}
-              onDeleteSession={gym.deleteSession}
-              onUpdateSetLog={gym.updateSetLog}
-              getLastPerformance={gym.getLastPerformance}
-              onUploadExercisePhoto={gym.uploadExercisePhoto}
-              onUploadExerciseImage={gym.uploadExerciseImage}
+            <Route
+              path="/timeline"
+              element={
+                <TimelineView
+                  tasks={store.tasks}
+                  projects={store.projects}
+                  deadlines={deadlineStore.deadlines}
+                  onUpdateDueDate={handleUpdateTaskDueDate}
+                />
+              }
             />
-          )}
-          </div>
+            <Route
+              path="/gym"
+              element={
+                <GymPage
+                  plans={gym.plans}
+                  dayTemplates={gym.dayTemplates}
+                  exercises={gym.exercises}
+                  dayExercises={gym.dayExercises}
+                  sessions={gym.sessions}
+                  exerciseLogs={gym.exerciseLogs}
+                  setLogs={gym.setLogs}
+                  activePlan={gym.activePlan}
+                  activeSession={gym.activeSession}
+                  onAddPlan={gym.addPlan}
+                  onUpdatePlan={gym.updatePlan}
+                  onDeletePlan={gym.deletePlan}
+                  onAddDayTemplate={gym.addDayTemplate}
+                  onUpdateDayTemplate={gym.updateDayTemplate}
+                  onDeleteDayTemplate={gym.deleteDayTemplate}
+                  onAddExercise={gym.addExercise}
+                  onUpdateExercise={gym.updateExercise}
+                  onDeleteExercise={gym.deleteExercise}
+                  onAddDayExercise={gym.addDayExercise}
+                  onUpdateDayExercise={gym.updateDayExercise}
+                  onDeleteDayExercise={gym.deleteDayExercise}
+                  onStartSession={gym.startSession}
+                  onCompleteSession={gym.completeSession}
+                  onDeleteSession={gym.deleteSession}
+                  onUpdateSetLog={gym.updateSetLog}
+                  getLastPerformance={gym.getLastPerformance}
+                  onUploadExercisePhoto={gym.uploadExercisePhoto}
+                  onUploadExerciseImage={gym.uploadExerciseImage}
+                />
+              }
+            />
+            <Route
+              path="*"
+              element={<Navigate to="/dashboard" replace />}
+            />
+          </Routes>
         </main>
       </div>
 

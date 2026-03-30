@@ -139,9 +139,10 @@ export function useStore(userId: string) {
   const projectStorageKey = getStorageKey(STORAGE_KEY_PROJECTS, userId);
   const initialTasks = getStoredSnapshot<Task[]>(STORAGE_KEY_TASKS, userId) ?? [];
   const initialProjects = getStoredSnapshot<Project[]>(STORAGE_KEY_PROJECTS, userId) ?? [];
+  const hasInitialSnapshot = initialTasks.length > 0 || initialProjects.length > 0;
   const [tasks, setTasks] = useState<Task[]>(() => initialTasks);
   const [projects, setProjects] = useState<Project[]>(() => initialProjects);
-  const [isLoading, setIsLoading] = useState(() => initialTasks.length === 0 && initialProjects.length === 0);
+  const [isLoading, setIsLoading] = useState(() => !hasInitialSnapshot);
   const [error, setError] = useState<string | null>(null);
 
   const persistLocalSnapshot = useCallback((nextProjects: Project[], nextTasks: Task[]) => {
@@ -158,7 +159,7 @@ export function useStore(userId: string) {
       return;
     }
 
-    setIsLoading(true);
+    setIsLoading(!hasInitialSnapshot);
     setError(null);
 
     try {

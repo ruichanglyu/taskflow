@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 
 export type PaletteId = 'neutral' | 'matcha' | 'sakura' | 'lavender' | 'ember' | 'honey' | 'mocha';
-export type ModeId = 'light' | 'dark';
+export type ModeId = 'light' | 'dark' | 'system';
 export type FontId = 'inter' | 'dm-sans' | 'lora' | 'playfair';
 
 // Keep old ThemeId as union for backward compat
@@ -46,6 +46,7 @@ interface ThemeContextValue extends ThemeSettings {
   theme: ThemeId;
   setTheme: (t: ThemeId) => void;
   isDark: boolean;
+  effectiveMode: 'light' | 'dark';
 }
 
 const STORAGE_KEY = 'taskflow_theme_settings';
@@ -57,6 +58,17 @@ const DEFAULTS: ThemeSettings = {
   fontSize: 14,
 };
 
+function getSystemMode(): 'light' | 'dark' {
+  if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches) {
+    return 'light';
+  }
+  return 'dark';
+}
+
+function resolveMode(mode: ModeId): 'light' | 'dark' {
+  return mode === 'system' ? getSystemMode() : mode;
+}
+
 function loadSettings(): ThemeSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -64,9 +76,10 @@ function loadSettings(): ThemeSettings {
       const parsed = JSON.parse(raw);
       // New format
       if (parsed.palette && parsed.mode) {
+        const validModes = ['light', 'dark', 'system'];
         return {
           palette: PALETTE_OPTIONS.some(p => p.id === parsed.palette) ? parsed.palette : DEFAULTS.palette,
-          mode: parsed.mode === 'light' || parsed.mode === 'dark' ? parsed.mode : DEFAULTS.mode,
+          mode: validModes.includes(parsed.mode) ? parsed.mode : DEFAULTS.mode,
           font: FONT_OPTIONS.some(f => f.id === parsed.font) ? parsed.font : DEFAULTS.font,
           fontSize: typeof parsed.fontSize === 'number' && parsed.fontSize >= 13 && parsed.fontSize <= 18 ? parsed.fontSize : DEFAULTS.fontSize,
         };
@@ -95,14 +108,14 @@ function loadSettings(): ThemeSettings {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function applySettings(settings: ThemeSettings) {
-  // Set data attributes for CSS
+  const effective = resolveMode(settings.mode);
   document.documentElement.dataset.palette = settings.palette;
-  document.documentElement.dataset.mode = settings.mode;
+  document.documentElement.dataset.mode = effective;
   // Legacy compat: also set data-theme for any old selectors
   if (settings.palette === 'neutral') {
-    document.documentElement.dataset.theme = settings.mode;
+    document.documentElement.dataset.theme = effective;
   } else {
-    document.documentElement.dataset.theme = settings.palette + '-' + settings.mode;
+    document.documentElement.dataset.theme = settings.palette + '-' + effective;
   }
   const fontOption = FONT_OPTIONS.find(f => f.id === settings.font);
   document.documentElement.style.setProperty('--font-family', fontOption?.family ?? FONT_OPTIONS[0].family);
@@ -118,9 +131,22 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return s;
   });
 
+  const [systemMode, setSystemMode] = useState<'light' | 'dark'>(getSystemMode);
+
+  // Listen for OS theme changes when mode is 'system'
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => {
+      setSystemMode(e.matches ? 'dark' : 'light');
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // Re-apply when settings or system mode changes
   useEffect(() => {
     applySettings(settings);
-  }, [settings]);
+  }, [settings, systemMode]);
 
   const setPalette = useCallback((palette: PaletteId) => {
     setSettings(prev => ({ ...prev, palette }));
@@ -139,7 +165,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Compat
-  const theme: ThemeId = settings.palette === 'neutral' ? settings.mode : settings.palette;
+  const effectiveMode = settings.mode === 'system' ? systemMode : settings.mode;
+  const theme: ThemeId = settings.palette === 'neutral' ? effectiveMode : settings.palette;
   const setTheme = useCallback((t: ThemeId) => {
     if (t === 'dark') setSettings(prev => ({ ...prev, palette: 'neutral', mode: 'dark' }));
     else if (t === 'light') setSettings(prev => ({ ...prev, palette: 'neutral', mode: 'light' }));
@@ -149,7 +176,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (
     <ThemeContext.Provider value={{
       ...settings, setPalette, setMode, setFont, setFontSize,
-      theme, setTheme, isDark: settings.mode === 'dark',
+      theme, setTheme, isDark: effectiveMode === 'dark', effectiveMode,
     }}>
       {children}
     </ThemeContext.Provider>

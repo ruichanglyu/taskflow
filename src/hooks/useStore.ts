@@ -163,7 +163,7 @@ export function useStore(userId: string) {
     setError(null);
 
     try {
-      const [{ data: projectRows, error: projectError }, { data: taskRows, error: taskError }, { data: subtaskRows, error: subtaskError }, { data: commentRows, error: commentError }] = await Promise.all([
+      const [{ data: projectRows, error: projectError }, { data: taskRows, error: taskError }] = await Promise.all([
         supabase
           .from('projects')
           .select('id, name, description, color, created_at, canvas_course_id')
@@ -174,24 +174,43 @@ export function useStore(userId: string) {
           .select('id, title, description, status, priority, project_id, created_at, due_date, recurrence')
           .eq('user_id', userId)
           .order('created_at', { ascending: false }),
-        supabase
-          .from('subtasks')
-          .select('id, task_id, title, done, position')
-          .eq('user_id', userId)
-          .order('position', { ascending: true }),
-        supabase
-          .from('task_comments')
-          .select('id, task_id, text, created_at')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: true }),
       ]);
 
       if (projectError) throw projectError;
       if (taskError) throw taskError;
-      if (subtaskError) throw subtaskError;
-      if (commentError) throw commentError;
 
-      const allSubtasks = (subtaskRows ?? []).map(mapSubtask);
+      const taskIds = (taskRows ?? []).map((row: TaskRow) => row.id);
+      let subtaskRows: SubtaskRow[] = [];
+      let commentRows: CommentRow[] = [];
+
+      if (taskIds.length > 0) {
+        const [{ data: fetchedSubtasks, error: subtaskError }, { data: fetchedComments, error: commentError }] = await Promise.all([
+          supabase
+            .from('subtasks')
+            .select('id, task_id, title, done, position')
+            .in('task_id', taskIds)
+            .order('position', { ascending: true }),
+          supabase
+            .from('task_comments')
+            .select('id, task_id, text, created_at')
+            .in('task_id', taskIds)
+            .order('created_at', { ascending: true }),
+        ]);
+
+        if (subtaskError) {
+          console.warn('Failed to load subtasks for current task set, continuing without them.', subtaskError);
+        } else {
+          subtaskRows = (fetchedSubtasks ?? []) as SubtaskRow[];
+        }
+
+        if (commentError) {
+          console.warn('Failed to load task comments for current task set, continuing without them.', commentError);
+        } else {
+          commentRows = (fetchedComments ?? []) as CommentRow[];
+        }
+      }
+
+      const allSubtasks = subtaskRows.map(mapSubtask);
       const subtasksByTask = new Map<string, Subtask[]>();
       for (const st of allSubtasks) {
         const list = subtasksByTask.get(st.taskId) ?? [];
@@ -199,7 +218,7 @@ export function useStore(userId: string) {
         subtasksByTask.set(st.taskId, list);
       }
 
-      const allComments = (commentRows ?? []).map(mapComment);
+      const allComments = commentRows.map(mapComment);
       const commentsByTask = new Map<string, TaskComment[]>();
       for (const c of allComments) {
         const list = commentsByTask.get(c.taskId) ?? [];

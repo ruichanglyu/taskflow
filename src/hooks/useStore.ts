@@ -137,8 +137,8 @@ const seedTasks: Task[] = [
 export function useStore(userId: string) {
   const taskStorageKey = getStorageKey(STORAGE_KEY_TASKS, userId);
   const projectStorageKey = getStorageKey(STORAGE_KEY_PROJECTS, userId);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>(() => getStoredSnapshot<Task[]>(STORAGE_KEY_TASKS, userId) ?? []);
+  const [projects, setProjects] = useState<Project[]>(() => getStoredSnapshot<Project[]>(STORAGE_KEY_PROJECTS, userId) ?? []);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -164,18 +164,22 @@ export function useStore(userId: string) {
         supabase
           .from('projects')
           .select('id, name, description, color, created_at, canvas_course_id')
+          .eq('user_id', userId)
           .order('created_at', { ascending: false }),
         supabase
           .from('tasks')
           .select('id, title, description, status, priority, project_id, created_at, due_date, recurrence')
+          .eq('user_id', userId)
           .order('created_at', { ascending: false }),
         supabase
           .from('subtasks')
           .select('id, task_id, title, done, position')
+          .eq('user_id', userId)
           .order('position', { ascending: true }),
         supabase
           .from('task_comments')
           .select('id, task_id, text, created_at')
+          .eq('user_id', userId)
           .order('created_at', { ascending: true }),
       ]);
 
@@ -256,10 +260,12 @@ export function useStore(userId: string) {
             supabase
               .from('projects')
               .select('id, name, description, color, created_at, canvas_course_id')
+              .eq('user_id', userId)
               .order('created_at', { ascending: false }),
             supabase
               .from('tasks')
               .select('id, title, description, status, priority, project_id, created_at, due_date')
+              .eq('user_id', userId)
               .order('created_at', { ascending: false }),
           ]);
 

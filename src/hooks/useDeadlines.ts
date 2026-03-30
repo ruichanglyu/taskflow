@@ -65,6 +65,7 @@ export function useDeadlines(userId: string) {
         supabase
           .from('deadlines')
           .select(DEADLINE_SELECT)
+          .eq('user_id', userId)
           .order('due_date', { ascending: true }),
         supabase
           .from('deadline_tasks')

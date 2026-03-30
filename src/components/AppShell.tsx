@@ -738,12 +738,13 @@ export function AppShell({ user }: AppShellProps) {
             </div>
           )}
 
-          {store.isLoading ? (
-            <div className="flex min-h-[50vh] items-center justify-center rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-muted)] text-sm text-[var(--text-muted)]">
-              Syncing your workspace...
+          {store.isLoading && (
+            <div className="mb-4 flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-muted)]">
+              <CheckCheck size={16} className="text-[var(--accent)]" />
+              Syncing your workspace in the background...
             </div>
-          ) : (
-            <>
+          )}
+          <>
           {currentView === 'dashboard' && (
             <Dashboard
               tasks={store.tasks}
@@ -862,8 +863,7 @@ export function AppShell({ user }: AppShellProps) {
               onUploadExerciseImage={gym.uploadExerciseImage}
             />
           )}
-            </>
-          )}
+          </>
         </main>
       </div>
 

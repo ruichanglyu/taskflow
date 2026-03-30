@@ -32,102 +32,131 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail,
     <>
       {/* Mobile overlay */}
       {isOpen && (
-        <div className="fixed inset-0 z-40 bg-black/75 lg:hidden" onClick={onClose} />
+        <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
       )}
 
+      {/* Mobile sidebar — full labels */}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-50 flex h-full w-72 flex-col border-r border-[var(--border-soft)] bg-[var(--bg-app-soft)] backdrop-blur-xl transition-transform duration-300 lg:translate-x-0 lg:static lg:z-auto',
+          'fixed top-0 left-0 z-50 flex h-full w-64 flex-col border-r border-[var(--border-soft)] bg-[var(--bg-app)] transition-transform duration-200 lg:hidden',
           isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
-        style={{ boxShadow: '24px 0 80px var(--shadow-color)' }}
       >
-        {/* Logo */}
-        <div className="border-b border-[var(--border-soft)] px-6 py-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl shadow-lg" style={{ backgroundImage: 'var(--sidebar-gradient)', boxShadow: '0 12px 32px var(--glow-accent)' }}>
-                <Zap size={18} className="text-white" />
-              </div>
-              <span className="text-lg font-bold tracking-tight text-[var(--text-primary)]">TaskFlow</span>
-            </div>
-            <button onClick={onClose} className="lg:hidden text-[var(--text-muted)] hover:text-[var(--text-primary)]">
-              <X size={20} />
-            </button>
+        <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-4 py-4">
+          <div className="flex items-center gap-2">
+            <Zap size={18} className="text-[var(--accent)]" />
+            <span className="text-sm font-semibold text-[var(--text-primary)]">TaskFlow</span>
           </div>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+            <X size={18} />
+          </button>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 space-y-1 px-3 py-5">
+        <nav className="flex-1 space-y-0.5 px-2 py-3">
           {navItems.map(item => (
             <button
               key={item.view}
               onClick={() => { onViewChange(item.view); onClose(); }}
               className={cn(
-                'group w-full rounded-2xl px-3 py-3 text-sm font-medium transition-all',
+                'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                 currentView === item.view
-                  ? 'bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-lg'
+                  ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
                   : 'text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]'
               )}
-              style={currentView === item.view ? { boxShadow: '0 16px 34px var(--shadow-color)' } : undefined}
             >
-              <span className="flex items-center gap-3">
-                <span
-                  className={cn(
-                    'flex h-9 w-9 items-center justify-center rounded-xl border transition-all',
-                    currentView === item.view
-                      ? 'border-transparent text-[var(--accent-contrast)]'
-                      : 'border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-faint)] group-hover:text-[var(--text-primary)]'
-                  )}
-                  style={currentView === item.view ? { backgroundImage: 'var(--sidebar-gradient)' } : undefined}
-                >
-                  {item.icon}
-                </span>
-                {item.label}
-              </span>
+              {item.icon}
+              {item.label}
             </button>
           ))}
         </nav>
 
-        {/* Canvas integration */}
-        <div className="px-3 pb-3">
+        <div className="space-y-0.5 border-t border-[var(--border-soft)] px-2 py-3">
           <button
-            onClick={onCanvasClick}
-            className="flex w-full items-center justify-between rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-3 text-sm font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+            onClick={() => { onCanvasClick?.(); onClose(); }}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
           >
-            <span className="flex items-center gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)]">
-                <GraduationCap size={20} />
-              </span>
-              Canvas
-            </span>
-            <span className="ml-auto">
-              {canvasConnected ? (
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.6)]" title="Connected" />
-              ) : (
-                <span className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[9px] text-[var(--text-faint)]">Setup</span>
-              )}
-            </span>
+            <GraduationCap size={20} />
+            Canvas
+            {canvasConnected && (
+              <span className="ml-auto h-2 w-2 rounded-full bg-emerald-400" />
+            )}
           </button>
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-[var(--border-soft)] px-4 py-4">
+        <div className="border-t border-[var(--border-soft)] px-2 py-3">
           <button
-            onClick={onProfileClick}
-            className="flex w-full items-center gap-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-3 text-left transition-all hover:border-[var(--border-strong)] hover:shadow-md"
+            onClick={() => { onProfileClick?.(); onClose(); }}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-[var(--surface-muted)]"
           >
             {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="h-10 w-10 rounded-2xl object-cover" />
+              <img src={avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
             ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl text-xs font-bold text-white" style={{ backgroundImage: 'var(--avatar-gradient)' }}>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-xs font-bold text-white">
                 {avatarInitial}
               </div>
             )}
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-[var(--text-primary)] truncate">{displayName}</p>
-              {userEmail && <p className="text-xs text-[var(--text-faint)] truncate">{userEmail}</p>}
+              <p className="truncate text-sm font-medium text-[var(--text-primary)]">{displayName}</p>
+              {userEmail && <p className="truncate text-xs text-[var(--text-faint)]">{userEmail}</p>}
             </div>
+          </button>
+        </div>
+      </aside>
+
+      {/* Desktop sidebar — icon-only rail */}
+      <aside className="hidden lg:flex h-full w-14 flex-col items-center border-r border-[var(--border-soft)] bg-[var(--bg-app)] py-3">
+        {/* Logo */}
+        <div className="mb-4 flex h-9 w-9 items-center justify-center">
+          <Zap size={20} className="text-[var(--accent)]" />
+        </div>
+
+        {/* Nav */}
+        <nav className="flex flex-1 flex-col items-center gap-1">
+          {navItems.map(item => (
+            <button
+              key={item.view}
+              onClick={() => onViewChange(item.view)}
+              className={cn(
+                'relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                currentView === item.view
+                  ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+                  : 'text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]'
+              )}
+              title={item.label}
+            >
+              {currentView === item.view && (
+                <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[var(--accent)]" />
+              )}
+              {item.icon}
+            </button>
+          ))}
+        </nav>
+
+        {/* Bottom icons */}
+        <div className="flex flex-col items-center gap-1">
+          <button
+            onClick={onCanvasClick}
+            className="relative flex h-10 w-10 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+            title="Canvas"
+          >
+            <GraduationCap size={20} />
+            {canvasConnected && (
+              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-400" />
+            )}
+          </button>
+
+          <button
+            onClick={onProfileClick}
+            className="mt-1 flex h-9 w-9 items-center justify-center overflow-hidden rounded-full transition-opacity hover:opacity-80"
+            title={displayName}
+          >
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center rounded-full bg-[var(--accent)] text-xs font-bold text-white">
+                {avatarInitial}
+              </div>
+            )}
           </button>
         </div>
       </aside>

@@ -545,15 +545,25 @@ export function AppShell({ user }: AppShellProps) {
   }, [learning, store, pushToast]);
 
   const handleUpdateProject = useCallback(async (id: string, updates: { name?: string; description?: string; color?: string }) => {
+    const currentProject = store.projects.find(item => item.id === id);
     const ok = await store.updateProject(id, updates);
     if (!ok) {
       pushToast('error', 'Could not update course', store.error ?? 'Please try again.');
       return false;
     }
 
+    if (currentProject) {
+      learning.logProjectUpdated({
+        name: updates.name ?? currentProject.name,
+        description: updates.description ?? currentProject.description,
+        color: updates.color ?? currentProject.color,
+        options: { source: 'manual', learn: true },
+      });
+    }
+
     pushToast('success', updates.color ? 'Course color updated' : 'Course updated');
     return true;
-  }, [store, pushToast]);
+  }, [store, pushToast, learning]);
 
   const handleAddHabit = useCallback(async (
     title: string,
@@ -675,34 +685,35 @@ export function AppShell({ user }: AppShellProps) {
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex items-center gap-4 border-b border-[var(--border-soft)] bg-[var(--bg-app-soft)] px-4 py-4 backdrop-blur-xl sm:px-6">
+        <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-[var(--border-soft)] bg-[var(--bg-app)] px-4 py-3 sm:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-2 text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] lg:hidden"
+            className="rounded-lg p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] lg:hidden"
           >
-            <Menu size={22} />
+            <Menu size={20} />
           </button>
 
           {/* Search trigger */}
           <button
             onClick={() => setSearchOpen(true)}
-            className="hidden items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-faint)] shadow-sm transition hover:border-[var(--border-strong)] sm:flex"
+            className="hidden items-center gap-2 rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-sm text-[var(--text-faint)] transition hover:border-[var(--border-strong)] sm:flex"
           >
             <Search size={14} />
             <span>Search...</span>
-            <kbd className="ml-4 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-faint)]">⌘K</kbd>
+            <kbd className="ml-4 rounded border border-[var(--border-soft)] bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-faint)]">⌘K</kbd>
           </button>
 
           <div className="flex-1" />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               ref={habitsButtonRef}
               onClick={() => setHabitsOpen(prev => !prev)}
               className={cn(
-                'flex items-center gap-2 rounded-2xl border bg-[var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:border-[var(--border-strong)]',
-                habitsOpen ? 'border-[var(--border-strong)]' : 'border-[var(--border-soft)]'
+                'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm transition-colors',
+                habitsOpen
+                  ? 'bg-[var(--surface-muted)] text-[var(--text-primary)]'
+                  : 'text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]'
               )}
-              style={{ color: 'var(--text-secondary)' }}
               title="Routines"
             >
               <CheckCheck size={16} />
@@ -713,8 +724,7 @@ export function AppShell({ user }: AppShellProps) {
                 learning.logAiPanelOpened({ source: 'manual', learn: true });
                 setAiOpen(true);
               }}
-              className="flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm shadow-sm transition hover:border-[var(--accent)]"
-              style={{ color: 'var(--accent)' }}
+              className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)]"
               title="AI Assistant"
             >
               <Sparkles size={16} />
@@ -723,7 +733,7 @@ export function AppShell({ user }: AppShellProps) {
             <ThemeSwitcher />
             <button
               onClick={handleSignOut}
-              className="flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+              className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
               title="Sign out"
             >
               <LogOut size={16} />
@@ -734,11 +744,11 @@ export function AppShell({ user }: AppShellProps) {
 
         <main className="relative flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           {(store.error || deadlineStore.error || canvasStore.error || gym.error) && (
-            <div className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-white/90">
+            <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-[var(--text-primary)]">
               <p>{store.error || deadlineStore.error || canvasStore.error || gym.error}</p>
               <button
                 onClick={() => { store.clearError(); deadlineStore.clearError(); canvasStore.clearError(); gym.clearError(); }}
-                className="shrink-0 rounded-full border border-rose-300/20 px-2 py-1 text-xs text-white/70 transition hover:bg-rose-300/10 hover:text-white"
+                className="shrink-0 rounded px-2 py-1 text-xs text-[var(--text-muted)] transition hover:bg-rose-500/10 hover:text-[var(--text-primary)]"
               >
                 Dismiss
               </button>
@@ -746,7 +756,7 @@ export function AppShell({ user }: AppShellProps) {
           )}
 
           {showBackgroundSyncBanner && (
-            <div className="mb-4 flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-muted)]">
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2.5 text-sm text-[var(--text-muted)]">
               <CheckCheck size={16} className="text-[var(--accent)]" />
               Syncing your workspace in the background...
             </div>
@@ -1033,7 +1043,7 @@ export function AppShell({ user }: AppShellProps) {
           <div
             key={toast.id}
             className={cn(
-              'pointer-events-auto overflow-hidden rounded-2xl border shadow-xl backdrop-blur-lg',
+              'pointer-events-auto overflow-hidden rounded-lg border shadow-sm',
               toast.tone === 'error'
                 ? 'border-red-500/20 bg-red-500/10'
                 : toast.tone === 'success'

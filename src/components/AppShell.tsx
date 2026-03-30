@@ -153,29 +153,34 @@ export function AppShell({ user }: AppShellProps) {
     await supabase.auth.refreshSession();
   }, []);
 
+  const navigateHard = useCallback((to: string) => {
+    if (window.location.pathname + window.location.search === to) return;
+    window.location.assign(to);
+  }, []);
+
   const handleViewChange = useCallback((view: View) => {
-    navigate(VIEW_PATHS[view]);
-  }, [navigate]);
+    navigateHard(VIEW_PATHS[view]);
+  }, [navigateHard]);
 
   const openCourse = useCallback((projectId: string) => {
-    navigate(`/courses?project=${encodeURIComponent(projectId)}`);
-  }, [navigate]);
+    navigateHard(`/courses?project=${encodeURIComponent(projectId)}`);
+  }, [navigateHard]);
 
   const openCourseTasks = useCallback((projectId: string) => {
-    navigate(`/tasks?project=${encodeURIComponent(projectId)}`);
-  }, [navigate]);
+    navigateHard(`/tasks?project=${encodeURIComponent(projectId)}`);
+  }, [navigateHard]);
 
   const openCourseDeadlines = useCallback((projectId: string) => {
-    navigate(`/deadlines?course=${encodeURIComponent(projectId)}`);
-  }, [navigate]);
+    navigateHard(`/deadlines?course=${encodeURIComponent(projectId)}`);
+  }, [navigateHard]);
 
   const openDeadline = useCallback((deadlineId: string) => {
     const deadline = deadlineStore.deadlines.find(item => item.id === deadlineId);
     const params = new URLSearchParams();
     params.set('deadline', deadlineId);
     if (deadline?.projectId) params.set('course', deadline.projectId);
-    navigate(`/deadlines?${params.toString()}`);
-  }, [deadlineStore.deadlines, navigate]);
+    navigateHard(`/deadlines?${params.toString()}`);
+  }, [deadlineStore.deadlines, navigateHard]);
 
   useEffect(() => {
     learning.logViewOpened(currentView, { source: 'manual', learn: true });

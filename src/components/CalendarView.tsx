@@ -206,7 +206,7 @@ function CalendarChecklist({
   onChooseCalendar: (id: string) => void;
 }) {
   return (
-    <div className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm sm:p-5">
+    <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-4 sm:p-5">
       <button
         type="button"
         onClick={onToggleOpen}
@@ -228,7 +228,7 @@ function CalendarChecklist({
       {open && (
         <div className="mt-3 space-y-1.5">
           {calendars.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-[var(--border-soft)] px-3 py-4 text-xs text-[var(--text-faint)]">
+            <div className="rounded-lg border border-dashed border-[var(--border-soft)] px-3 py-4 text-xs text-[var(--text-faint)]">
               No calendars loaded yet.
             </div>
           ) : (
@@ -241,7 +241,7 @@ function CalendarChecklist({
                 <div
                   key={item.id}
                   className={cn(
-                    'flex items-center gap-3 rounded-2xl px-2.5 py-2 transition',
+                    'flex items-center gap-3 rounded-lg px-2.5 py-2 transition',
                     checked ? 'bg-[var(--surface-muted)]' : 'hover:bg-[var(--surface-muted)]'
                   )}
                 >
@@ -331,7 +331,7 @@ function CalendarMiniMonth({
   }, [month, year]);
 
   return (
-    <div className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm sm:p-5">
+    <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-[var(--text-primary)]">{monthLabel}</h2>
         <div className="flex items-center gap-1">
@@ -430,8 +430,8 @@ function DayPanel({
 
   if (!dateStr) {
     return (
-      <div className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
-        <div className="flex min-h-[180px] items-center justify-center rounded-2xl border border-dashed border-[var(--border-soft)] text-sm text-[var(--text-faint)]">
+      <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+        <div className="flex min-h-[180px] items-center justify-center rounded-lg border border-dashed border-[var(--border-soft)] text-sm text-[var(--text-faint)]">
           Select a day to see its events.
         </div>
       </div>
@@ -465,7 +465,7 @@ function DayPanel({
   };
 
   return (
-    <div className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+    <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
       <div className="mb-5 flex items-start justify-between gap-3">
         <h3 className="text-lg font-semibold leading-tight text-[var(--text-primary)]">{dateLabel}</h3>
         <button
@@ -478,13 +478,13 @@ function DayPanel({
       </div>
 
       {events.length === 0 && dayDeadlines.length === 0 ? (
-        <div className="flex min-h-[120px] items-center justify-center rounded-2xl border border-dashed border-[var(--border-soft)] text-sm text-[var(--text-faint)]">
+        <div className="flex min-h-[120px] items-center justify-center rounded-lg border border-dashed border-[var(--border-soft)] text-sm text-[var(--text-faint)]">
           No events this day
         </div>
       ) : (
         <div className="space-y-3">
           {(reviewableStudyBlocks.length > 0 || futureStudyBlocks.length > 0) && (
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3.5">
+            <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3.5">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-semibold text-[var(--text-primary)]">Study review</h4>
@@ -504,7 +504,7 @@ function DayPanel({
                     return (
                       <div
                         key={`review-${event.id}`}
-                        className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-3"
+                        className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-3"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
@@ -548,7 +548,7 @@ function DayPanel({
                   })}
                 </div>
               ) : (
-                <div className="mt-3 rounded-2xl border border-dashed border-[var(--border-soft)] px-3 py-4 text-xs text-[var(--text-faint)]">
+                <div className="mt-3 rounded-lg border border-dashed border-[var(--border-soft)] px-3 py-4 text-xs text-[var(--text-faint)]">
                   No study blocks are ready for review yet.
                 </div>
               )}
@@ -566,7 +566,7 @@ function DayPanel({
           {dayDeadlines.map(dl => (
             <div
               key={dl.id}
-              className="flex items-start gap-3 rounded-2xl bg-orange-400/6 p-3"
+              className="flex items-start gap-3 rounded-lg bg-orange-400/6 p-3"
             >
               <div className="mt-0.5 flex h-8 w-1 shrink-0 rounded-full bg-orange-400" />
               <div className="min-w-0 flex-1">
@@ -583,7 +583,7 @@ function DayPanel({
           {events.map(event => (
             <div
               key={getCalendarEventRenderKey(event)}
-              className="group flex items-start gap-3 rounded-2xl bg-[var(--surface-muted)] p-3"
+              className="group flex items-start gap-3 rounded-lg bg-[var(--surface-muted)] p-3"
             >
               <div
                 className="mt-1 flex h-2.5 w-2.5 shrink-0 rounded-full"
@@ -768,7 +768,7 @@ function WeekCalendarGrid({
   }, [deadlines]);
 
   return (
-    <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)]">
+    <div className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)]">
       <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
         <h2 className="text-[22px] font-semibold tracking-tight text-[var(--text-primary)]">{headerLabel}</h2>
         <div className="flex items-center gap-1.5">
@@ -1213,7 +1213,7 @@ export function CalendarView({
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+      <div className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="max-w-2xl">
             <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Calendar</h1>
@@ -1221,7 +1221,7 @@ export function CalendarView({
 
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           {calendar.isConnected && (
-            <div className="flex overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)]">
+            <div className="flex overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)]">
               <button
                 type="button"
                 onClick={() => handleSetViewMode('month')}
@@ -1266,7 +1266,7 @@ export function CalendarView({
               <button
                 type="button"
                 onClick={() => { setCreateDate(undefined); setShowCreateModal(true); }}
-                className="flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)]"
+                className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)]"
                 style={{ backgroundColor: 'var(--accent-strong)' }}
               >
                 <Plus size={16} />
@@ -1275,7 +1275,7 @@ export function CalendarView({
               <button
                 type="button"
                 onClick={() => void calendar.refresh()}
-                className="flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2.5 text-sm text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+                className="flex items-center gap-2 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2.5 text-sm text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
               >
                 <RefreshCcw size={15} />
                 Refresh
@@ -1283,7 +1283,7 @@ export function CalendarView({
               <button
                 type="button"
                 onClick={calendar.disconnect}
-                className="flex items-center gap-2 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2.5 text-sm text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+                className="flex items-center gap-2 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2.5 text-sm text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
               >
                 <Unplug size={15} />
                 Disconnect
@@ -1294,8 +1294,8 @@ export function CalendarView({
               type="button"
               onClick={() => void calendar.connect()}
               disabled={!calendar.isConfigured || calendar.isConnecting}
-              className="rounded-2xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ backgroundColor: 'var(--accent-strong)', boxShadow: '0 16px 34px var(--glow-accent)' }}
+              className="rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ backgroundColor: 'var(--accent-strong)' }}
             >
               {calendar.isConnecting ? 'Connecting...' : 'Connect Google Calendar'}
             </button>
@@ -1305,20 +1305,20 @@ export function CalendarView({
       </div>
 
       {!calendar.isConfigured && (
-        <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">
+        <div className="rounded-lg border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">
           Add `VITE_GOOGLE_CLIENT_ID` to your local env and Vercel project settings before Google Calendar can connect.
         </div>
       )}
 
       {calendar.error && (
-        <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
+        <div className="rounded-lg border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
           {calendar.error}
         </div>
       )}
 
       {!calendar.isConnected ? (
         <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <section className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+          <section className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
             <div className="flex items-center gap-2">
               <CalendarDays size={18} className="text-[var(--accent)]" />
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">Connected Calendar</h2>
@@ -1327,7 +1327,7 @@ export function CalendarView({
               Connect your Google account to view and create events here.
             </div>
           </section>
-          <section className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+          <section className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
             <div className="flex min-h-[320px] items-center justify-center rounded-xl border border-dashed border-[var(--border-soft)] text-sm text-[var(--text-muted)]">
               Connect Google Calendar to populate this view.
             </div>
@@ -1463,7 +1463,7 @@ export function CalendarView({
             />
           </div>
 
-          <section className="rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+          <section className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
             <div className="mb-6 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-[var(--text-primary)]">Upcoming Events</h2>
@@ -1491,7 +1491,7 @@ export function CalendarView({
                       {events.map(event => (
                         <article
                           key={getCalendarEventRenderKey(event)}
-                          className="group rounded-2xl bg-[var(--surface-muted)] p-4"
+                          className="group rounded-lg bg-[var(--surface-muted)] p-4"
                         >
                           <div className="flex items-start justify-between gap-4">
                             <div className="min-w-0">

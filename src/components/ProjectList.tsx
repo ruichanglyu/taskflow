@@ -82,22 +82,22 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+      <div className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">
             <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Courses</h1>
           </div>
           <button
             onClick={() => setShowForm(!showForm)}
-            className="inline-flex items-center gap-2 self-start rounded-2xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] shadow-lg transition-colors"
-            style={{ backgroundColor: 'var(--accent-strong)', boxShadow: '0 16px 34px var(--glow-accent)' }}
+            className="inline-flex items-center gap-2 self-start rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] shadow-sm transition-colors"
+            style={{ backgroundColor: 'var(--accent-strong)' }}
           >
             <Plus size={15} /> New Course
           </button>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+      <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
@@ -136,7 +136,7 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
 
       {/* Add Project Form */}
       {showForm && (
-        <form onSubmit={handleSubmit} className="space-y-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+        <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
           <input
             type="text"
             value={name}
@@ -197,12 +197,12 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
               }}
               role="button"
               tabIndex={0}
-              className="group relative cursor-pointer rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 text-left shadow-sm transition-all hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)] hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20"
+              className="group relative cursor-pointer rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5 text-left shadow-sm transition-all hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20"
             >
-              <div className="absolute inset-x-0 top-0 h-1.5 rounded-t-[24px]" style={{ backgroundColor: project.color }} />
+              <div className="absolute inset-x-0 top-0 h-1.5 rounded-t-lg" style={{ backgroundColor: project.color }} />
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm" style={{ backgroundColor: project.color + '20' }}>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg shadow-sm" style={{ backgroundColor: project.color + '20' }}>
                     <FolderOpen size={20} style={{ color: project.color }} />
                   </div>
                   <div>
@@ -233,7 +233,7 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
 
               {colorMenuProjectId === project.id && (
                 <div
-                  className="mt-4 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3"
+                  className="mt-4 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3"
                   onClick={e => e.stopPropagation()}
                 >
                   <div className="mb-2 flex items-center justify-between gap-3">
@@ -311,7 +311,7 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
           </div>
         )}
         {projects.length > 0 && visibleProjects.length === 0 && (
-          <div className="col-span-full rounded-2xl border border-dashed border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
+          <div className="col-span-full rounded-lg border border-dashed border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
             No courses match your search.
           </div>
         )}
@@ -352,7 +352,7 @@ function DeleteCourseConfirmModal({ project, onCancel, onConfirm }: {
 }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4" onClick={onCancel}>
-      <div className="w-full max-w-md rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm" onClick={e => e.stopPropagation()}>
         <div className="border-b border-[var(--border-soft)] px-5 py-4">
           <h3 className="text-lg font-semibold text-[var(--text-primary)]">Delete course?</h3>
           <p className="mt-1 text-sm text-[var(--text-muted)]">
@@ -416,10 +416,10 @@ function CourseDetailModal({ project, tasks, deadlines, onOpenTasks, onOpenDeadl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
-      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm" onClick={e => e.stopPropagation()}>
         <div className="shrink-0 flex items-start justify-between gap-3 border-b border-[var(--border-soft)] px-4 py-4 sm:px-6 sm:py-5">
           <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl" style={{ backgroundColor: `${project.color}20` }}>
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg" style={{ backgroundColor: `${project.color}20` }}>
               <FolderOpen size={22} style={{ color: project.color }} />
             </div>
             <div className="min-w-0">
@@ -458,7 +458,7 @@ function CourseDetailModal({ project, tasks, deadlines, onOpenTasks, onOpenDeadl
 
           <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
             <div className="space-y-4">
-              <section className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)]">
+              <section className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)]">
                 <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-4 py-3">
                   <div>
                     <h3 className="text-sm font-semibold text-[var(--text-primary)]">Upcoming Deadlines</h3>
@@ -583,7 +583,7 @@ function CourseDetailModal({ project, tasks, deadlines, onOpenTasks, onOpenDeadl
             </div>
 
             <div className="space-y-4">
-              <section className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)]">
+              <section className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)]">
                 <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-4 py-3">
                   <div>
                     <h3 className="text-sm font-semibold text-[var(--text-primary)]">Tasks in Progress</h3>
@@ -644,7 +644,7 @@ function SummaryStat({ label, value, icon, tone }: {
         : 'bg-[var(--surface-muted)] text-[var(--text-secondary)]';
 
   return (
-    <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
+    <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-4">
       <div className="flex items-center justify-between">
         <div>
           <div className="text-xs text-[var(--text-faint)]">{label}</div>

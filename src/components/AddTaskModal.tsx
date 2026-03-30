@@ -29,8 +29,8 @@ export function AddTaskModal({ projects, onAdd, onClose }: AddTaskModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">New Task</h2>
           <button onClick={onClose} className="text-[var(--text-faint)] transition-colors hover:text-[var(--text-primary)]">

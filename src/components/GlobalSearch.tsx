@@ -88,9 +88,9 @@ export function GlobalSearch({ tasks, projects, deadlines = [], onClose, onNavig
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/75" />
+      <div className="absolute inset-0 bg-black/55" />
       <div
-        className="relative w-full max-w-lg rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl"
+        className="relative w-full max-w-xl rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)]"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b border-[var(--border-soft)] px-4 py-3">

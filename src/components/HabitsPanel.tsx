@@ -87,7 +87,7 @@ export function HabitsPanel({
   return createPortal(
     <div
       ref={panelRef}
-      className="fixed z-50 flex w-80 flex-col overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] shadow-2xl"
+      className="fixed z-50 flex w-80 flex-col overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)]"
       style={{ top: pos.top, right: pos.right }}
     >
       {/* Header */}

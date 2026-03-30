@@ -1842,7 +1842,7 @@ export function AIPanel({
   return createPortal(
     <div className="pointer-events-none fixed inset-0 z-[60]">
       <div
-        className="pointer-events-auto fixed flex min-h-0 flex-col overflow-hidden rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl animate-in fade-in duration-200"
+        className="pointer-events-auto fixed flex min-h-0 flex-col overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] animate-in fade-in duration-200"
         onClick={e => e.stopPropagation()}
         style={{
           animationDuration: '200ms',
@@ -1858,8 +1858,8 @@ export function AIPanel({
             className="flex flex-1 cursor-grab items-center gap-2 active:cursor-grabbing"
             onMouseDown={beginMove}
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl" style={{ backgroundImage: 'var(--sidebar-gradient)' }}>
-              <Sparkles size={16} className="text-white" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-soft)]">
+              <Sparkles size={16} className="text-[var(--accent)]" />
             </div>
             <div>
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">AI Assistant</h3>
@@ -1945,7 +1945,7 @@ export function AIPanel({
           {/* Chat list */}
           <aside
             className={cn(
-              'relative flex min-h-0 shrink-0 flex-col border-b border-[var(--border-soft)] bg-[var(--surface-muted)]/40 md:border-b-0 md:border-r',
+              'relative flex min-h-0 shrink-0 flex-col border-b border-[var(--border-soft)] bg-[var(--surface-muted)] md:border-b-0 md:border-r',
               chatSidebarCollapsed ? 'overflow-hidden' : 'overflow-visible',
             )}
             style={{
@@ -2241,7 +2241,7 @@ export function AIPanel({
                 </div>
               )}
               <div
-                className={`relative flex items-end gap-2 rounded-2xl border px-3 py-3 transition-colors ${
+                className={`relative flex items-end gap-2 rounded-lg border px-3 py-3 transition-colors ${
                   isComposerDragActive
                     ? 'border-[var(--accent)]/55 bg-[var(--accent)]/8 pt-8 shadow-[0_0_0_1px_rgba(99,102,241,0.12)]'
                     : 'border-[var(--border-soft)] bg-[var(--surface)]'
@@ -2262,7 +2262,7 @@ export function AIPanel({
                   <button
                     type="button"
                     onClick={handleToggleDictation}
-                    className="absolute bottom-full right-3 z-10 mb-2 flex items-center gap-2 rounded-full border border-black/10 bg-[#26211b] px-3 py-1.5 text-xs text-white shadow-lg transition hover:bg-[#312922] dark:border-white/10 dark:bg-[#1b1714] dark:hover:bg-[#26201b]"
+                    className="absolute bottom-full right-3 z-10 mb-2 flex items-center gap-2 rounded-full border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-3 py-1.5 text-xs text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
                     title="Stop dictation"
                   >
                     <span className="font-medium">Stop dictation</span>
@@ -2293,7 +2293,7 @@ export function AIPanel({
                     <Plus size={16} />
                   </button>
                   {showAttachmentMenu && (
-                    <div className="absolute bottom-full left-0 z-20 mb-2 min-w-[170px] rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-1.5 shadow-2xl">
+                    <div className="absolute bottom-full left-0 z-20 mb-2 min-w-[170px] rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-1.5 shadow-sm">
                       <button
                         onClick={handleOpenAttachmentPicker}
                         className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
@@ -2370,11 +2370,11 @@ export function AIPanel({
 
         {pendingDeleteChat && (
           <div
-            className="absolute inset-0 z-[70] flex items-center justify-center bg-black/45 backdrop-blur-sm px-4"
+            className="absolute inset-0 z-[70] flex items-center justify-center bg-black/45 px-4"
             onClick={() => setPendingDeleteChat(null)}
           >
             <div
-              className="w-full max-w-sm rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-4 shadow-2xl"
+              className="w-full max-w-sm rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-4 shadow-sm"
               onClick={e => e.stopPropagation()}
             >
               <p className="text-sm font-semibold text-[var(--text-primary)]">Delete chat?</p>
@@ -2421,8 +2421,8 @@ export function AIPanel({
 function WelcomeScreen({ hasKey }: { hasKey: boolean }) {
   return (
     <div className="flex h-full flex-col items-center justify-center text-center">
-      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl" style={{ backgroundImage: 'var(--sidebar-gradient)' }}>
-        <Sparkles size={24} className="text-white" />
+      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)]">
+        <Sparkles size={24} className="text-[var(--accent)]" />
       </div>
       <h3 className="text-lg font-semibold text-[var(--text-primary)]">AI Assistant</h3>
       <p className="mt-2 max-w-xs text-sm text-[var(--text-muted)]">
@@ -3495,7 +3495,7 @@ function MessageBubble({
             </div>
           ) : null}
           {message.content && (
-            <div className="rounded-2xl rounded-br-md bg-[var(--accent)] px-3.5 py-2 text-sm text-[var(--accent-contrast)]">
+            <div className="rounded-xl rounded-br-sm bg-[var(--accent)] px-3.5 py-2 text-sm text-[var(--accent-contrast)]">
               <p className="whitespace-pre-wrap">{message.content}</p>
             </div>
           )}
@@ -3529,7 +3529,7 @@ function MessageBubble({
             if (!segment?.type) return null;
             if (segment.type === 'text') {
               return segment.content ? (
-                <div key={i} className="rounded-2xl rounded-bl-md bg-[var(--surface-muted)] px-3.5 py-2 text-sm text-[var(--text-primary)]">
+                <div key={i} className="rounded-xl rounded-bl-sm bg-[var(--surface-muted)] px-3.5 py-2 text-sm text-[var(--text-primary)]">
                   <div className="whitespace-pre-wrap">{segment.content}</div>
                 </div>
               ) : null;
@@ -4195,7 +4195,7 @@ function CSVDownloadCard({ content }: { content: string }) {
   const rowCount = Math.max(0, lines.length - 1); // minus header
 
   return (
-    <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
+    <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-[var(--text-primary)]">CSV File</p>

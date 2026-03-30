@@ -488,7 +488,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+      <div className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">
             <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Deadlines</h1>
@@ -498,7 +498,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
               type="button"
               onClick={() => setShowFilters(f => !f)}
               className={cn(
-                'flex h-10 items-center gap-1.5 rounded-2xl border px-3 text-xs font-medium shadow-sm transition',
+                'flex h-10 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium shadow-sm transition',
                 showFilters || activeFilters > 0
                   ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--surface)]'
                   : 'border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]'
@@ -510,7 +510,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
             <button
               type="button"
               onClick={() => setShowImportModal(true)}
-              className="flex h-10 items-center gap-1.5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+              className="flex h-10 items-center gap-1.5 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
             >
               <Upload size={14} />
               Import CSV
@@ -519,7 +519,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
               type="button"
               onClick={() => setShowDeleteAllModal(true)}
               disabled={deadlines.length === 0}
-              className="flex h-10 items-center gap-1.5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-10 items-center gap-1.5 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Trash2 size={14} />
               Delete All
@@ -527,8 +527,8 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
             <button
               type="button"
               onClick={() => setShowAddModal(true)}
-              className="flex h-10 items-center gap-1.5 rounded-2xl px-4 text-xs font-medium text-[var(--accent-contrast)] shadow-lg"
-              style={{ backgroundColor: 'var(--accent-strong)', boxShadow: '0 16px 34px var(--glow-accent)' }}
+              className="flex h-10 items-center gap-1.5 rounded-lg px-4 text-xs font-medium text-[var(--accent-contrast)] shadow-sm"
+              style={{ backgroundColor: 'var(--accent-strong)' }}
             >
               <Plus size={14} />
               Add Deadline
@@ -540,7 +540,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
       {importMessage && (
         <div
           className={cn(
-            'flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm',
+            'flex items-start gap-3 rounded-lg border px-4 py-3 text-sm',
             importStatus === 'success'
               ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
               : 'border-amber-400/20 bg-amber-400/10 text-amber-100'
@@ -557,7 +557,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
         </div>
       )}
 
-      <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+      <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
@@ -646,7 +646,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
 
       {/* Filters */}
       {showFilters && (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
           <select
             value={filterCourse}
             onChange={e => setFilterCourse(e.target.value)}
@@ -684,14 +684,14 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
       {viewMode === 'course' ? (
         <div className="space-y-4">
           {groupedByCourse.length === 0 && leadingCompletedCount === 0 ? (
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
+            <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
               No deadlines match your filters.
             </div>
           ) : (
             <>
               {groupedByCourse.length > 0 ? (
                 groupedByCourse.map(group => (
-                  <div key={group.courseName} className="overflow-hidden rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm">
+                  <div key={group.courseName} className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)]">
                     <div className="flex items-center justify-between border-b border-[var(--border-soft)] bg-[var(--surface-muted)]/60 px-4 py-3">
                       <div>
                         <div className="text-sm font-semibold text-[var(--text-primary)]">{group.courseName}</div>
@@ -732,7 +732,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                   </div>
                 ))
               ) : (
-                <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
+                <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-faint)]">
                   Everything currently visible is in completed history.
                 </div>
               )}
@@ -741,10 +741,10 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                 <button
                   type="button"
                   onClick={() => setShowCompletedHistory(current => !current)}
-                  className="flex w-full items-center justify-between gap-3 rounded-[24px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-4 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-[var(--surface-muted)]"
+                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-4 text-left transition hover:border-[var(--accent)] hover:bg-[var(--surface-muted)]"
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--surface-muted)] text-[var(--accent)]">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--accent)]">
                       {showCompletedHistory ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </span>
                     <div className="min-w-0">
@@ -770,7 +770,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                 <div className="space-y-4 pt-2">
                   <div className="text-xs uppercase tracking-[0.18em] text-[var(--text-faint)]">Completed history</div>
                   {historyGroupedByCourse.map(group => (
-                    <div key={`history-${group.courseName}`} className="overflow-hidden rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm">
+                    <div key={`history-${group.courseName}`} className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)]">
                       <div className="flex items-center justify-between border-b border-[var(--border-soft)] bg-[var(--surface-muted)]/60 px-4 py-3">
                         <div>
                           <div className="text-sm font-semibold text-[var(--text-primary)]">{group.courseName}</div>
@@ -829,7 +829,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                 key={dl.id}
                 type="button"
                 onClick={() => setDetailId(dl.id)}
-                className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 text-left shadow-sm transition hover:border-[var(--border-strong)] hover:shadow-lg"
+                className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-4 text-left shadow-sm transition hover:border-[var(--border-strong)]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -855,10 +855,10 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
           <button
             type="button"
             onClick={() => setShowCompletedHistory(current => !current)}
-            className="flex items-center justify-between gap-3 rounded-[24px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-4 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-[var(--surface-muted)]"
+            className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-4 text-left shadow-sm transition hover:border-[var(--accent)] hover:bg-[var(--surface-muted)]"
           >
             <div className="flex min-w-0 items-center gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-[var(--surface-muted)] text-[var(--accent)]">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--accent)]">
                 {showCompletedHistory ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
               </span>
               <div className="min-w-0">
@@ -894,7 +894,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                   key={dl.id}
                   type="button"
                   onClick={() => setDetailId(dl.id)}
-                  className="rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4 text-left shadow-sm transition hover:border-[var(--border-strong)] hover:shadow-lg"
+                  className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-4 text-left shadow-sm transition hover:border-[var(--border-strong)]"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -919,11 +919,11 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
       </div>
 
       {/* Table */}
-      <div className="hidden overflow-hidden rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm md:block">
+      <div className="hidden overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10">
-              <tr className="border-b border-[var(--border-soft)] bg-[var(--surface-muted)]/95 backdrop-blur">
+              <tr className="border-b border-[var(--border-soft)] bg-[var(--surface-muted)]">
                 <th className="w-10 px-3 py-2.5" />
                 <th
                   className="px-3 py-2.5 text-left text-xs font-medium text-[var(--text-muted)] cursor-pointer select-none"
@@ -1292,7 +1292,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
       {showDeleteAllModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setShowDeleteAllModal(false)}>
           <div
-            className="w-full max-w-md rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl"
+            className="w-full max-w-md rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm"
             onClick={e => e.stopPropagation()}
           >
             <div className="border-b border-[var(--border-soft)] px-5 py-4">
@@ -1409,7 +1409,7 @@ function ImportDeadlinesModal({ existingDeadlines, existingProjects, onImport, o
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
-      <div className="w-full max-w-3xl rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-3xl rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">Import Deadlines from CSV</h2>
@@ -1556,7 +1556,7 @@ function AddDeadlineModal({ projects, onAdd, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-md rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">New Deadline</h2>
           <button onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-primary)]"><X size={18} /></button>
@@ -1696,7 +1696,7 @@ function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-lg rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">Deadline Details</h2>
@@ -1816,7 +1816,7 @@ function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, 
                   <Link2 size={10} /> Link a task
                 </button>
                 {linkDropdown && availableTasks.length > 0 && (
-                  <div className="absolute right-0 top-full mt-1 z-10 w-56 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-lg max-h-40 overflow-y-auto">
+                  <div className="absolute right-0 top-full mt-1 z-10 w-56 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm max-h-40 overflow-y-auto">
                     {availableTasks.map(t => (
                       <button
                         key={t.id}

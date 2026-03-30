@@ -84,7 +84,7 @@ function OutcomeBadge({ status }: { status: StudyBlockOutcomeStatus }) {
 
 function SummaryPill({ label, value, pulse }: { label: string; value: string; pulse?: boolean }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-full border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs text-[var(--text-secondary)] shadow-sm">
+    <div className="flex items-center gap-1.5 rounded-full bg-[var(--surface-muted)] px-3 py-1.5 text-xs text-[var(--text-secondary)]">
       {pulse && <div className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />}
       <span className="font-medium text-[var(--text-primary)]">{value}</span>
       <span className="text-[var(--text-faint)]">{label}</span>
@@ -94,13 +94,13 @@ function SummaryPill({ label, value, pulse }: { label: string; value: string; pu
 
 function StatCard({ icon, label, value, color, bg }: { icon: React.ReactNode; label: string; value: number; color: string; bg: string }) {
   return (
-    <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm transition-colors hover:border-[var(--border-strong)] hover:shadow-lg">
+    <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5 transition-colors hover:border-[var(--border-strong)]">
       <div className="flex items-center justify-between">
         <div>
           <p className="mb-1 text-xs font-medium uppercase tracking-[0.18em] text-[var(--text-faint)]">{label}</p>
           <p className="text-3xl font-bold text-[var(--text-primary)]">{value}</p>
         </div>
-        <div className={cn('flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm', bg)}>
+        <div className={cn('flex h-12 w-12 items-center justify-center rounded-lg', bg)}>
           <span className={color}>{icon}</span>
         </div>
       </div>
@@ -234,7 +234,7 @@ export function Dashboard({
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-5 shadow-sm">
+      <div className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">
@@ -250,7 +250,7 @@ export function Dashboard({
       </div>
 
       {pendingStudyReview.length > 0 && (
-        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+        <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="flex items-center gap-2">
@@ -279,7 +279,7 @@ export function Dashboard({
                   })
                 : 'Unknown day';
               return (
-                <div key={event.id} className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3.5">
+                <div key={event.id} className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3.5">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -326,7 +326,7 @@ export function Dashboard({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Completion Progress */}
-        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+        <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp size={18} className="text-indigo-400" />
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Completion Rate</h3>
@@ -353,7 +353,7 @@ export function Dashboard({
         </div>
 
         {/* Weekly Activity Chart */}
-        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+        <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 size={18} className="text-indigo-400" />
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Tasks Created This Week</h3>
@@ -377,7 +377,7 @@ export function Dashboard({
         </div>
 
         {/* Priority Distribution */}
-        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+        <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
           <div className="flex items-center gap-2 mb-4">
             <AlertCircle size={18} className="text-indigo-400" />
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Active by Priority</h3>
@@ -411,7 +411,7 @@ export function Dashboard({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Recent Tasks */}
-        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+        <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
           <h3 className="mb-4 text-sm font-semibold text-[var(--text-primary)]">Recent Tasks</h3>
           <div className="space-y-3">
             {recentTasks.map(task => (
@@ -434,7 +434,7 @@ export function Dashboard({
         </div>
 
         {/* Upcoming Deadlines */}
-        <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+        <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
           <div className="flex items-center gap-2 mb-4">
             <Target size={18} className="text-indigo-400" />
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Upcoming Deadlines</h3>
@@ -487,7 +487,7 @@ export function Dashboard({
       </div>
 
       {/* Courses Overview */}
-      <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-5 shadow-sm">
+      <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
         <div className="mb-4 flex items-center gap-2">
           <FolderKanban size={18} className="text-indigo-400" />
           <h3 className="text-sm font-semibold text-[var(--text-primary)]">Courses Overview</h3>
@@ -499,7 +499,7 @@ export function Dashboard({
             const progress = projectTasks.length > 0 ? Math.round((projectDone / projectTasks.length) * 100) : 0;
 
             return (
-              <div key={project.id} className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4 shadow-sm transition-colors hover:border-[var(--border-strong)]">
+              <div key={project.id} className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4 transition-colors hover:border-[var(--border-strong)]">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: project.color }} />
                   <h4 className="text-sm font-medium text-[var(--text-primary)] truncate">{project.name}</h4>

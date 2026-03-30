@@ -73,6 +73,10 @@ export function AppShell({ user }: AppShellProps) {
   const navigate = useNavigate();
   const currentView = getViewFromPath(location.pathname);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState<boolean>(() => {
+    const stored = window.localStorage.getItem('taskflow_sidebar_collapsed');
+    return stored ? stored === 'true' : true;
+  });
   const [searchOpen, setSearchOpen] = useState(false);
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -141,6 +145,10 @@ export function AppShell({ user }: AppShellProps) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('taskflow_sidebar_collapsed', String(desktopSidebarCollapsed));
+  }, [desktopSidebarCollapsed]);
 
   const handleSignOut = async () => {
     if (!supabase) return;
@@ -670,7 +678,7 @@ export function AppShell({ user }: AppShellProps) {
   const showBackgroundSyncBanner = store.isLoading && (store.tasks.length > 0 || store.projects.length > 0);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text-primary)]">
+    <div className="flex h-screen overflow-y-hidden bg-[var(--bg-app)] text-[var(--text-primary)]">
       <Sidebar
         currentView={currentView}
         onViewChange={handleViewChange}
@@ -682,6 +690,8 @@ export function AppShell({ user }: AppShellProps) {
         canvasConnected={!!canvasStore.connection}
         onCanvasClick={() => { setSidebarOpen(false); setCanvasOpen(true); }}
         onProfileClick={() => { setSidebarOpen(false); setProfileOpen(true); }}
+        desktopCollapsed={desktopSidebarCollapsed}
+        onToggleDesktopCollapse={() => setDesktopSidebarCollapsed(prev => !prev)}
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col">

@@ -56,7 +56,7 @@ export function ResetPasswordScreen({ onBackToSignIn }: ResetPasswordScreenProps
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center gap-10 px-6 py-12 lg:flex-row lg:items-center lg:gap-16">
         <section className="max-w-xl">
           <div className="mb-6 flex items-center justify-between gap-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--accent-soft)] px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-[var(--accent)]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-[var(--accent)]">
               <ShieldCheck size={14} />
               Secure Reset
             </div>
@@ -70,7 +70,7 @@ export function ResetPasswordScreen({ onBackToSignIn }: ResetPasswordScreenProps
           </p>
         </section>
 
-        <section className="w-full max-w-md rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-2xl backdrop-blur-xl" style={{ boxShadow: '0 24px 80px var(--shadow-color)' }}>
+        <section className="w-full max-w-md rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6">
           <div className="mb-6">
             <h2 className="text-2xl font-semibold">Reset password</h2>
             <p className="mt-2 text-sm text-[var(--text-muted)]">Choose a new password for your TaskFlow account.</p>
@@ -88,7 +88,7 @@ export function ResetPasswordScreen({ onBackToSignIn }: ResetPasswordScreenProps
                 onChange={event => setPassword(event.target.value)}
                 placeholder="At least 6 characters"
                 autoComplete="new-password"
-                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+                className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                 minLength={6}
                 required
               />
@@ -104,20 +104,20 @@ export function ResetPasswordScreen({ onBackToSignIn }: ResetPasswordScreenProps
                 onChange={event => setConfirmPassword(event.target.value)}
                 placeholder="Repeat your new password"
                 autoComplete="new-password"
-                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+                className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                 minLength={6}
                 required
               />
             </label>
 
             {error && (
-              <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-3 text-sm text-rose-100">
+              <div className="rounded-lg border border-rose-400/20 bg-rose-400/10 p-3 text-sm text-rose-100">
                 {error}
               </div>
             )}
 
             {message && (
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-100">
+              <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-100">
                 <div className="flex items-start gap-2">
                   <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
                   <span>{message}</span>
@@ -128,7 +128,7 @@ export function ResetPasswordScreen({ onBackToSignIn }: ResetPasswordScreenProps
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-50"
               style={{ backgroundColor: 'var(--accent-strong)' }}
             >
               {isSubmitting && <LoaderCircle size={16} className="animate-spin" />}

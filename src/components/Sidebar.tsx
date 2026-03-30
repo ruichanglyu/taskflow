@@ -1,4 +1,4 @@
-import { LayoutDashboard, CheckSquare, FolderKanban, CalendarDays, GanttChart, Target, Dumbbell, Zap, X, GraduationCap } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, FolderKanban, CalendarDays, GanttChart, Target, Dumbbell, Zap, X, GraduationCap, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { View } from '../types';
 import { cn } from '../utils/cn';
 
@@ -13,6 +13,8 @@ interface SidebarProps {
   canvasConnected?: boolean;
   onCanvasClick?: () => void;
   onProfileClick?: () => void;
+  desktopCollapsed?: boolean;
+  onToggleDesktopCollapse?: () => void;
 }
 
 const navItems: { view: View; label: string; icon: React.ReactNode }[] = [
@@ -25,7 +27,20 @@ const navItems: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: 'gym', label: 'Gym', icon: <Dumbbell size={20} /> },
 ];
 
-export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail, userName, avatarUrl, canvasConnected, onCanvasClick, onProfileClick }: SidebarProps) {
+export function Sidebar({
+  currentView,
+  onViewChange,
+  isOpen,
+  onClose,
+  userEmail,
+  userName,
+  avatarUrl,
+  canvasConnected,
+  onCanvasClick,
+  onProfileClick,
+  desktopCollapsed = true,
+  onToggleDesktopCollapse,
+}: SidebarProps) {
   const displayName = userName || (userEmail ? userEmail.split('@')[0] : 'User');
   const avatarInitial = displayName.charAt(0).toUpperCase();
   return (
@@ -103,59 +118,133 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, userEmail,
         </div>
       </aside>
 
-      {/* Desktop sidebar — icon-only rail */}
-      <aside className="hidden lg:flex h-full w-14 flex-col items-center border-r border-[var(--border-soft)] bg-[var(--bg-app)] py-3">
-        {/* Logo */}
-        <div className="mb-4 flex h-9 w-9 items-center justify-center">
-          <Zap size={20} className="text-[var(--accent)]" />
+      {/* Desktop sidebar */}
+      <aside className={cn(
+        'hidden h-full flex-col overflow-visible border-r border-[var(--border-soft)] bg-[var(--bg-app)] py-3 transition-[width] duration-200 lg:relative lg:z-20 lg:flex',
+        desktopCollapsed ? 'w-14 items-center' : 'w-56'
+      )}>
+        <div className={cn(
+          'mb-4 flex items-center',
+          desktopCollapsed ? 'w-full flex-col gap-2 px-0' : 'px-3'
+        )}>
+          <div className={cn(
+            'flex items-center',
+            desktopCollapsed ? 'h-9 w-9 justify-center' : 'gap-2'
+          )}>
+            <Zap size={20} className="text-[var(--accent)]" />
+            {!desktopCollapsed && (
+              <span className="text-sm font-semibold text-[var(--text-primary)]">TaskFlow</span>
+            )}
+          </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex flex-1 flex-col items-center gap-1">
+        <nav className={cn(
+          'flex flex-1 gap-1',
+          desktopCollapsed ? 'flex-col items-center' : 'flex-col px-2'
+        )}>
+          <button
+            type="button"
+            onClick={onToggleDesktopCollapse}
+            className={cn(
+              'group relative rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]',
+              desktopCollapsed ? 'mb-1 flex h-10 w-10 items-center justify-center' : 'mb-1 flex h-10 w-full items-center gap-3 px-3'
+            )}
+            aria-label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {desktopCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            {!desktopCollapsed && <span className="text-sm font-medium">Collapse</span>}
+            {desktopCollapsed && (
+              <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-md border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] opacity-0 shadow-sm transition duration-100 group-hover:opacity-100">
+                Expand sidebar
+              </span>
+            )}
+          </button>
+
           {navItems.map(item => (
             <button
               key={item.view}
               onClick={() => onViewChange(item.view)}
               className={cn(
-                'relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
+                'group relative rounded-lg transition-colors',
+                desktopCollapsed ? 'flex h-10 w-10 items-center justify-center' : 'flex h-10 w-full items-center gap-3 px-3',
                 currentView === item.view
                   ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
                   : 'text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]'
               )}
-              title={item.label}
+              aria-label={item.label}
             >
               {currentView === item.view && (
                 <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[var(--accent)]" />
               )}
               {item.icon}
+              {!desktopCollapsed && (
+                <span className="truncate text-sm font-medium">{item.label}</span>
+              )}
+              {desktopCollapsed && (
+                <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-md border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] opacity-0 shadow-sm transition duration-100 group-hover:opacity-100">
+                  {item.label}
+                </span>
+              )}
             </button>
           ))}
         </nav>
 
         {/* Bottom icons */}
-        <div className="flex flex-col items-center gap-1">
+        <div className={cn(
+          'flex gap-1',
+          desktopCollapsed ? 'flex-col items-center' : 'flex-col px-2'
+        )}>
           <button
             onClick={onCanvasClick}
-            className="relative flex h-10 w-10 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
-            title="Canvas"
+            className="group relative flex h-10 w-10 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+            aria-label="Canvas"
           >
             <GraduationCap size={20} />
             {canvasConnected && (
               <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-400" />
             )}
+            {!desktopCollapsed && (
+              <span className="absolute left-12 text-sm font-medium">Canvas</span>
+            )}
+            {desktopCollapsed && (
+              <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-md border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] opacity-0 shadow-sm transition duration-100 group-hover:opacity-100">
+                Canvas
+              </span>
+            )}
           </button>
 
           <button
             onClick={onProfileClick}
-            className="mt-1 flex h-9 w-9 items-center justify-center overflow-hidden rounded-full transition-opacity hover:opacity-80"
-            title={displayName}
+            className={cn(
+              'group relative mt-1 flex items-center overflow-hidden transition-opacity hover:opacity-80',
+              desktopCollapsed ? 'h-9 w-9 justify-center rounded-full' : 'h-10 w-full gap-3 rounded-lg px-3 hover:bg-[var(--surface-muted)]'
+            )}
+            aria-label={displayName}
           >
             {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
+              <img src={avatarUrl} alt="" className={cn(
+                'object-cover',
+                desktopCollapsed ? 'h-full w-full rounded-full' : 'h-8 w-8 rounded-full'
+              )} />
             ) : (
-              <div className="flex h-full w-full items-center justify-center rounded-full bg-[var(--accent)] text-xs font-bold text-white">
+              <div className={cn(
+                'flex items-center justify-center rounded-full bg-[var(--accent)] text-xs font-bold text-white',
+                desktopCollapsed ? 'h-full w-full' : 'h-8 w-8'
+              )}>
                 {avatarInitial}
               </div>
+            )}
+            {!desktopCollapsed && (
+              <div className="min-w-0 flex-1 text-left">
+                <p className="truncate text-sm font-medium text-[var(--text-primary)]">{displayName}</p>
+                {userEmail && <p className="truncate text-xs text-[var(--text-faint)]">{userEmail}</p>}
+              </div>
+            )}
+            {desktopCollapsed && (
+              <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-md border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] opacity-0 shadow-sm transition duration-100 group-hover:opacity-100">
+                {displayName}
+              </span>
             )}
           </button>
         </div>

@@ -112,7 +112,7 @@ export function CalendarGrid({
   }
 
   return (
-    <div className="overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)]">
+    <div className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)]">
       <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
         <div className="flex items-center gap-3">
           <h2 className="text-[22px] font-semibold tracking-tight text-[var(--text-primary)]">{monthLabel}</h2>
@@ -121,21 +121,21 @@ export function CalendarGrid({
           <button
             type="button"
             onClick={onToday}
-            className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+            className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
           >
             Today
           </button>
           <button
             type="button"
             onClick={onPrevMonth}
-            className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+            className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
           >
             <ChevronLeft size={16} />
           </button>
           <button
             type="button"
             onClick={onNextMonth}
-            className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
+            className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-1.5 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)]"
           >
             <ChevronRight size={16} />
           </button>

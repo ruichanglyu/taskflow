@@ -100,11 +100,11 @@ export function CreateEventModal({
 
   return (
     <div
-      className={compact ? 'fixed inset-0 z-50' : 'fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4'}
+      className={compact ? 'fixed inset-0 z-50' : 'fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4'}
       onClick={onClose}
     >
       <div
-        className={compact ? 'absolute w-full max-w-[380px] rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl' : 'w-full max-w-md rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl'}
+        className={compact ? 'absolute w-full max-w-[380px] rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm' : 'w-full max-w-md rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm'}
         style={compact ? { top: `${compactTop}px`, left: `${compactLeft}px` } : undefined}
         onClick={e => e.stopPropagation()}
       >

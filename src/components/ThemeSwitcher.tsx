@@ -19,6 +19,15 @@ const MODE_OPTIONS: { id: ModeId; label: string; icon: React.ReactNode }[] = [
   { id: 'system', label: 'System', icon: <Monitor size={16} /> },
 ];
 
+const PAGE_ZOOM_LABELS: Record<number, string> = {
+  13: '90%',
+  14: '100%',
+  15: '110%',
+  16: '115%',
+  17: '120%',
+  18: '125%',
+};
+
 export function ThemeSwitcher() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -138,11 +147,11 @@ export function ThemeSwitcher() {
 
           <div className="border-t border-[var(--border-soft)]" />
 
-          {/* Font size + Font */}
+          {/* Page zoom + Font */}
           <div className="p-3 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Font size</span>
-              <span className="text-xs text-[var(--text-muted)]">{fontSize}px</span>
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-faint)]">Page zoom</span>
+              <span className="text-xs text-[var(--text-muted)]">{PAGE_ZOOM_LABELS[fontSize] ?? `${fontSize}px`}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-[var(--text-faint)]">A</span>

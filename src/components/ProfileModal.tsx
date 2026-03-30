@@ -310,10 +310,10 @@ export function ProfileModal({
   if (cropImage) {
     return createPortal(
       <>
-        <div className="fixed inset-0 z-[9998] bg-black/75 backdrop-blur-sm" />
+        <div className="fixed inset-0 z-[9998] bg-black/55" />
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div
-            className="flex w-full max-w-md flex-col overflow-hidden rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl"
+            className="flex w-full max-w-md flex-col overflow-hidden rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm"
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
@@ -411,10 +411,10 @@ export function ProfileModal({
   // ── Main modal ──
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[9998] bg-black/75 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[9998] bg-black/55" onClick={onClose} />
       <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
         <div
-          className="w-full max-w-lg overflow-hidden rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-2xl"
+          className="w-full max-w-lg overflow-hidden rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm"
           onClick={e => e.stopPropagation()}
         >
           {/* Header with avatar */}
@@ -437,8 +437,7 @@ export function ProfileModal({
                   />
                 ) : (
                   <div
-                    className="flex h-16 w-16 items-center justify-center rounded-full text-xl font-bold text-white"
-                    style={{ backgroundImage: 'var(--avatar-gradient)' }}
+                    className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent)] text-xl font-bold text-white"
                   >
                     {initials}
                   </div>
@@ -685,7 +684,7 @@ export function ProfileModal({
                       {behaviorLines.map(line => (
                         <div
                           key={line}
-                          className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text-secondary)]"
+                          className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text-secondary)]"
                         >
                           {line}
                         </div>

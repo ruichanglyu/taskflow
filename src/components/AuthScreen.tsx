@@ -97,7 +97,7 @@ export function AuthScreen() {
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center gap-10 px-6 py-12 lg:flex-row lg:items-center lg:gap-16">
         <section className="w-full max-w-xl">
           <div className="mb-6 flex items-center justify-between gap-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-strong)] bg-[var(--accent-soft)] px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-[var(--accent)]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-[var(--accent)]">
               <Rocket size={14} />
               TaskFlow
             </div>
@@ -110,25 +110,25 @@ export function AuthScreen() {
             This app now uses Supabase Authentication so each person can keep a separate workspace and stay signed in across devices.
           </p>
           <div className="mt-8 grid gap-3 text-sm text-[var(--text-secondary)]">
-            <div className="flex items-start gap-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
+            <div className="flex items-start gap-3 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-4">
               <span className="mt-0.5 text-[var(--accent)]">✦</span>
               <span>Track deadlines, tasks, and courses — all in one place, synced across every device you use.</span>
             </div>
-            <div className="flex items-start gap-3 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
+            <div className="flex items-start gap-3 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-4">
               <span className="mt-0.5 text-[var(--accent)]">✦</span>
               <span>Log gym sessions, plan workouts, and review your history with photos and set-by-set data.</span>
             </div>
           </div>
         </section>
 
-        <section className="w-full max-w-md rounded-3xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-2xl backdrop-blur-xl" style={{ boxShadow: '0 24px 80px var(--shadow-color)' }}>
+        <section className="w-full max-w-md rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6">
           <div className="mb-6">
             <h2 className="text-2xl font-semibold">{title}</h2>
             <p className="mt-2 text-sm text-[var(--text-muted)]">{subtitle}</p>
           </div>
 
           {!isSupabaseConfigured && (
-            <div className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-600 dark:text-amber-200">
+            <div className="mb-4 rounded-lg border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-600 dark:text-amber-200">
               Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to your Vercel and local `.env` before authentication will work.
             </div>
           )}
@@ -144,7 +144,7 @@ export function AuthScreen() {
                   value={fullName}
                   onChange={event => setFullName(event.target.value)}
                   placeholder="Jane Doe"
-                  className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+                  className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                 />
               </label>
             )}
@@ -160,7 +160,7 @@ export function AuthScreen() {
                 onChange={event => setEmail(event.target.value)}
                 placeholder="you@example.com"
                 autoComplete="email"
-                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+                className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                 required
               />
             </label>
@@ -176,20 +176,20 @@ export function AuthScreen() {
                 onChange={event => setPassword(event.target.value)}
                 placeholder="At least 6 characters"
                 autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
-                className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
+                className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                 minLength={6}
                 required
               />
             </label>
 
             {error && (
-              <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-3 text-sm text-rose-600 dark:text-rose-200">
+              <div className="rounded-lg border border-rose-400/20 bg-rose-400/10 p-3 text-sm text-rose-600 dark:text-rose-200">
                 {error}
               </div>
             )}
 
             {message && (
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-600 dark:text-emerald-200">
+              <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-600 dark:text-emerald-200">
                 {message}
               </div>
             )}
@@ -197,7 +197,7 @@ export function AuthScreen() {
             <button
               type="submit"
               disabled={isSubmitting || isResettingPassword || !isSupabaseConfigured}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-50"
               style={{ backgroundColor: 'var(--accent-strong)' }}
             >
               {isSubmitting && <LoaderCircle size={16} className="animate-spin" />}

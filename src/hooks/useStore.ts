@@ -137,9 +137,11 @@ const seedTasks: Task[] = [
 export function useStore(userId: string) {
   const taskStorageKey = getStorageKey(STORAGE_KEY_TASKS, userId);
   const projectStorageKey = getStorageKey(STORAGE_KEY_PROJECTS, userId);
-  const [tasks, setTasks] = useState<Task[]>(() => getStoredSnapshot<Task[]>(STORAGE_KEY_TASKS, userId) ?? []);
-  const [projects, setProjects] = useState<Project[]>(() => getStoredSnapshot<Project[]>(STORAGE_KEY_PROJECTS, userId) ?? []);
-  const [isLoading, setIsLoading] = useState(true);
+  const initialTasks = getStoredSnapshot<Task[]>(STORAGE_KEY_TASKS, userId) ?? [];
+  const initialProjects = getStoredSnapshot<Project[]>(STORAGE_KEY_PROJECTS, userId) ?? [];
+  const [tasks, setTasks] = useState<Task[]>(() => initialTasks);
+  const [projects, setProjects] = useState<Project[]>(() => initialProjects);
+  const [isLoading, setIsLoading] = useState(() => initialTasks.length === 0 && initialProjects.length === 0);
   const [error, setError] = useState<string | null>(null);
 
   const persistLocalSnapshot = useCallback((nextProjects: Project[], nextTasks: Task[]) => {

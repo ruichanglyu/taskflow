@@ -744,7 +744,7 @@ export function AppShell({ user }: AppShellProps) {
               Syncing your workspace in the background...
             </div>
           )}
-          <>
+          <div key={`${location.pathname}?${location.search}`}>
           {currentView === 'dashboard' && (
             <Dashboard
               tasks={store.tasks}
@@ -863,7 +863,7 @@ export function AppShell({ user }: AppShellProps) {
               onUploadExerciseImage={gym.uploadExerciseImage}
             />
           )}
-          </>
+          </div>
         </main>
       </div>
 

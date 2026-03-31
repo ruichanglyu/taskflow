@@ -330,6 +330,34 @@ create policy "Users can delete their own canvas_connections"
 on public.canvas_connections for delete to authenticated
 using (auth.uid() = user_id);
 
+-- Google Calendar connections (per-user refresh tokens stored server-side only)
+create table if not exists public.google_calendar_connections (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  refresh_token text not null,
+  scopes text,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  unique(user_id)
+);
+
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'google_calendar_connections' and column_name = 'refresh_token') then
+    alter table public.google_calendar_connections add column refresh_token text not null default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'google_calendar_connections' and column_name = 'scopes') then
+    alter table public.google_calendar_connections add column scopes text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'google_calendar_connections' and column_name = 'created_at') then
+    alter table public.google_calendar_connections add column created_at timestamptz not null default timezone('utc', now());
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'google_calendar_connections' and column_name = 'updated_at') then
+    alter table public.google_calendar_connections add column updated_at timestamptz not null default timezone('utc', now());
+  end if;
+end $$;
+
+alter table public.google_calendar_connections enable row level security;
+
 -- ============================================================
 -- Gym Module
 -- ============================================================

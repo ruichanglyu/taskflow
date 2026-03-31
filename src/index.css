@@ -1,5 +1,41 @@
 @import "tailwindcss";
 
+@keyframes onboarding-slide-forward {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes onboarding-slide-backward {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.onboarding-step-enter {
+  animation-duration: 220ms;
+  animation-timing-function: ease;
+  animation-fill-mode: both;
+}
+
+.onboarding-step-forward {
+  animation-name: onboarding-slide-forward;
+}
+
+.onboarding-step-backward {
+  animation-name: onboarding-slide-backward;
+}
+
 /* ===== NEUTRAL ===== */
 :root, :root[data-palette="neutral"][data-mode="dark"], :root[data-theme="dark"] {
   --bg-app: #080b11;

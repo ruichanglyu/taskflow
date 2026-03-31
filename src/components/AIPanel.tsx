@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Component, type ReactNode } from 'react';
-import { X, Send, Sparkles, Square, Trash2, Key, Check, AlertCircle, Download, ChevronDown, ImagePlus, Plus, Pencil, Search, PanelLeftClose, PanelLeftOpen, Mic, MicOff } from 'lucide-react';
+import { Minus, Send, Sparkles, Square, Check, AlertCircle, Download, ImagePlus, Plus, Mic, MicOff, CopyPlus, FileSearch, CheckCircle2, ChevronDown, LayoutPanelLeft, PanelRightOpen, Wand2, Pencil, Trash2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { useAI, getAPIKey, getAPIKeyCached, setAPIKey, removeAPIKey, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow, type ImageAttachment, type ChatThread } from '../hooks/useAI';
+import { useAI, getAPIKey, getAPIKeyCached, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow, type ImageAttachment, type ChatThread } from '../hooks/useAI';
 import type { BehaviorLearningActionOptions } from '../hooks/useBehaviorLearning';
 import type { Habit } from '../hooks/useHabits';
 import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus, TaskStatus } from '../types';
@@ -36,13 +36,6 @@ class AIPanelErrorBoundary extends Component<{ children: ReactNode }, { hasError
     }
     return this.props.children;
   }
-}
-
-interface PanelFrame {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
 }
 
 interface ImportExecutionOptions {
@@ -120,30 +113,16 @@ declare global {
   }
 }
 
-type PanelInteraction =
-  | {
-      type: 'move' | 'resize';
-      startX: number;
-      startY: number;
-      initial: PanelFrame;
-    }
-  | null;
-
-const PANEL_FRAME_STORAGE = 'taskflow_ai_panel_frame';
-const CHAT_SIDEBAR_WIDTH_STORAGE = 'taskflow_ai_sidebar_width';
-const CHAT_SIDEBAR_COLLAPSED_STORAGE = 'taskflow_ai_sidebar_collapsed';
 const IMPORTED_BLOCKS_STORAGE_PREFIX = 'taskflow_ai_imported_blocks';
 const RECENT_APPLIED_CALENDAR_ACTIONS_STORAGE_PREFIX = 'taskflow_ai_recent_calendar_actions';
 const RECENT_LISTED_CALENDAR_EVENTS_STORAGE_PREFIX = 'taskflow_ai_recent_listed_calendar_events';
 const RECENT_CALENDAR_TARGETS_STORAGE_PREFIX = 'taskflow_ai_recent_calendar_targets';
-const DEFAULT_PANEL_FRAME: PanelFrame = {
-  x: 0,
-  y: 88,
-  width: 920,
-  height: 760,
-};
-const DEFAULT_CHAT_SIDEBAR_WIDTH = 184;
-const DEFAULT_CHAT_SIDEBAR_COLLAPSED = false;
+const AI_PERSONALITY_STORAGE_PREFIX = 'taskflow_ai_personality';
+
+interface AIPersonality {
+  name: string;
+  badge: string;
+}
 
 function importedBlocksStorageKey(userId: string) {
   return `${IMPORTED_BLOCKS_STORAGE_PREFIX}:${userId}`;
@@ -159,6 +138,10 @@ function recentListedCalendarEventsStorageKey(userId: string) {
 
 function recentCalendarTargetsStorageKey(userId: string) {
   return `${RECENT_CALENDAR_TARGETS_STORAGE_PREFIX}:${userId}`;
+}
+
+function aiPersonalityStorageKey(userId: string) {
+  return `${AI_PERSONALITY_STORAGE_PREFIX}:${userId}`;
 }
 
 function loadImportedBlocks(userId: string) {
@@ -220,6 +203,39 @@ function saveRecentListedCalendarEvents(userId: string, entries: string[]) {
     );
   } catch {
     // ignore local storage quota errors
+  }
+}
+
+function loadAIPersonality(userId: string): AIPersonality {
+  if (typeof window === 'undefined') return { name: '', badge: '✨' };
+  try {
+    const raw = localStorage.getItem(aiPersonalityStorageKey(userId));
+    if (!raw) return { name: '', badge: '✨' };
+    const parsed = JSON.parse(raw) as Partial<AIPersonality>;
+    return {
+      name: typeof parsed.name === 'string' ? parsed.name : '',
+      badge: typeof parsed.badge === 'string' ? parsed.badge : '✨',
+    };
+  } catch {
+    return { name: '', badge: '✨' };
+  }
+}
+
+function saveAIPersonality(userId: string, personality: AIPersonality) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(aiPersonalityStorageKey(userId), JSON.stringify(personality));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function resetAIPersonality(userId: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(aiPersonalityStorageKey(userId));
+  } catch {
+    // ignore storage failures
   }
 }
 
@@ -405,87 +421,12 @@ function formatDictationElapsed(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-function clampPanelFrame(frame: PanelFrame): PanelFrame {
-  if (typeof window === 'undefined') return frame;
-
-  const minWidth = Math.min(640, window.innerWidth - 32);
-  const minHeight = Math.min(520, window.innerHeight - 32);
-  const width = Math.max(minWidth, Math.min(frame.width, window.innerWidth - 24));
-  const height = Math.max(minHeight, Math.min(frame.height, window.innerHeight - 24));
-  const maxX = Math.max(12, window.innerWidth - width - 12);
-  const maxY = Math.max(12, window.innerHeight - height - 12);
-
-  return {
-    width,
-    height,
-    x: Math.max(12, Math.min(frame.x, maxX)),
-    y: Math.max(12, Math.min(frame.y, maxY)),
-  };
-}
-
-function loadSavedPanelFrame(): PanelFrame {
-  if (typeof window === 'undefined') return DEFAULT_PANEL_FRAME;
-
-  try {
-    const saved = localStorage.getItem(PANEL_FRAME_STORAGE);
-    if (!saved) {
-      const width = Math.min(DEFAULT_PANEL_FRAME.width, window.innerWidth - 24);
-      return clampPanelFrame({
-        ...DEFAULT_PANEL_FRAME,
-        x: Math.max(12, window.innerWidth - width - 24),
-        width,
-        height: Math.min(DEFAULT_PANEL_FRAME.height, window.innerHeight - 24),
-      });
-    }
-
-    const parsed = JSON.parse(saved) as Partial<PanelFrame>;
-    return clampPanelFrame({
-      x: typeof parsed.x === 'number' ? parsed.x : DEFAULT_PANEL_FRAME.x,
-      y: typeof parsed.y === 'number' ? parsed.y : DEFAULT_PANEL_FRAME.y,
-      width: typeof parsed.width === 'number' ? parsed.width : DEFAULT_PANEL_FRAME.width,
-      height: typeof parsed.height === 'number' ? parsed.height : DEFAULT_PANEL_FRAME.height,
-    });
-  } catch {
-    return clampPanelFrame(DEFAULT_PANEL_FRAME);
-  }
-}
-
-function clampChatSidebarWidth(width: number) {
-  if (typeof window === 'undefined') return width;
-  const minWidth = 160;
-  const maxWidth = Math.min(320, Math.max(160, Math.floor(window.innerWidth * 0.34)));
-  return Math.max(minWidth, Math.min(width, maxWidth));
-}
-
-function loadSavedChatSidebarState() {
-  if (typeof window === 'undefined') {
-    return {
-      width: DEFAULT_CHAT_SIDEBAR_WIDTH,
-      collapsed: DEFAULT_CHAT_SIDEBAR_COLLAPSED,
-    };
-  }
-
-  try {
-    const savedWidth = localStorage.getItem(CHAT_SIDEBAR_WIDTH_STORAGE);
-    const savedCollapsed = localStorage.getItem(CHAT_SIDEBAR_COLLAPSED_STORAGE);
-    const width = clampChatSidebarWidth(
-      savedWidth ? Number(savedWidth) || DEFAULT_CHAT_SIDEBAR_WIDTH : DEFAULT_CHAT_SIDEBAR_WIDTH
-    );
-    return {
-      width,
-      collapsed: savedCollapsed === null ? DEFAULT_CHAT_SIDEBAR_COLLAPSED : savedCollapsed === 'true',
-    };
-  } catch {
-    return {
-      width: DEFAULT_CHAT_SIDEBAR_WIDTH,
-      collapsed: DEFAULT_CHAT_SIDEBAR_COLLAPSED,
-    };
-  }
-}
-
 interface AIPanelProps {
   open: boolean;
+  mode: 'floating' | 'sidebar';
+  onModeChange: (mode: 'floating' | 'sidebar') => void;
   onClose: () => void;
+  onOpenDataSettings: () => void;
   userId: string;
   // App data for context
   tasks: Task[];
@@ -564,7 +505,7 @@ interface AIPanelProps {
 }
 
 export function AIPanel({
-  open, onClose, userId,
+  open, mode, onModeChange, onClose, onOpenDataSettings, userId,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
   calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot, behaviorSummary, draftPrompt, onDraftPromptConsumed, onAiPromptSubmitted, onAiActionsApplied, onAiSuggestionAccepted, onAiSuggestionEdited, onAiSuggestionRejected, onStudyBlockLinkedTarget, onStudySlotCandidatesLogged,
   onAddTask, onUpdateTask, onAddDeadline, onUpdateDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
@@ -587,10 +528,8 @@ export function AIPanel({
   } = useAI(userId);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [input, setInput] = useState('');
-  const [apiKey, setApiKey] = useState(getAPIKeyCached(userId) ?? '');
   const [hasKey, setHasKey] = useState(!!getAPIKeyCached(userId));
   const [keyLoading, setKeyLoading] = useState(!getAPIKeyCached(userId));
-  const [showKeyInput, setShowKeyInput] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -598,7 +537,6 @@ export function AIPanel({
       setKeyLoading(true);
       void getAPIKey(userId).then(key => {
         if (cancelled) return;
-        setApiKey(key ?? '');
         setHasKey(!!key);
         setKeyLoading(false);
       });
@@ -631,22 +569,14 @@ export function AIPanel({
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingChatTitle, setEditingChatTitle] = useState('');
   const [pendingDeleteChat, setPendingDeleteChat] = useState<ChatThread | null>(null);
-  const initialSidebarState = useMemo(() => loadSavedChatSidebarState(), []);
-  const [chatSidebarWidth, setChatSidebarWidth] = useState(initialSidebarState.width);
-  const [chatSidebarCollapsed, setChatSidebarCollapsed] = useState(initialSidebarState.collapsed);
-  const [sidebarSearch, setSidebarSearch] = useState('');
-  const [showSidebarSearch, setShowSidebarSearch] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const [panelFrame, setPanelFrame] = useState<PanelFrame>(() => loadSavedPanelFrame());
-  const [interaction, setInteraction] = useState<PanelInteraction>(null);
-  const [sidebarInteraction, setSidebarInteraction] = useState<{
-    startX: number;
-    initialWidth: number;
-  } | null>(null);
+  const [showChatMenu, setShowChatMenu] = useState(false);
+  const [showModeMenu, setShowModeMenu] = useState(false);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
+  const chatMenuRef = useRef<HTMLDivElement>(null);
+  const modeMenuRef = useRef<HTMLDivElement>(null);
   const recentAiTasksRef = useRef<Task[]>([]);
   const handledPendingSuggestionRefs = useRef<Set<string>>(new Set());
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -769,90 +699,16 @@ export function AIPanel({
   }, []);
 
   useEffect(() => {
-    if (!open) return;
-    setPanelFrame(prev => clampPanelFrame(prev));
-  }, [open]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(PANEL_FRAME_STORAGE, JSON.stringify(panelFrame));
-    } catch {
-      // ignore storage errors
-    }
-  }, [panelFrame]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(CHAT_SIDEBAR_WIDTH_STORAGE, String(chatSidebarWidth));
-      localStorage.setItem(CHAT_SIDEBAR_COLLAPSED_STORAGE, String(chatSidebarCollapsed));
-    } catch {
-      // ignore storage errors
-    }
-  }, [chatSidebarWidth, chatSidebarCollapsed]);
-
-  useEffect(() => {
-    if (!interaction) return;
-
-    const handleMove = (event: MouseEvent) => {
-      const deltaX = event.clientX - interaction.startX;
-      const deltaY = event.clientY - interaction.startY;
-
-      if (interaction.type === 'move') {
-        setPanelFrame(clampPanelFrame({
-          ...interaction.initial,
-          x: interaction.initial.x + deltaX,
-          y: interaction.initial.y + deltaY,
-        }));
-        return;
-      }
-
-      setPanelFrame(clampPanelFrame({
-        ...interaction.initial,
-        width: interaction.initial.width + deltaX,
-        height: interaction.initial.height + deltaY,
-      }));
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (chatMenuRef.current?.contains(target) || modeMenuRef.current?.contains(target)) return;
+      setShowChatMenu(false);
+      setShowModeMenu(false);
     };
 
-    const handleUp = () => setInteraction(null);
-
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = interaction.type === 'move' ? 'grabbing' : 'nwse-resize';
-
-    return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-    };
-  }, [interaction]);
-
-  useEffect(() => {
-    if (!sidebarInteraction) return;
-
-    const handleMove = (event: MouseEvent) => {
-      const deltaX = event.clientX - sidebarInteraction.startX;
-      setChatSidebarWidth(clampChatSidebarWidth(sidebarInteraction.initialWidth + deltaX));
-      if (chatSidebarCollapsed) {
-        setChatSidebarCollapsed(false);
-      }
-    };
-
-    const handleUp = () => setSidebarInteraction(null);
-
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = 'col-resize';
-
-    return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-    };
-  }, [sidebarInteraction, chatSidebarCollapsed]);
+    window.addEventListener('mousedown', handlePointerDown);
+    return () => window.removeEventListener('mousedown', handlePointerDown);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -1091,19 +947,12 @@ export function AIPanel({
     fileInputRef.current?.click();
   }, []);
 
-  const handleSaveKey = async () => {
-    if (apiKey.trim()) {
-      await setAPIKey(userId, apiKey.trim());
-      setHasKey(true);
-      setShowKeyInput(false);
-    }
-  };
-
-  const handleRemoveKey = async () => {
-    await removeAPIKey(userId);
-    setApiKey('');
-    setHasKey(false);
-    setShowKeyInput(false);
+  const selectChatFromMenu = (chatId: string) => {
+    stopStreaming();
+    selectChat(chatId);
+    setPanelError(null);
+    setShowChatMenu(false);
+    requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   const startRenameChat = (chat: ChatThread) => {
@@ -1130,6 +979,7 @@ export function AIPanel({
     stopStreaming();
     deleteChat(pendingDeleteChat.id);
     setPendingDeleteChat(null);
+    setShowChatMenu(false);
   };
 
   const handleImport = async (block: ImportBlock, blockKey: string, options?: ImportExecutionOptions) => {
@@ -1793,9 +1643,8 @@ export function AIPanel({
 
   const handleCreateChat = () => {
     setPanelError(null);
-    setEditingChatId(null);
-    setEditingChatTitle('');
-    setPendingDeleteChat(null);
+    setShowChatMenu(false);
+    setShowModeMenu(false);
     stopStreaming();
     createChat();
     requestAnimationFrame(() => {
@@ -1804,365 +1653,213 @@ export function AIPanel({
     });
   };
 
-  const beginMove = (event: React.MouseEvent) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    setInteraction({
-      type: 'move',
-      startX: event.clientX,
-      startY: event.clientY,
-      initial: panelFrame,
-    });
+  const handleStarterPrompt = (prompt: string) => {
+    setInput(prompt);
+    requestAnimationFrame(() => inputRef.current?.focus());
   };
 
-  const beginResize = (event: React.MouseEvent) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    setInteraction({
-      type: 'resize',
-      startX: event.clientX,
-      startY: event.clientY,
-      initial: panelFrame,
-    });
-  };
-
-  const beginSidebarResize = (event: React.MouseEvent) => {
-    if (chatSidebarCollapsed || event.button !== 0) return;
-    event.preventDefault();
-    setSidebarInteraction({
-      startX: event.clientX,
-      initialWidth: chatSidebarWidth,
-    });
-  };
-
-  const toggleChatSidebar = () => {
-    setChatSidebarCollapsed(prev => !prev);
-  };
-
-  return createPortal(
-    <div className="pointer-events-none fixed inset-0 z-[60]">
+  const panelContent = (
       <div
-        className="pointer-events-auto fixed flex min-h-0 flex-col overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] animate-in fade-in duration-200"
+        className={cn(
+          'flex min-h-0 flex-col overflow-hidden border border-[var(--border-soft)] bg-[var(--surface-elevated)]',
+          mode === 'floating'
+            ? 'fixed bottom-6 right-6 z-[70] h-[min(72vh,680px)] w-[min(440px,calc(100vw-3rem))] rounded-[28px] shadow-[0_24px_80px_rgba(15,23,42,0.18)] animate-in fade-in slide-in-from-bottom-2 duration-200'
+            : 'h-full w-[420px] shrink-0 rounded-none border-y-0 border-r-0 shadow-none'
+        )}
         onClick={e => e.stopPropagation()}
-        style={{
-          animationDuration: '200ms',
-          left: panelFrame.x,
-          top: panelFrame.y,
-          width: panelFrame.width,
-          height: panelFrame.height,
-        }}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-4 py-3">
-          <div
-            className="flex flex-1 cursor-grab items-center gap-2 active:cursor-grabbing"
-            onMouseDown={beginMove}
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-soft)]">
-              <Sparkles size={16} className="text-[var(--accent)]" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--text-primary)]">AI Assistant</h3>
-              <p className="text-[10px] text-[var(--text-faint)]">Powered by Gemini</p>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div ref={chatMenuRef} className="relative min-w-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowChatMenu(prev => !prev);
+                  setShowModeMenu(false);
+                }}
+                className="inline-flex max-w-[220px] items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-sm font-semibold text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
+              >
+                <span className="truncate">{messages.length > 0 ? currentChat?.title || 'New AI chat' : 'New AI chat'}</span>
+                <ChevronDown size={14} className="shrink-0 text-[var(--text-faint)]" />
+              </button>
+              {showChatMenu && (
+                <div className="absolute left-0 top-full z-20 mt-2 w-72 overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-[0_18px_50px_rgba(15,23,42,0.12)]">
+                  <div className="border-b border-[var(--border-soft)] px-4 py-3 text-xs font-medium text-[var(--text-faint)]">Recent chats</div>
+                  <div className="max-h-72 overflow-y-auto px-2 py-2">
+                    {threads.map(chat => {
+                      const active = chat.id === currentChatId;
+                      const isEditing = editingChatId === chat.id;
+                      return (
+                        <div
+                          key={chat.id}
+                          className={cn(
+                            'group flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition',
+                            active
+                              ? 'bg-[var(--surface)] text-[var(--text-primary)]'
+                              : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
+                          )}
+                        >
+                          {isEditing ? (
+                            <>
+                              <input
+                                value={editingChatTitle}
+                                onChange={e => setEditingChatTitle(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') commitRenameChat();
+                                  if (e.key === 'Escape') cancelRenameChat();
+                                }}
+                                autoFocus
+                                className="min-w-0 flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-2.5 py-1.5 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={commitRenameChat}
+                                className="rounded-lg px-2 py-1 text-xs font-medium text-[var(--accent)] transition hover:bg-[var(--surface-elevated)]"
+                              >
+                                Save
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => selectChatFromMenu(chat.id)}
+                                className="min-w-0 flex-1 truncate text-left"
+                              >
+                                {chat.title}
+                              </button>
+                              <div className="flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100">
+                                <button
+                                  type="button"
+                                  onClick={() => startRenameChat(chat)}
+                                  className="rounded-md p-1 text-[var(--text-faint)] transition hover:bg-[var(--surface-elevated)] hover:text-[var(--text-primary)]"
+                                  title="Rename chat"
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPendingDeleteChat(chat)}
+                                  className="rounded-md p-1 text-[var(--text-faint)] transition hover:bg-rose-500/10 hover:text-rose-400"
+                                  title="Delete chat"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-1">
             <button
+              type="button"
               onClick={handleCreateChat}
-              className="rounded-lg p-1.5 text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
+              className="rounded-lg p-1.5 text-[var(--text-faint)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
               title="New chat"
             >
-              <Plus size={14} />
+              <Plus size={16} />
             </button>
-            <button
-              onClick={() => setShowKeyInput(!showKeyInput)}
-              className={cn(
-                'rounded-lg p-1.5 transition',
-                hasKey
-                  ? 'text-[var(--text-faint)] hover:text-[var(--text-primary)]'
-                  : 'text-amber-400 hover:text-amber-300'
-              )}
-              title={hasKey ? 'API key settings' : 'Add API key'}
+            <div ref={modeMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowModeMenu(prev => !prev);
+                  setShowChatMenu(false);
+                }}
+                className="rounded-lg p-1.5 text-[var(--text-faint)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+                title="AI panel mode"
               >
-                <Key size={14} />
+                {mode === 'sidebar' ? <LayoutPanelLeft size={16} /> : <PanelRightOpen size={16} />}
               </button>
-            <button
-              onClick={() => setPendingDeleteChat(currentChat)}
-              className="rounded-lg p-1.5 text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
-              title="Delete chat"
-            >
-              <Trash2 size={14} />
-            </button>
+              {showModeMenu && (
+                <div className="absolute right-0 top-full z-20 mt-2 w-44 overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-[0_18px_50px_rgba(15,23,42,0.12)]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onModeChange('sidebar');
+                      setShowModeMenu(false);
+                    }}
+                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
+                    title="Sidebar"
+                  >
+                    <LayoutPanelLeft size={15} className="text-[var(--text-faint)]" />
+                    <span className="flex-1">Sidebar</span>
+                    {mode === 'sidebar' && <Check size={14} className="text-[var(--text-muted)]" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onModeChange('floating');
+                      setShowModeMenu(false);
+                    }}
+                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
+                    title="Floating"
+                  >
+                    <PanelRightOpen size={15} className="text-[var(--text-faint)]" />
+                    <span className="flex-1">Floating</span>
+                    {mode === 'floating' && <Check size={14} className="text-[var(--text-muted)]" />}
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={onClose}
-              className="rounded-lg p-1.5 text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
+              className="rounded-lg p-1.5 text-[var(--text-faint)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+              title="Minimize AI"
             >
-              <X size={16} />
+              <Minus size={16} />
             </button>
           </div>
         </div>
 
-        {/* API Key Input */}
-        {(showKeyInput || !hasKey) && (
-          <div className="border-b border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3">
-            <p className="mb-2 text-xs text-[var(--text-muted)]">
-              {hasKey ? 'Your API key is saved.' : 'Enter your Google Gemini API key to get started (free tier available).'}{' '}
-              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline">Get a free key →</a>
-            </p>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                value={apiKey}
-                onChange={e => setApiKey(e.target.value)}
-                placeholder="Paste your Gemini API key"
-                className="flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-                onKeyDown={e => { if (e.key === 'Enter') handleSaveKey(); }}
-              />
-              <button
-                onClick={handleSaveKey}
-                disabled={!apiKey.trim()}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40"
-                style={{ backgroundColor: 'var(--accent-strong)' }}
-              >
-                Save
-              </button>
-              {hasKey && (
-                <button
-                  onClick={handleRemoveKey}
-                  className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-rose-400 hover:bg-rose-500/10"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-            <p className="mt-1.5 text-[10px] text-[var(--text-faint)]">
-              Key is stored locally in your browser. Free tier: 15 req/min, 500 req/day.
-            </p>
-          </div>
-        )}
-
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          {/* Chat list */}
-          <aside
-            className={cn(
-              'relative flex min-h-0 shrink-0 flex-col border-b border-[var(--border-soft)] bg-[var(--surface-muted)] md:border-b-0 md:border-r',
-              chatSidebarCollapsed ? 'overflow-hidden' : 'overflow-visible',
-            )}
-            style={{
-              width: chatSidebarCollapsed ? 52 : chatSidebarWidth,
-              minWidth: chatSidebarCollapsed ? 52 : chatSidebarWidth,
-              maxWidth: chatSidebarCollapsed ? 52 : chatSidebarWidth,
-            }}
-          >
-            {/* Top: Collapse toggle */}
-            <div className="px-1.5 pt-2 pb-0.5">
-              {chatSidebarCollapsed ? (
-                <button
-                  onClick={toggleChatSidebar}
-                  className="flex h-8 w-full items-center justify-center rounded-lg text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
-                  title="Expand sidebar"
-                >
-                  <PanelLeftOpen size={16} />
-                </button>
-              ) : (
-                <button
-                  onClick={toggleChatSidebar}
-                  className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-xs text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
-                >
-                  <PanelLeftClose size={16} className="shrink-0" />
-                  <span>Collapse</span>
-                </button>
-              )}
-            </div>
-
-            {/* Actions: New session + Search */}
-            <div className="flex flex-col gap-0.5 px-1.5 pb-1">
-              {chatSidebarCollapsed ? (
-                <>
-                  <button
-                    onClick={handleCreateChat}
-                    className="flex h-8 w-full items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
-                    title="New session"
-                  >
-                    <Plus size={16} />
-                  </button>
-                  <button
-                    onClick={() => { toggleChatSidebar(); setShowSidebarSearch(true); requestAnimationFrame(() => searchInputRef.current?.focus()); }}
-                    className="flex h-8 w-full items-center justify-center rounded-lg text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
-                    title="Search chats"
-                  >
-                    <Search size={16} />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={handleCreateChat}
-                    className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-xs text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
-                  >
-                    <Plus size={16} className="shrink-0" />
-                    <span>New session</span>
-                  </button>
-                  <button
-                    onClick={() => { setShowSidebarSearch(s => !s); setSidebarSearch(''); requestAnimationFrame(() => searchInputRef.current?.focus()); }}
-                    className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-xs text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
-                  >
-                    <Search size={16} className="shrink-0" />
-                    <span>Search</span>
-                  </button>
-                </>
-              )}
-            </div>
-
-            {/* Search input (expanded only) */}
-            {!chatSidebarCollapsed && showSidebarSearch && (
-              <div className="px-2 pb-1.5">
-                <input
-                  ref={searchInputRef}
-                  value={sidebarSearch}
-                  onChange={e => setSidebarSearch(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Escape') { setShowSidebarSearch(false); setSidebarSearch(''); } }}
-                  placeholder="Search chats..."
-                  className="w-full rounded-md border border-[var(--border-soft)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-                />
-              </div>
-            )}
-
-            {/* Divider */}
-            <div className="mx-2 border-t border-[var(--border-soft)]" />
-
-            {/* Chat list */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5">
-              {chatSidebarCollapsed ? (
-                <div className="flex h-full items-start justify-center pt-1">
-                  <div className="h-1.5 w-1.5 rounded-full bg-[var(--text-faint)]/40" />
-                </div>
-              ) : (
-                <div className="space-y-0.5">
-                  {(() => {
-                    const q = sidebarSearch.toLowerCase().trim();
-                    const filtered = q ? threads.filter(c => c.title.toLowerCase().includes(q) || c.messages.some(m => m.content.toLowerCase().includes(q))) : threads;
-                    if (q && filtered.length === 0) {
-                      return <p className="px-2 py-3 text-center text-[11px] text-[var(--text-faint)]">No chats found</p>;
-                    }
-                    return filtered.map(chat => {
-                    const active = chat.id === currentChatId;
-                    const isEditing = editingChatId === chat.id;
-                    return (
-                      <div key={chat.id}>
-                        {isEditing ? (
-                          <div className="flex items-center gap-1 px-1 py-1">
-                            <input
-                              value={editingChatTitle}
-                              onChange={e => setEditingChatTitle(e.target.value)}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') commitRenameChat();
-                                if (e.key === 'Escape') cancelRenameChat();
-                              }}
-                              autoFocus
-                              className="min-w-0 flex-1 rounded-md border border-[var(--border-soft)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
-                            />
-                            <button onClick={commitRenameChat} className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--accent)]">OK</button>
-                          </div>
-                        ) : (
-                          <div
-                            onClick={() => {
-                              stopStreaming();
-                              selectChat(chat.id);
-                              setPanelError(null);
-                              cancelRenameChat();
-                              setPendingDeleteChat(null);
-                              setSidebarSearch('');
-                              setShowSidebarSearch(false);
-                              requestAnimationFrame(() => inputRef.current?.focus());
-                            }}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                stopStreaming();
-                                selectChat(chat.id);
-                                setPanelError(null);
-                                cancelRenameChat();
-                                setPendingDeleteChat(null);
-                                setSidebarSearch('');
-                                setShowSidebarSearch(false);
-                                requestAnimationFrame(() => inputRef.current?.focus());
-                              }
-                            }}
-                            className={cn(
-                              'group flex w-full cursor-pointer items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-left transition',
-                              active
-                                ? 'bg-[var(--accent-soft)]/30 text-[var(--accent)]'
-                                : 'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]',
-                            )}
-                          >
-                            <p className="truncate text-xs">{chat.title}</p>
-                            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
-                              <button
-                                onClick={e => { e.stopPropagation(); startRenameChat(chat); }}
-                                className="rounded p-0.5 text-[var(--text-faint)] hover:text-[var(--text-primary)]"
-                                title="Rename"
-                              >
-                                <Pencil size={10} />
-                              </button>
-                              <button
-                                onClick={e => { e.stopPropagation(); setPendingDeleteChat(chat); }}
-                                className="rounded p-0.5 text-[var(--text-faint)] hover:text-rose-400"
-                                title="Delete"
-                              >
-                                <Trash2 size={10} />
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  });
-                  })()}
-                </div>
-              )}
-            </div>
-
-            {/* Bottom branding — aligned with input bar */}
-            <div className="border-t border-[var(--border-soft)] px-3 py-3">
-              {chatSidebarCollapsed ? (
-                <div className="flex items-center justify-center" title="AI Assistant · Powered by Gemini">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl" style={{ backgroundImage: 'var(--sidebar-gradient)' }}>
-                    <Sparkles size={13} className="text-white" />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl" style={{ backgroundImage: 'var(--sidebar-gradient)' }}>
-                    <Sparkles size={13} className="text-white" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-medium text-[var(--text-primary)]">AI Assistant</p>
-                    <p className="truncate text-[10px] text-[var(--text-faint)]">Powered by Gemini</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {!chatSidebarCollapsed && (
-              <button
-                onMouseDown={beginSidebarResize}
-                className="absolute inset-y-0 right-0 w-1 cursor-col-resize bg-transparent hover:bg-[var(--accent)]/20"
-                aria-label="Resize chat sidebar"
-                title="Drag to resize"
-              />
-            )}
-          </aside>
-
-          {/* Chat area */}
           <section className="min-w-0 flex-1 flex min-h-0 flex-col">
             {/* Messages */}
             <div key={currentChatId} ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               <AIPanelErrorBoundary>
-                {messages.length === 0 ? (
-                  <WelcomeScreen hasKey={hasKey} />
+                {keyLoading ? (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--border-soft)] border-t-[var(--accent)]" />
+                  </div>
+                ) : !hasKey ? (
+                  <div className="flex h-full items-center justify-center px-4">
+                    <div className="w-full max-w-md rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface)] p-6 text-center shadow-sm">
+                      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--surface-muted)]">
+                        <Sparkles size={22} className="text-[var(--text-primary)]" />
+                      </div>
+                      <h3 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">Set up AI first</h3>
+                      <p className="mt-3 text-sm leading-6 text-[var(--text-muted)]">
+                        Add your Gemini API key in Profile → Data, then come right back here to start planning, scheduling, and chatting.
+                      </p>
+                      <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
+                        <button
+                          type="button"
+                          onClick={onOpenDataSettings}
+                          className="rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)]"
+                          style={{ backgroundColor: 'var(--accent-strong)' }}
+                        >
+                          Open Data settings
+                        </button>
+                        <a
+                          href="https://aistudio.google.com/apikey"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-xl border border-[var(--border-soft)] px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
+                        >
+                          Get a free Gemini key
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ) : messages.length === 0 ? (
+                  <WelcomeScreen userId={userId} hasKey={hasKey} onUsePrompt={handleStarterPrompt} />
                 ) : (
                   <div className="space-y-4">
                     {messages.map(msg => (
@@ -2195,7 +1892,7 @@ export function AIPanel({
             )}
 
             {/* Input */}
-            <div className="border-t border-[var(--border-soft)] px-4 py-3">
+            <div className="border-t border-[var(--border-soft)] px-4 py-4">
               {/* Pending image previews */}
               {pendingImages.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-2">
@@ -2217,7 +1914,7 @@ export function AIPanel({
                 </div>
               )}
               <div
-                className={`relative flex items-end gap-2 rounded-lg border px-3 py-3 transition-colors ${
+                className={`relative flex flex-col gap-2.5 rounded-[22px] border px-3.5 py-3 transition-colors ${
                   isComposerDragActive
                     ? 'border-[var(--accent)]/55 bg-[var(--accent)]/8 pt-8 shadow-[0_0_0_1px_rgba(99,102,241,0.12)]'
                     : 'border-[var(--border-soft)] bg-[var(--surface)]'
@@ -2257,29 +1954,6 @@ export function AIPanel({
                   onChange={handleImageSelect}
                   className="hidden"
                 />
-                <div ref={attachmentMenuRef} className="relative shrink-0">
-                  <button
-                    onClick={() => setShowAttachmentMenu(prev => !prev)}
-                    disabled={!hasKey || isStreaming}
-                    className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-faint)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
-                    title="Add photo"
-                    aria-haspopup="menu"
-                    aria-expanded={showAttachmentMenu}
-                  >
-                    <Plus size={16} />
-                  </button>
-                  {showAttachmentMenu && (
-                    <div className="absolute bottom-full left-0 z-20 mb-2 min-w-[170px] rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-1.5 shadow-sm">
-                      <button
-                        onClick={handleOpenAttachmentPicker}
-                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
-                      >
-                        <ImagePlus size={15} className="text-[var(--text-muted)]" />
-                        <span>Add photo</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
                 <textarea
                   ref={inputRef}
                   value={input}
@@ -2288,15 +1962,42 @@ export function AIPanel({
                   placeholder={hasKey ? 'Ask anything or request tasks, deadlines, or calendar events...' : 'Add your Gemini API key above to start'}
                   disabled={!hasKey || isStreaming}
                   rows={1}
-                  className="max-h-32 min-h-[38px] flex-1 resize-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-50"
+                  className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:outline-none disabled:opacity-50"
                   style={{ height: 'auto' }}
                 />
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <div ref={attachmentMenuRef} className="relative shrink-0">
+                      <button
+                        onClick={() => setShowAttachmentMenu(prev => !prev)}
+                        disabled={!hasKey || isStreaming}
+                        className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] disabled:opacity-40"
+                        title="Add photo"
+                        aria-haspopup="menu"
+                        aria-expanded={showAttachmentMenu}
+                      >
+                        <Plus size={15} />
+                      </button>
+                      {showAttachmentMenu && (
+                        <div className="absolute bottom-full left-0 z-20 mb-2 min-w-[170px] rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-1.5 shadow-sm">
+                          <button
+                            onClick={handleOpenAttachmentPicker}
+                            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
+                          >
+                            <ImagePlus size={15} className="text-[var(--text-muted)]" />
+                            <span>Add photo</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-2">
                   {isDictating ? (
                     <button
                       onClick={handleToggleDictation}
                       disabled={!hasKey || isStreaming}
-                      className="flex h-[38px] items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 text-sm font-medium text-rose-400 transition hover:bg-rose-500/15 disabled:opacity-40"
+                      className="flex h-8 items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 text-sm font-medium text-rose-400 transition hover:bg-rose-500/15 disabled:opacity-40"
                       title="Stop dictation"
                     >
                       <span className="h-2.5 w-2.5 rounded-full bg-current animate-pulse" />
@@ -2307,7 +2008,7 @@ export function AIPanel({
                     <button
                       onClick={handleToggleDictation}
                       disabled={!hasKey || isStreaming || !speechSupported}
-                      className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-faint)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-faint)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] disabled:opacity-40"
                       title={
                         !speechSupported
                           ? 'Dictation is not supported in this browser'
@@ -2316,13 +2017,13 @@ export function AIPanel({
                             : 'Start dictation'
                       }
                     >
-                      <Mic size={16} />
+                      <Mic size={15} />
                     </button>
                   )}
                   {isStreaming ? (
                     <button
                       onClick={stopStreaming}
-                      className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-rose-500 text-white transition hover:bg-rose-600"
+                      className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-500 text-white transition hover:bg-rose-600"
                       title="Stop response"
                     >
                       <Square size={14} />
@@ -2331,13 +2032,13 @@ export function AIPanel({
                     <button
                       onClick={handleSend}
                       disabled={(!input.trim() && !pendingImages.length) || !hasKey}
-                      className="flex h-[38px] w-[38px] items-center justify-center rounded-full text-[var(--accent-contrast)] transition disabled:opacity-40"
-                      style={{ backgroundColor: 'var(--accent-strong)' }}
+                      className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--text-primary)] text-[var(--bg-app)] transition hover:scale-[1.02] disabled:opacity-40"
                       title="Send message"
                     >
-                      <Send size={14} />
+                      <Send size={15} />
                     </button>
                   )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -2346,84 +2047,217 @@ export function AIPanel({
 
         {pendingDeleteChat && (
           <div
-            className="absolute inset-0 z-[70] flex items-center justify-center bg-black/45 px-4"
+            className="absolute inset-0 z-[80] flex items-center justify-center bg-black/35 px-4"
             onClick={() => setPendingDeleteChat(null)}
           >
             <div
-              className="w-full max-w-sm rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-4 shadow-sm"
+              className="w-full max-w-sm rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.12)]"
               onClick={e => e.stopPropagation()}
             >
               <p className="text-sm font-semibold text-[var(--text-primary)]">Delete chat?</p>
-              <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
-                This will remove “{pendingDeleteChat.title}” and its message history. A new blank chat will be created if needed.
+              <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
+                This will permanently remove “{pendingDeleteChat.title}”.
               </p>
-              <div className="mt-4 flex items-center justify-end gap-2">
+              <div className="mt-4 flex justify-end gap-2">
                 <button
+                  type="button"
                   onClick={() => setPendingDeleteChat(null)}
-                  className="rounded-xl border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface)]"
+                  className="rounded-xl border border-[var(--border-soft)] px-4 py-2 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface)]"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={confirmDeleteChat}
-                  className="rounded-xl bg-rose-500 px-3 py-1.5 text-xs font-medium text-white"
+                  className="rounded-xl bg-rose-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-rose-600"
                 >
-                  Delete chat
+                  Delete
                 </button>
               </div>
             </div>
           </div>
         )}
-        <button
-          type="button"
-          aria-label="Resize AI panel"
-          title="Resize"
-          className="absolute bottom-1 right-1 z-[75] flex h-8 w-8 cursor-nwse-resize items-end justify-end rounded-full text-[var(--text-faint)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
-          onMouseDown={beginResize}
-        >
-          <span className="pointer-events-none relative mb-1 mr-1 block h-3 w-3">
-            <span className="absolute bottom-0 right-0 h-px w-3 rotate-45 bg-current opacity-80" />
-            <span className="absolute bottom-1 right-0 h-px w-2 rotate-45 bg-current opacity-60" />
-            <span className="absolute bottom-0 right-1 h-px w-2 rotate-45 bg-current opacity-45" />
-          </span>
-        </button>
       </div>
-    </div>,
-    document.body
   );
+
+  if (mode === 'floating') {
+    return createPortal(panelContent, document.body);
+  }
+
+  return panelContent;
 }
 
 // --- Welcome Screen ---
-function WelcomeScreen({ hasKey }: { hasKey: boolean }) {
+function WelcomeScreen({ userId, hasKey, onUsePrompt }: { userId: string; hasKey: boolean; onUsePrompt: (prompt: string) => void }) {
+  const badgeOptions = ['✨', '🎓', '🪄', '🧠', '🌿', '👑', '🦆', '🌶️', '🪐', '🍅', '🎀', '🧢'];
+  const [showPersonalize, setShowPersonalize] = useState(false);
+  const [personalizeOpen, setPersonalizeOpen] = useState(false);
+  const [personality, setPersonality] = useState<AIPersonality>(() => loadAIPersonality(userId));
+  const starterPrompts = [
+    { icon: Sparkles, label: 'Personalize your AI', prompt: 'Help me personalize how you plan my workload and schedule.' },
+    { icon: CopyPlus, label: 'Build a study plan', prompt: 'Build me a study plan for my next few deadlines.' },
+    { icon: FileSearch, label: 'Analyze my workload', prompt: 'Analyze my current workload and tell me what needs attention first.' },
+    { icon: CheckCircle2, label: 'Create a task tracker', prompt: 'Create tasks for my upcoming exams and assignments.' },
+  ];
+
+  useEffect(() => {
+    setPersonality(loadAIPersonality(userId));
+  }, [userId]);
+
+  const handleSavePersonality = () => {
+    saveAIPersonality(userId, personality);
+    setPersonalizeOpen(false);
+  };
+
+  const handleResetPersonality = () => {
+    const resetValue = { name: '', badge: '✨' };
+    setPersonality(resetValue);
+    resetAIPersonality(userId);
+  };
+
   return (
-    <div className="flex h-full flex-col items-center justify-center text-center">
-      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-[var(--accent-soft)]">
-        <Sparkles size={24} className="text-[var(--accent)]" />
+    <>
+    <div className="flex h-full flex-col items-center justify-center px-4 text-center">
+      <div
+        className="group relative mb-5"
+        onMouseEnter={() => setShowPersonalize(true)}
+        onMouseLeave={() => setShowPersonalize(false)}
+      >
+        <button
+          type="button"
+          onClick={() => setPersonalizeOpen(true)}
+          className="relative flex h-16 w-16 items-center justify-center rounded-full bg-[var(--surface)] shadow-sm transition hover:shadow-[0_12px_28px_rgba(15,23,42,0.12)]"
+        >
+          <Sparkles size={26} className="text-[var(--text-primary)]" />
+          <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-xl leading-none">{personality.badge}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setPersonalizeOpen(true)}
+          className={cn(
+            'absolute left-full top-1/2 ml-3 -translate-y-1/2 whitespace-nowrap rounded-full border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition',
+            showPersonalize ? 'opacity-100 translate-x-0' : 'pointer-events-none opacity-0 -translate-x-1'
+          )}
+        >
+          <span className="inline-flex items-center gap-2">
+            <Wand2 size={14} />
+            Personalize
+          </span>
+        </button>
       </div>
-      <h3 className="text-lg font-semibold text-[var(--text-primary)]">AI Assistant</h3>
-      <p className="mt-2 max-w-xs text-sm text-[var(--text-muted)]">
+      <h3 className="text-3xl font-semibold tracking-tight text-[var(--text-primary)]">How can I help you today?</h3>
+      <p className="mt-3 max-w-md text-sm leading-6 text-[var(--text-muted)]">
         {hasKey
-          ? 'Ask me about your schedule, or tell me to create tasks, deadlines, and calendar events for you.'
+          ? 'Use AI to plan your workload, build study blocks, and turn what’s coming up into an actionable schedule.'
           : 'Add your Google Gemini API key above to get started — it\'s free!'}
       </p>
       {hasKey && (
-        <div className="mt-6 space-y-2 text-left">
-          <SuggestionChip text="What's due this week?" />
-          <SuggestionChip text="Create study tasks for my next exam" />
-          <SuggestionChip text="Create a study block on my calendar tomorrow" />
-          <SuggestionChip text="Summarize my workload" />
-          <SuggestionChip text="Generate a deadlines CSV for this month" />
+        <div className="mt-8 grid w-full max-w-md gap-2.5 text-left">
+          {starterPrompts.map(item => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => onUsePrompt(item.prompt)}
+                className="group flex w-full items-center gap-3 rounded-[20px] border border-transparent px-4 py-3 text-left text-sm text-[var(--text-secondary)] transition duration-150 hover:-translate-y-0.5 hover:border-[var(--border-soft)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)] hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface)] text-[var(--text-muted)] transition group-hover:text-[var(--text-primary)]">
+                  <Icon size={15} />
+                </span>
+                <span className="font-medium">{item.label}</span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
-  );
-}
+    {personalizeOpen && (
+      <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 px-4" onClick={() => setPersonalizeOpen(false)}>
+        <div
+          className="w-full max-w-2xl rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface-elevated)] p-6 shadow-[0_30px_80px_rgba(15,23,42,0.18)]"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">Personalize your AI</h3>
+            <button
+              type="button"
+              onClick={() => setPersonalizeOpen(false)}
+              className="rounded-full p-2 text-[var(--text-faint)] transition hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+            >
+              <Minus size={16} />
+            </button>
+          </div>
 
-function SuggestionChip({ text }: { text: string }) {
-  return (
-    <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text-muted)]">
-      {text}
-    </div>
+          <div className="mt-8 flex flex-col items-center">
+            <div className="relative flex h-28 w-28 items-center justify-center rounded-full border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm">
+              <Sparkles size={38} className="text-[var(--text-primary)]" />
+              <span className="absolute -top-3 text-3xl leading-none">{personality.badge}</span>
+            </div>
+            <input
+              value={personality.name}
+              onChange={e => setPersonality(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Enter a name"
+              className="mt-6 w-full max-w-xs rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-center text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+            />
+          </div>
+
+          <div className="mt-8 rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Instructions</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">Add guidance for how your AI should behave. We can wire the real behavior next.</p>
+              </div>
+              <button
+                type="button"
+                className="shrink-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)] hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
+              >
+                Add instructions
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-[24px] border border-[var(--border-soft)] bg-[var(--surface)] p-4">
+            <div className="grid grid-cols-6 gap-3">
+              {badgeOptions.map(option => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setPersonality(prev => ({ ...prev, badge: option }))}
+                  className={cn(
+                    'flex h-14 items-center justify-center rounded-2xl border text-2xl transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]',
+                    personality.badge === option
+                      ? 'border-[var(--accent)] bg-[var(--accent-soft)]/30'
+                      : 'border-[var(--border-soft)] bg-[var(--surface-elevated)] hover:border-[var(--border-strong)]'
+                  )}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-6 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleResetPersonality}
+              className="rounded-xl border border-[var(--border-soft)] px-5 py-2.5 text-sm font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface)]"
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={handleSavePersonality}
+              className="rounded-xl px-5 py-2.5 text-sm font-medium text-[var(--accent-contrast)]"
+              style={{ backgroundColor: 'var(--accent-strong)' }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 

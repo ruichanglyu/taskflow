@@ -24,6 +24,7 @@ import { ThemeSwitcher } from './ThemeSwitcher';
 import { ProfileModal } from './ProfileModal';
 import { AIPanel } from './AIPanel';
 import { HabitsPanel } from './HabitsPanel';
+import { AuthOnboarding } from './AuthOnboarding';
 import { migrateLegacyAIData } from '../hooks/useAI';
 import { useHabits } from '../hooks/useHabits';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
@@ -80,7 +81,13 @@ export function AppShell({ user }: AppShellProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileInitialTab, setProfileInitialTab] = useState<'profile' | 'preferences' | 'data'>('profile');
+  const [preferenceSetupOpen, setPreferenceSetupOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiMode, setAiMode] = useState<'floating' | 'sidebar'>(() => {
+    const stored = window.localStorage.getItem('taskflow_ai_panel_mode');
+    return stored === 'sidebar' ? 'sidebar' : 'floating';
+  });
   const [queuedAiPrompt, setQueuedAiPrompt] = useState<string | null>(null);
   const [habitsOpen, setHabitsOpen] = useState(false);
   const habitsButtonRef = useRef<HTMLButtonElement>(null);
@@ -105,6 +112,11 @@ export function AppShell({ user }: AppShellProps) {
     setQueuedAiPrompt(prompt);
     setAiOpen(true);
   }, []);
+
+  const openAiPanel = useCallback(() => {
+    learning.logAiPanelOpened({ source: 'manual', learn: true });
+    setAiOpen(true);
+  }, [learning]);
 
   const pushToast = useCallback((tone: ToastTone, title: string, message?: string) => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
@@ -149,6 +161,10 @@ export function AppShell({ user }: AppShellProps) {
   useEffect(() => {
     window.localStorage.setItem('taskflow_sidebar_collapsed', String(desktopSidebarCollapsed));
   }, [desktopSidebarCollapsed]);
+
+  useEffect(() => {
+    window.localStorage.setItem('taskflow_ai_panel_mode', aiMode);
+  }, [aiMode]);
 
   const handleSignOut = async () => {
     if (!supabase) return;
@@ -689,7 +705,7 @@ export function AppShell({ user }: AppShellProps) {
         avatarUrl={user.user_metadata.avatar_url}
         canvasConnected={!!canvasStore.connection}
         onCanvasClick={() => { setSidebarOpen(false); setCanvasOpen(true); }}
-        onProfileClick={() => { setSidebarOpen(false); setProfileOpen(true); }}
+        onProfileClick={() => { setSidebarOpen(false); setProfileInitialTab('profile'); setProfileOpen(true); }}
         desktopCollapsed={desktopSidebarCollapsed}
         onToggleDesktopCollapse={() => setDesktopSidebarCollapsed(prev => !prev)}
       />
@@ -729,17 +745,6 @@ export function AppShell({ user }: AppShellProps) {
               <CheckCheck size={16} />
               <span className="hidden sm:inline text-xs font-medium">Routines</span>
             </button>
-            <button
-              onClick={() => {
-                learning.logAiPanelOpened({ source: 'manual', learn: true });
-                setAiOpen(true);
-              }}
-              className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-[var(--accent)] transition-colors hover:bg-[var(--accent-soft)]"
-              title="AI Assistant"
-            >
-              <Sparkles size={16} />
-              <span className="hidden sm:inline text-xs font-medium">AI</span>
-            </button>
             <ThemeSwitcher />
             <button
               onClick={handleSignOut}
@@ -752,7 +757,8 @@ export function AppShell({ user }: AppShellProps) {
           </div>
         </header>
 
-        <main className="relative flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <div className="relative flex min-h-0 flex-1">
+        <main className="relative min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           {(store.error || deadlineStore.error || canvasStore.error || gym.error) && (
             <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-[var(--text-primary)]">
               <p>{store.error || deadlineStore.error || canvasStore.error || gym.error}</p>
@@ -922,6 +928,88 @@ export function AppShell({ user }: AppShellProps) {
             />
           </Routes>
         </main>
+
+        {aiOpen && aiMode === 'sidebar' && (
+          <AIPanel
+            open={aiOpen}
+            mode={aiMode}
+            onModeChange={setAiMode}
+            onClose={() => setAiOpen(false)}
+            onOpenDataSettings={() => {
+              setAiOpen(false);
+              setProfileInitialTab('data');
+              setProfileOpen(true);
+            }}
+            userId={user.id}
+            tasks={store.tasks}
+            deadlines={deadlineStore.deadlines}
+            projects={store.projects}
+            plans={gym.plans}
+            dayTemplates={gym.dayTemplates}
+            exercises={gym.exercises}
+            dayExercises={gym.dayExercises}
+            calendarEvents={calendar.events}
+            calendarCalendars={calendar.calendars}
+            selectedCalendarId={calendar.selectedCalendarId}
+            getCalendarEventsForRange={calendar.getEventsForRange}
+            onAddTask={handleAddTask}
+            onUpdateTask={handleUpdateTask}
+            onAddDeadline={handleAddDeadline}
+            onUpdateDeadline={handleUpdateDeadline}
+            onAddProject={handleAddProject}
+            onAddSubtask={handleAddSubtask}
+            onDeleteTask={handleDeleteTask}
+            onLinkTask={handleLinkTask}
+            onCreateCalendarEvent={handleCreateCalendarEvent}
+            onUpdateCalendarEvent={handleUpdateCalendarEvent}
+            onDeleteCalendarEvent={handleDeleteCalendarEvent}
+            aiLearningEnabled={learning.aiLearningEnabled}
+            onAiLearningEnabledChange={learning.setAiLearningEnabled}
+            scoreStudySlot={learning.scoreStudySlot}
+            behaviorSummary={learning.behaviorInsights.summary}
+            draftPrompt={queuedAiPrompt}
+            onDraftPromptConsumed={() => setQueuedAiPrompt(null)}
+            onAiPromptSubmitted={(prompt, hasImages) => learning.logAiPromptSubmitted({
+              prompt,
+              hasImages,
+              options: { source: 'manual', learn: true },
+            })}
+            onAiActionsApplied={(blockType, appliedCount, skippedCount) => learning.logAiActionsApplied({
+              blockType,
+              appliedCount,
+              skippedCount,
+              options: { source: 'manual', learn: true },
+            })}
+            onAiSuggestionAccepted={(blockType, actionCount) => learning.logAiSuggestionAccepted({
+              blockType,
+              actionCount,
+              options: { source: 'manual', learn: true },
+            })}
+            onAiSuggestionEdited={(blockType, actionCount) => learning.logAiSuggestionEdited({
+              blockType,
+              actionCount,
+              options: { source: 'manual', learn: true },
+            })}
+            onAiSuggestionRejected={(blockTypes, actionCount) => learning.logAiSuggestionRejected({
+              blockTypes,
+              actionCount,
+              options: { source: 'manual', learn: true },
+            })}
+            onStudyBlockLinkedTarget={(params) => learning.logStudyBlockLinkedTarget({
+              ...params,
+              options: { source: 'manual', learn: true },
+            })}
+            onStudySlotCandidatesLogged={(params) => learning.logStudySlotCandidates({
+              ...params,
+              options: { source: 'manual', learn: true },
+            })}
+            habits={habits.habits}
+            onAddHabit={handleAddHabit}
+            onToggleHabit={handleToggleHabit}
+            onDeleteHabit={handleDeleteHabit}
+          />
+        )}
+        </div>
       </div>
 
       {searchOpen && (
@@ -951,6 +1039,7 @@ export function AppShell({ user }: AppShellProps) {
         user={user}
         open={profileOpen}
         onClose={() => setProfileOpen(false)}
+        initialTab={profileInitialTab}
         tasks={store.tasks}
         deadlines={deadlineStore.deadlines}
         projects={store.projects}
@@ -958,11 +1047,26 @@ export function AppShell({ user }: AppShellProps) {
         proactivePrompts={learning.behaviorInsights.proactivePrompts}
         aiLearningEnabled={learning.aiLearningEnabled}
         onAiLearningEnabledChange={learning.setAiLearningEnabled}
-        onSeedLearningProfile={learning.seedLearningProfile}
+        onOpenPreferenceSetup={() => {
+          setProfileOpen(false);
+          setPreferenceSetupOpen(true);
+        }}
         onClearBehaviorHistory={learning.clearBehaviorHistory}
         onUseBehaviorPrompt={openAiWithPrompt}
         onUserUpdated={handleUserUpdated}
       />
+
+      {preferenceSetupOpen && (
+        <AuthOnboarding
+          user={user}
+          mode="preferences"
+          onCancel={() => setPreferenceSetupOpen(false)}
+          onComplete={async () => {
+            await handleUserUpdated();
+            setPreferenceSetupOpen(false);
+          }}
+        />
+      )}
 
       {habitsOpen && (
         <HabitsPanel
@@ -976,77 +1080,97 @@ export function AppShell({ user }: AppShellProps) {
         />
       )}
 
-      <AIPanel
-        open={aiOpen}
-        onClose={() => setAiOpen(false)}
-        userId={user.id}
-        tasks={store.tasks}
-        deadlines={deadlineStore.deadlines}
-        projects={store.projects}
-        plans={gym.plans}
-        dayTemplates={gym.dayTemplates}
-        exercises={gym.exercises}
-        dayExercises={gym.dayExercises}
-        calendarEvents={calendar.events}
-        calendarCalendars={calendar.calendars}
-        selectedCalendarId={calendar.selectedCalendarId}
-        getCalendarEventsForRange={calendar.getEventsForRange}
-        onAddTask={handleAddTask}
-        onUpdateTask={handleUpdateTask}
-        onAddDeadline={handleAddDeadline}
-        onUpdateDeadline={handleUpdateDeadline}
-        onAddProject={handleAddProject}
-        onAddSubtask={handleAddSubtask}
-        onDeleteTask={handleDeleteTask}
-        onLinkTask={handleLinkTask}
-        onCreateCalendarEvent={handleCreateCalendarEvent}
-        onUpdateCalendarEvent={handleUpdateCalendarEvent}
-        onDeleteCalendarEvent={handleDeleteCalendarEvent}
-        aiLearningEnabled={learning.aiLearningEnabled}
-        onAiLearningEnabledChange={learning.setAiLearningEnabled}
-        scoreStudySlot={learning.scoreStudySlot}
-        behaviorSummary={learning.behaviorInsights.summary}
-        draftPrompt={queuedAiPrompt}
-        onDraftPromptConsumed={() => setQueuedAiPrompt(null)}
-        onAiPromptSubmitted={(prompt, hasImages) => learning.logAiPromptSubmitted({
-          prompt,
-          hasImages,
-          options: { source: 'manual', learn: true },
-        })}
-        onAiActionsApplied={(blockType, appliedCount, skippedCount) => learning.logAiActionsApplied({
-          blockType,
-          appliedCount,
-          skippedCount,
-          options: { source: 'manual', learn: true },
-        })}
-        onAiSuggestionAccepted={(blockType, actionCount) => learning.logAiSuggestionAccepted({
-          blockType,
-          actionCount,
-          options: { source: 'manual', learn: true },
-        })}
-        onAiSuggestionEdited={(blockType, actionCount) => learning.logAiSuggestionEdited({
-          blockType,
-          actionCount,
-          options: { source: 'manual', learn: true },
-        })}
-        onAiSuggestionRejected={(blockTypes, actionCount) => learning.logAiSuggestionRejected({
-          blockTypes,
-          actionCount,
-          options: { source: 'manual', learn: true },
-        })}
-        onStudyBlockLinkedTarget={(params) => learning.logStudyBlockLinkedTarget({
-          ...params,
-          options: { source: 'manual', learn: true },
-        })}
-        onStudySlotCandidatesLogged={(params) => learning.logStudySlotCandidates({
-          ...params,
-          options: { source: 'manual', learn: true },
-        })}
-        habits={habits.habits}
-        onAddHabit={handleAddHabit}
-        onToggleHabit={handleToggleHabit}
-        onDeleteHabit={handleDeleteHabit}
-      />
+      {!aiOpen && (
+        <button
+          type="button"
+          onClick={openAiPanel}
+          className="fixed bottom-6 right-6 z-[55] flex h-14 w-14 items-center justify-center rounded-full border border-[var(--border-soft)] bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-[0_10px_30px_rgba(15,23,42,0.12)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(15,23,42,0.16)]"
+          title="AI Assistant"
+        >
+          <Sparkles size={18} />
+        </button>
+      )}
+
+      {aiOpen && aiMode === 'floating' && (
+        <AIPanel
+          open={aiOpen}
+          mode={aiMode}
+          onModeChange={setAiMode}
+          onClose={() => setAiOpen(false)}
+          onOpenDataSettings={() => {
+            setAiOpen(false);
+            setProfileInitialTab('data');
+            setProfileOpen(true);
+          }}
+          userId={user.id}
+          tasks={store.tasks}
+          deadlines={deadlineStore.deadlines}
+          projects={store.projects}
+          plans={gym.plans}
+          dayTemplates={gym.dayTemplates}
+          exercises={gym.exercises}
+          dayExercises={gym.dayExercises}
+          calendarEvents={calendar.events}
+          calendarCalendars={calendar.calendars}
+          selectedCalendarId={calendar.selectedCalendarId}
+          getCalendarEventsForRange={calendar.getEventsForRange}
+          onAddTask={handleAddTask}
+          onUpdateTask={handleUpdateTask}
+          onAddDeadline={handleAddDeadline}
+          onUpdateDeadline={handleUpdateDeadline}
+          onAddProject={handleAddProject}
+          onAddSubtask={handleAddSubtask}
+          onDeleteTask={handleDeleteTask}
+          onLinkTask={handleLinkTask}
+          onCreateCalendarEvent={handleCreateCalendarEvent}
+          onUpdateCalendarEvent={handleUpdateCalendarEvent}
+          onDeleteCalendarEvent={handleDeleteCalendarEvent}
+          aiLearningEnabled={learning.aiLearningEnabled}
+          onAiLearningEnabledChange={learning.setAiLearningEnabled}
+          scoreStudySlot={learning.scoreStudySlot}
+          behaviorSummary={learning.behaviorInsights.summary}
+          draftPrompt={queuedAiPrompt}
+          onDraftPromptConsumed={() => setQueuedAiPrompt(null)}
+          onAiPromptSubmitted={(prompt, hasImages) => learning.logAiPromptSubmitted({
+            prompt,
+            hasImages,
+            options: { source: 'manual', learn: true },
+          })}
+          onAiActionsApplied={(blockType, appliedCount, skippedCount) => learning.logAiActionsApplied({
+            blockType,
+            appliedCount,
+            skippedCount,
+            options: { source: 'manual', learn: true },
+          })}
+          onAiSuggestionAccepted={(blockType, actionCount) => learning.logAiSuggestionAccepted({
+            blockType,
+            actionCount,
+            options: { source: 'manual', learn: true },
+          })}
+          onAiSuggestionEdited={(blockType, actionCount) => learning.logAiSuggestionEdited({
+            blockType,
+            actionCount,
+            options: { source: 'manual', learn: true },
+          })}
+          onAiSuggestionRejected={(blockTypes, actionCount) => learning.logAiSuggestionRejected({
+            blockTypes,
+            actionCount,
+            options: { source: 'manual', learn: true },
+          })}
+          onStudyBlockLinkedTarget={(params) => learning.logStudyBlockLinkedTarget({
+            ...params,
+            options: { source: 'manual', learn: true },
+          })}
+          onStudySlotCandidatesLogged={(params) => learning.logStudySlotCandidates({
+            ...params,
+            options: { source: 'manual', learn: true },
+          })}
+          habits={habits.habits}
+          onAddHabit={handleAddHabit}
+          onToggleHabit={handleToggleHabit}
+          onDeleteHabit={handleDeleteHabit}
+        />
+      )}
 
       <div className="pointer-events-none fixed right-4 top-20 z-[80] flex w-full max-w-sm flex-col gap-2 sm:right-6">
         {toasts.map(toast => (

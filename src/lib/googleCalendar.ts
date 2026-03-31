@@ -14,6 +14,7 @@ declare global {
       accounts: {
         oauth2: {
           initTokenClient: (config: GoogleTokenClientConfig) => GoogleTokenClient;
+          initCodeClient: (config: GoogleCodeClientConfig) => GoogleCodeClient;
           revoke: (token: string, callback?: () => void) => void;
         };
       };
@@ -39,6 +40,28 @@ interface GoogleTokenClientConfig {
 
 interface GoogleTokenClient {
   requestAccessToken: (options?: { prompt?: string }) => void;
+}
+
+export interface GoogleCodeResponse {
+  code?: string;
+  error?: string;
+  scope?: string;
+}
+
+interface GoogleCodeClientConfig {
+  client_id: string;
+  scope: string;
+  callback: (response: GoogleCodeResponse) => void;
+  error_callback?: (error: { type: string }) => void;
+  ux_mode?: 'popup' | 'redirect';
+  redirect_uri?: string;
+  state?: string;
+  select_account?: boolean;
+  include_granted_scopes?: boolean;
+}
+
+interface GoogleCodeClient {
+  requestCode: () => void;
 }
 
 let googleScriptPromise: Promise<void> | null = null;

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Camera, Check, AlertCircle, Download, Eye, EyeOff, Mail, Lock, User as UserIcon, Calendar, Sparkles, Trash2, Moon, Sunrise, Sunset, Fingerprint, ZoomIn, ZoomOut, RotateCw, ChevronDown } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
@@ -7,12 +7,13 @@ import type { Area } from 'react-easy-crop';
 import { supabase } from '../lib/supabase';
 import { cn } from '../utils/cn';
 import { Task, Deadline, Project } from '../types';
-import type { BehaviorLearningSeedPreset } from '../hooks/useBehaviorLearning';
+import { getAPIKey, setAPIKey, removeAPIKey } from '../hooks/useAI';
 
 interface ProfileModalProps {
   user: User;
   open: boolean;
   onClose: () => void;
+  initialTab?: Tab;
   tasks: Task[];
   deadlines: Deadline[];
   projects: Project[];
@@ -20,7 +21,7 @@ interface ProfileModalProps {
   behaviorSummary: string;
   proactivePrompts: string[];
   onAiLearningEnabledChange: (enabled: boolean) => void;
-  onSeedLearningProfile: (preset: BehaviorLearningSeedPreset) => void;
+  onOpenPreferenceSetup: () => void;
   onClearBehaviorHistory: () => void;
   onUseBehaviorPrompt: (prompt: string) => void;
   onUserUpdated: () => void;
@@ -63,6 +64,7 @@ export function ProfileModal({
   user,
   open,
   onClose,
+  initialTab = 'profile',
   tasks,
   deadlines,
   projects,
@@ -70,14 +72,17 @@ export function ProfileModal({
   behaviorSummary,
   proactivePrompts,
   onAiLearningEnabledChange,
-  onSeedLearningProfile,
+  onOpenPreferenceSetup,
   onClearBehaviorHistory,
   onUseBehaviorPrompt,
   onUserUpdated,
 }: ProfileModalProps) {
-  const [tab, setTab] = useState<Tab>('profile');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [geminiKey, setGeminiKey] = useState('');
+  const [geminiKeyLoading, setGeminiKeyLoading] = useState(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
 
   // Profile fields
   const [displayName, setDisplayName] = useState(user.user_metadata?.full_name || '');
@@ -109,6 +114,25 @@ export function ProfileModal({
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 5000);
   };
+
+  useEffect(() => {
+    if (!open) return;
+    setTab(initialTab);
+  }, [initialTab, open]);
+
+  useEffect(() => {
+    if (!open || tab !== 'data') return;
+    let cancelled = false;
+    setGeminiKeyLoading(true);
+    void getAPIKey(user.id).then(key => {
+      if (cancelled) return;
+      setGeminiKey(key ?? '');
+      setGeminiKeyLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, tab, user.id]);
 
   // ── Save display name ──
   const handleSaveName = async () => {
@@ -283,6 +307,23 @@ export function ProfileModal({
     showMessage('success', 'Data exported successfully.');
   }, [tasks, deadlines, projects]);
 
+  const handleSaveGeminiKey = async () => {
+    setSaving(true);
+    clearMessage();
+    await setAPIKey(user.id, geminiKey.trim());
+    setSaving(false);
+    showMessage('success', 'AI key updated.');
+  };
+
+  const handleRemoveGeminiKey = async () => {
+    setSaving(true);
+    clearMessage();
+    await removeAPIKey(user.id);
+    setGeminiKey('');
+    setSaving(false);
+    showMessage('success', 'AI key removed.');
+  };
+
   if (!open) return null;
 
   const initials = (displayName || user.email?.split('@')[0] || 'U').charAt(0).toUpperCase();
@@ -297,13 +338,6 @@ export function ProfileModal({
     { id: 'profile', label: 'Profile' },
     { id: 'preferences', label: 'Preferences' },
     { id: 'data', label: 'Data' },
-  ];
-
-  // Toggle controls "AI learning" directly (on = learning from your actions)
-  const preferenceCards: { id: BehaviorLearningSeedPreset; title: string; subtitle: string; icon: typeof Sunrise }[] = [
-    { id: 'early-bird', title: 'Early bird', subtitle: '6:00 AM to 2:00 PM', icon: Sunrise },
-    { id: 'normal-grinder', title: 'Normal grinder', subtitle: '2:00 PM to 8:00 PM', icon: Sunset },
-    { id: 'night-owl', title: 'Night owl', subtitle: '8:00 PM to 4:00 AM', icon: Moon },
   ];
 
   // ── Crop overlay ──
@@ -712,37 +746,23 @@ export function ProfileModal({
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
                   <div className="mb-3 flex items-center gap-2">
                     <Sparkles size={14} className="text-[var(--accent)]" />
-                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">Study preferences</h3>
+                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">Customize your preferences</h3>
                   </div>
                   <p className="mb-3 text-xs text-[var(--text-faint)]">
-                    Pick a starting style and we’ll seed learning data without creating any real calendar events.
+                    Reopen the onboarding-style setup if you want to adjust how AI plans, paces, and schedules for you.
                   </p>
-                  <div className="space-y-2">
-                    {preferenceCards.map(card => {
-                      const Icon = card.icon;
-                      return (
-                        <button
-                          key={card.id}
-                          onClick={() => {
-                            onSeedLearningProfile(card.id);
-                            showMessage('success', `${card.title} preference applied.`);
-                          }}
-                          className="flex w-full items-center justify-between rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-3 text-left transition hover:border-[var(--accent)]/40"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[var(--accent)]">
-                              <Icon size={16} />
-                            </div>
-                            <div>
-                              <div className="text-sm font-medium text-[var(--text-primary)]">{card.title}</div>
-                              <div className="text-xs text-[var(--text-faint)]">{card.subtitle}</div>
-                            </div>
-                          </div>
-                          <span className="text-xs font-medium text-[var(--accent)]">Apply</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <button
+                    onClick={onOpenPreferenceSetup}
+                    className="flex w-full items-center justify-between rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-left transition hover:border-[var(--accent)]/40"
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-[var(--text-primary)]">Customize your preferences</div>
+                      <div className="text-xs text-[var(--text-faint)]">
+                        Re-answer the planning questions and update how AI personalizes your schedule.
+                      </div>
+                    </div>
+                    <span className="text-xs font-medium text-[var(--accent)]">Open</span>
+                  </button>
                 </div>
 
                 <div className="rounded-xl border border-rose-500/15 bg-rose-500/5 p-4">
@@ -768,6 +788,55 @@ export function ProfileModal({
 
             {tab === 'data' && (
               <div className="space-y-5">
+                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Sparkles size={14} className="text-[var(--accent)]" />
+                    <h3 className="text-sm font-semibold text-[var(--text-primary)]">AI Key</h3>
+                  </div>
+                  <p className="mb-3 text-sm text-[var(--text-muted)]">
+                    Keep your Gemini key here so the AI assistant can work without taking up panel space.
+                  </p>
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <input
+                        type={showGeminiKey ? 'text' : 'password'}
+                        value={geminiKey}
+                        onChange={e => setGeminiKey(e.target.value)}
+                        placeholder={geminiKeyLoading ? 'Loading key...' : 'Paste your Gemini API key'}
+                        disabled={geminiKeyLoading}
+                        className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 pr-11 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none disabled:opacity-50"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowGeminiKey(prev => !prev)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+                      >
+                        {showGeminiKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSaveGeminiKey}
+                        disabled={saving || !geminiKey.trim()}
+                        className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition disabled:opacity-50"
+                        style={{ backgroundColor: 'var(--accent-strong)' }}
+                      >
+                        Save key
+                      </button>
+                      <button
+                        onClick={handleRemoveGeminiKey}
+                        disabled={saving || !geminiKey.trim()}
+                        className="rounded-xl border border-rose-500/20 px-4 py-2.5 text-sm font-medium text-rose-400 transition hover:bg-rose-500/10 disabled:opacity-50"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-[var(--text-faint)]">
+                      Your key is stored in your account settings and cached locally for faster AI responses.
+                    </p>
+                  </div>
+                </div>
+
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
                   <h3 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">Your Data</h3>
                   <p className="mb-1 text-sm text-[var(--text-muted)]">

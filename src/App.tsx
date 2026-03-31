@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Session } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { AppBootScreen } from './components/AppBootScreen';
 import { AuthScreen } from './components/AuthScreen';
+import { AuthOnboarding } from './components/AuthOnboarding';
 import { AppShell } from './components/AppShell';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { supabase } from './lib/supabase';
@@ -12,12 +14,17 @@ function isRecoveryLink() {
   return hashParams.get('type') === 'recovery' || queryParams.get('type') === 'recovery';
 }
 
+function hasCompletedOnboarding(user: User | null | undefined) {
+  return Boolean(user?.user_metadata?.onboarding_completed);
+}
+
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRecoveryMode, setIsRecoveryMode] = useState(() => isRecoveryLink());
+  const [isEnteringApp, setIsEnteringApp] = useState(false);
 
   useEffect(() => {
     if (location.pathname !== '/canvas/callback') return;
@@ -41,10 +48,46 @@ export default function App() {
       return;
     }
 
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setIsLoading(false);
-    });
+    let cancelled = false;
+
+    const loadVerifiedSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      const cachedSession = data.session;
+
+      if (!cachedSession) {
+        if (!cancelled) {
+          setSession(null);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (!userError && userData.user) {
+        if (!cancelled) {
+          setSession(cachedSession);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+      if (!refreshError && refreshed.session) {
+        if (!cancelled) {
+          setSession(refreshed.session);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      await supabase.auth.signOut();
+      if (!cancelled) {
+        setSession(null);
+        setIsLoading(false);
+      }
+    };
+
+    void loadVerifiedSession();
 
     const {
       data: { subscription },
@@ -58,15 +101,35 @@ export default function App() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
+  useEffect(() => {
+    if (!session?.user || isRecoveryMode || !hasCompletedOnboarding(session.user)) {
+      setIsEnteringApp(false);
+      return;
+    }
+
+    setIsEnteringApp(true);
+    const timer = window.setTimeout(() => {
+      setIsEnteringApp(false);
+    }, 1100);
+
+    return () => window.clearTimeout(timer);
+  }, [isRecoveryMode, session?.user?.id, session?.user?.user_metadata?.onboarding_completed]);
+
+  const refreshSession = async () => {
+    if (!supabase) return;
+    await supabase.auth.refreshSession();
+    const { data } = await supabase.auth.getSession();
+    setSession(data.session);
+  };
+
   if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-app)] text-sm text-[var(--text-muted)]">
-        Loading TaskFlow...
-      </div>
-    );
+    return <AppBootScreen />;
   }
 
   if (isRecoveryMode) {
@@ -75,6 +138,14 @@ export default function App() {
 
   if (!session?.user) {
     return <AuthScreen />;
+  }
+
+  if (!hasCompletedOnboarding(session.user)) {
+    return <AuthOnboarding user={session.user} onComplete={refreshSession} />;
+  }
+
+  if (isEnteringApp) {
+    return <AppBootScreen />;
   }
 
   return <AppShell user={session.user} />;

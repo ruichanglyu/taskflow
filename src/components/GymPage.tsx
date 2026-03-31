@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import {
   Dumbbell, Plus, Play, Square, ChevronRight, ChevronDown,
   Trash2, Edit3, Check, X, Timer, RotateCcw, History,
-  Trophy, TrendingUp, GripVertical, Camera, CalendarDays,
+  Trophy, TrendingUp, GripVertical, Camera, CalendarDays, ImagePlus,
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, type DropResult, type DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 import type {
@@ -10,6 +10,7 @@ import type {
   WorkoutDayExercise, WorkoutSession, WorkoutExerciseLog, WorkoutSetLog,
 } from '../types';
 import { cn } from '../utils/cn';
+import { getAPIKey, getAPIKeyCached, type ImageAttachment } from '../hooks/useAI';
 
 type GymTab = 'plan' | 'workout' | 'history' | 'library';
 
@@ -27,6 +28,15 @@ interface ParsedWorkoutPlan {
       restSeconds: number;
     }[];
   }[];
+}
+
+function emptyParsedWorkoutPlan(): ParsedWorkoutPlan {
+  return {
+    name: '',
+    description: '',
+    daysPerWeek: 3,
+    days: [],
+  };
 }
 
 function normalizeWorkoutName(raw: string) {
@@ -53,12 +63,30 @@ function parseRestSeconds(text: string): number {
 }
 
 function parseExerciseLine(line: string) {
-  const trimmed = line.replace(/^[•-]\s*/, '').trim();
-  const match = trimmed.match(/^(.*?)\s+[—-]\s+(.+)$/);
-  if (!match) return null;
+  const trimmed = line.replace(/^[•\-*]\s*/, '').replace(/^\d+[.)]\s*/, '').trim();
+  if (!trimmed) return null;
 
-  const name = normalizeWorkoutName(match[1]);
-  const prescription = match[2].trim();
+  let name = '';
+  let prescription = '';
+
+  const dashMatch = trimmed.match(/^(.*?)\s+[—-]\s+(.+)$/);
+  const colonMatch = trimmed.match(/^(.*?):\s*(.+)$/);
+  const inlineSetRepMatch = trimmed.match(/^(.*?)(\d+\s*x\s*[\d,\s–-]+(?:AMRAP)?|AMRAP.*)$/i);
+
+  if (dashMatch) {
+    name = normalizeWorkoutName(dashMatch[1]);
+    prescription = dashMatch[2].trim();
+  } else if (colonMatch) {
+    name = normalizeWorkoutName(colonMatch[1]);
+    prescription = colonMatch[2].trim();
+  } else if (inlineSetRepMatch) {
+    name = normalizeWorkoutName(inlineSetRepMatch[1]);
+    prescription = inlineSetRepMatch[2].trim();
+  } else {
+    return null;
+  }
+
+  if (!name || !prescription) return null;
 
   const setRepMatch = prescription.match(/(\d+)\s*x\s*([\d,\s–-]+(?:AMRAP)?|AMRAP)/i);
   if (setRepMatch) {
@@ -90,6 +118,95 @@ function parseExerciseLine(line: string) {
   };
 }
 
+async function fileToImageAttachment(file: File): Promise<ImageAttachment> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Could not read that image.'));
+    reader.readAsDataURL(file);
+  });
+
+  const [header, base64] = dataUrl.split(',');
+  const mimeType = header.match(/data:(.*?);/)?.[1] ?? file.type ?? 'image/png';
+  return { base64, mimeType, preview: dataUrl };
+}
+
+async function extractWorkoutPlanFromImage(userId: string, image: ImageAttachment): Promise<string> {
+  const key = getAPIKeyCached(userId) ?? await getAPIKey(userId);
+  if (!key) {
+    throw new Error('Add your AI key first in Profile → Data before importing workout images.');
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+  const prompt = [
+    'You are extracting a workout plan from an image.',
+    'Read the routine and convert it into a clean plain-text format for app import.',
+    'Output only structured plain text in this shape:',
+    'Plan Title',
+    'WEEKLY SPLIT',
+    'Day 1 - Name',
+    '- Exercise - 4x8-10',
+    '- Exercise - 3x12',
+    '',
+    'Rules:',
+    '- Keep only the workout plan content.',
+    '- Use one DAY section per workout day you can identify.',
+    '- Normalize exercise lines to "- Name - sets x reps" when possible.',
+    '- If reps are unclear, keep the visible prescription text after the second dash.',
+    '- Do not output markdown fences or commentary.',
+  ].join('\n');
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inline_data: { mime_type: image.mimeType, data: image.base64 } },
+        ],
+      }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 4096,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Could not extract workout text from image (${response.status}). ${body.slice(0, 180)}`.trim());
+  }
+
+  const payload = await response.json();
+  const text = payload?.candidates?.[0]?.content?.parts
+    ?.map((part: { text?: string }) => part?.text ?? '')
+    .join('')
+    .trim();
+
+  if (!text) {
+    throw new Error('The image was read, but no workout text could be extracted.');
+  }
+
+  return text;
+}
+
+function isDayHeader(line: string) {
+  return /^DAY\s+\d+/i.test(line);
+}
+
+function extractDayName(header: string) {
+  const normalized = header.trim();
+  const explicitMatch = normalized.match(/^DAY\s+\d+\s*[—:-]\s*(.+)$/i);
+  if (explicitMatch) return explicitMatch[1].trim();
+
+  const implicitMatch = normalized.match(/^DAY\s+\d+\s+(.+)$/i);
+  if (implicitMatch) return implicitMatch[1].trim();
+
+  return normalized;
+}
+
 function parseWorkoutPlanText(raw: string): ParsedWorkoutPlan {
   const normalized = raw.replace(/\r/g, '').trim();
   if (!normalized) {
@@ -99,28 +216,25 @@ function parseWorkoutPlanText(raw: string): ParsedWorkoutPlan {
   const lines = normalized.split('\n').map(line => line.trim()).filter(Boolean);
   const name = lines[0];
   const splitIndex = lines.findIndex(line => line.toUpperCase().startsWith('WEEKLY SPLIT'));
-  if (splitIndex === -1) {
-    throw new Error('Could not find a WEEKLY SPLIT section.');
-  }
 
   const dayHeaderIndexes = lines
-    .map((line, index) => (/^DAY\s+\d+/i.test(line) ? index : -1))
+    .map((line, index) => (isDayHeader(line) ? index : -1))
     .filter(index => index >= 0);
 
   if (dayHeaderIndexes.length === 0) {
     throw new Error('Could not find any day sections.');
   }
 
-  const descriptionParts = lines.slice(1, splitIndex).filter(line => !/^GOAL:?$/i.test(line) && !/^[-–—]+$/.test(line));
-  const weeklySplitStart = splitIndex + 1;
+  const descriptionEnd = splitIndex === -1 ? dayHeaderIndexes[0] : splitIndex;
+  const descriptionParts = lines.slice(1, descriptionEnd).filter(line => !/^GOAL:?$/i.test(line) && !/^[-–—]+$/.test(line));
+  const weeklySplitStart = splitIndex === -1 ? dayHeaderIndexes[0] : splitIndex + 1;
   const weeklySplitEnd = dayHeaderIndexes[0];
   const weeklySplitLines = lines.slice(weeklySplitStart, weeklySplitEnd).filter(line => /^Day\s+\d+/i.test(line));
 
   const parsedDays = dayHeaderIndexes.map((startIndex, idx) => {
     const endIndex = dayHeaderIndexes[idx + 1] ?? lines.length;
     const header = lines[startIndex];
-    const titleMatch = header.match(/^DAY\s+\d+\s+[—-]\s+(.+)$/i);
-    const dayName = titleMatch ? titleMatch[1].trim() : header;
+    const dayName = extractDayName(header);
     const sectionLines = lines.slice(startIndex + 1, endIndex).filter(line => !/^[-–—]+$/.test(line));
 
     let defaultRest = 90;
@@ -180,6 +294,7 @@ function parseWorkoutPlanText(raw: string): ParsedWorkoutPlan {
 }
 
 interface GymPageProps {
+  userId: string;
   plans: WorkoutPlan[];
   dayTemplates: WorkoutDayTemplate[];
   exercises: Exercise[];
@@ -292,6 +407,9 @@ function PlanTab(props: GymPageProps) {
   const [importText, setImportText] = useState('');
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [importPreview, setImportPreview] = useState<ParsedWorkoutPlan | null>(null);
+  const [isExtractingImage, setIsExtractingImage] = useState(false);
+  const [importImagePreview, setImportImagePreview] = useState<string | null>(null);
   const [pendingDeleteDay, setPendingDeleteDay] = useState<WorkoutDayTemplate | null>(null);
 
   // Wizard modal state
@@ -328,6 +446,12 @@ function PlanTab(props: GymPageProps) {
       if (wizExImagePreview) URL.revokeObjectURL(wizExImagePreview);
     };
   }, [wizExImagePreview]);
+
+  useEffect(() => {
+    return () => {
+      if (importImagePreview) URL.revokeObjectURL(importImagePreview);
+    };
+  }, [importImagePreview]);
 
   const selectedPlan = selectedPlanId
     ? plans.find(plan => plan.id === selectedPlanId) ?? null
@@ -391,7 +515,7 @@ function PlanTab(props: GymPageProps) {
     setIsImporting(true);
 
     try {
-      const parsed = parseWorkoutPlanText(importText);
+      const parsed = importPreview ?? parseWorkoutPlanText(importText);
       const planId = await props.onAddPlan(parsed.name, parsed.description, parsed.daysPerWeek);
 
       if (!planId) {
@@ -428,11 +552,126 @@ function PlanTab(props: GymPageProps) {
 
       setSelectedPlanId(planId);
       setImportText('');
+      setImportPreview(null);
       setShowImportPlan(false);
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Could not import that workout plan.');
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  const handlePreviewImportPlan = () => {
+    setImportError(null);
+    try {
+      const parsed = parseWorkoutPlanText(importText);
+      setImportPreview(parsed);
+    } catch (err) {
+      setImportPreview(null);
+      setImportError(err instanceof Error ? err.message : 'Could not preview that workout plan.');
+    }
+  };
+
+  const resetImportPlanState = () => {
+    setShowImportPlan(false);
+    setImportText('');
+    setImportError(null);
+    setImportPreview(null);
+    if (importImagePreview) URL.revokeObjectURL(importImagePreview);
+    setImportImagePreview(null);
+    setIsExtractingImage(false);
+  };
+
+  const updateImportDay = (dayIndex: number, updates: Partial<ParsedWorkoutPlan['days'][number]>) => {
+    setImportPreview(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        days: prev.days.map((day, index) => (index === dayIndex ? { ...day, ...updates } : day)),
+      };
+    });
+  };
+
+  const updateImportExercise = (
+    dayIndex: number,
+    exerciseIndex: number,
+    updates: Partial<ParsedWorkoutPlan['days'][number]['exercises'][number]>,
+  ) => {
+    setImportPreview(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        days: prev.days.map((day, index) => {
+          if (index !== dayIndex) return day;
+          return {
+            ...day,
+            exercises: day.exercises.map((exercise, innerIndex) => (
+              innerIndex === exerciseIndex ? { ...exercise, ...updates } : exercise
+            )),
+          };
+        }),
+      };
+    });
+  };
+
+  const addPreviewExercise = (dayIndex: number) => {
+    setImportPreview(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        days: prev.days.map((day, index) => (
+          index === dayIndex
+            ? {
+                ...day,
+                exercises: [
+                  ...day.exercises,
+                  { name: '', targetSets: 3, targetReps: '8-12', restSeconds: 90 },
+                ],
+              }
+            : day
+        )),
+      };
+    });
+  };
+
+  const removePreviewExercise = (dayIndex: number, exerciseIndex: number) => {
+    setImportPreview(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        days: prev.days.map((day, index) => (
+          index === dayIndex
+            ? { ...day, exercises: day.exercises.filter((_, innerIndex) => innerIndex !== exerciseIndex) }
+            : day
+        )),
+      };
+    });
+  };
+
+  const handleImportImage = async (file: File | null | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setImportError('Please choose an image file for workout import.');
+      return;
+    }
+
+    setImportError(null);
+    setIsExtractingImage(true);
+
+    try {
+      const image = await fileToImageAttachment(file);
+      if (importImagePreview) URL.revokeObjectURL(importImagePreview);
+      setImportImagePreview(image.preview);
+
+      const extractedText = await extractWorkoutPlanFromImage(props.userId, image);
+      setImportText(extractedText);
+
+      const parsed = parseWorkoutPlanText(extractedText);
+      setImportPreview(parsed);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Could not extract that workout image.');
+    } finally {
+      setIsExtractingImage(false);
     }
   };
 
@@ -765,50 +1004,211 @@ function PlanTab(props: GymPageProps) {
       )}
 
       {showImportPlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={() => setShowImportPlan(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={resetImportPlanState}>
           <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-3 border-b border-[var(--border-soft)] px-4 py-4 sm:px-5">
               <div>
                 <h3 className="text-lg font-semibold text-[var(--text-primary)]">Import Workout Plan</h3>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">Paste a structured workout plan and TaskFlow will build the plan, days, and exercises for you.</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">Paste a workout plan, preview what TaskFlow understood, and fix anything before importing.</p>
               </div>
-              <button onClick={() => setShowImportPlan(false)} className="text-[var(--text-faint)] hover:text-[var(--text-primary)]">
+              <button onClick={resetImportPlanState} className="text-[var(--text-faint)] hover:text-[var(--text-primary)]">
                 <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-4 overflow-y-auto p-4 sm:p-5">
-              <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-xs text-[var(--text-muted)]">
-                Expected format: plan title, optional GOAL block, WEEKLY SPLIT, then sections like `DAY 1 — Shoulders`, with bullet exercises such as `- Barbell bench press — 4x6–10`.
+            <div className="grid gap-4 overflow-y-auto p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] sm:p-5">
+              <div className="space-y-4">
+                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-xs text-[var(--text-muted)]">
+                  Flexible format works best if it includes a title, day headers like `DAY 1 - Push`, and bullet exercises such as `- Incline dumbbell press — 4x8-10`. If parsing misses something, you can fix it in the preview.
+                </div>
+
+                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--text-primary)]">Import from image</div>
+                      <div className="mt-1 text-xs text-[var(--text-muted)]">Upload a screenshot or saved routine image and TaskFlow will convert it into editable text.</div>
+                    </div>
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border-soft)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]">
+                      <ImagePlus size={14} />
+                      {isExtractingImage ? 'Extracting...' : 'Upload Image'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={e => {
+                          void handleImportImage(e.target.files?.[0]);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  {importImagePreview && (
+                    <img
+                      src={importImagePreview}
+                      alt="Workout plan import preview"
+                      className="mt-3 max-h-40 rounded-xl border border-[var(--border-soft)] object-contain"
+                    />
+                  )}
+                </div>
+
+                <textarea
+                  value={importText}
+                  onChange={e => setImportText(e.target.value)}
+                  placeholder="Paste your workout plan here..."
+                  rows={18}
+                  className="w-full resize-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                />
+
+                {importError && (
+                  <div className="rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                    {importError}
+                  </div>
+                )}
               </div>
 
-              <textarea
-                value={importText}
-                onChange={e => setImportText(e.target.value)}
-                placeholder="Paste your workout plan here..."
-                rows={18}
-                className="w-full resize-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
-              />
-
-              {importError && (
-                <div className="rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
-                  {importError}
+              <div className="space-y-4">
+                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--text-primary)]">Preview</div>
+                      <div className="mt-1 text-xs text-[var(--text-muted)]">Review the parsed plan before importing it.</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handlePreviewImportPlan}
+                      disabled={!importText.trim() || isImporting}
+                      className="rounded-lg border border-[var(--border-soft)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Refresh Preview
+                    </button>
+                  </div>
                 </div>
-              )}
+
+                {!importPreview ? (
+                  <div className="rounded-xl border border-dashed border-[var(--border-soft)] bg-[var(--surface)] px-4 py-10 text-center text-sm text-[var(--text-muted)]">
+                    Paste a routine, then click <span className="font-medium text-[var(--text-primary)]">Refresh Preview</span>.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
+                      <label className="mb-1.5 block text-xs font-medium text-[var(--text-faint)]">Plan name</label>
+                      <input
+                        value={importPreview.name}
+                        onChange={e => setImportPreview(prev => (prev ? { ...prev, name: e.target.value } : emptyParsedWorkoutPlan()))}
+                        className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                      />
+                      <label className="mb-1.5 mt-4 block text-xs font-medium text-[var(--text-faint)]">Description</label>
+                      <textarea
+                        value={importPreview.description}
+                        onChange={e => setImportPreview(prev => (prev ? { ...prev, description: e.target.value } : emptyParsedWorkoutPlan()))}
+                        rows={4}
+                        className="w-full resize-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                      />
+                      <label className="mb-1.5 mt-4 block text-xs font-medium text-[var(--text-faint)]">Days per week</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={7}
+                        value={importPreview.daysPerWeek}
+                        onChange={e => setImportPreview(prev => (prev ? { ...prev, daysPerWeek: Math.min(7, Math.max(1, Number(e.target.value) || 1)) } : emptyParsedWorkoutPlan()))}
+                        className="w-24 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                      />
+                    </div>
+
+                    {importPreview.days.map((day, dayIndex) => (
+                      <div key={`${day.name}-${dayIndex}`} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
+                        <input
+                          value={day.name}
+                          onChange={e => updateImportDay(dayIndex, { name: e.target.value })}
+                          className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2.5 text-sm font-medium text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                        />
+                        <textarea
+                          value={day.notes}
+                          onChange={e => updateImportDay(dayIndex, { notes: e.target.value })}
+                          rows={2}
+                          placeholder="Optional day notes"
+                          className="mt-3 w-full resize-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                        />
+
+                        <div className="mt-4 space-y-2">
+                          {day.exercises.map((exercise, exerciseIndex) => (
+                            <div key={`${exercise.name}-${exerciseIndex}`} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  value={exercise.name}
+                                  onChange={e => updateImportExercise(dayIndex, exerciseIndex, { name: e.target.value })}
+                                  placeholder="Exercise name"
+                                  className="min-w-0 flex-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removePreviewExercise(dayIndex, exerciseIndex)}
+                                  className="rounded-lg border border-[var(--border-soft)] px-2.5 py-2 text-xs font-medium text-[var(--text-muted)] transition hover:border-rose-400/40 hover:text-rose-300"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                              <div className="mt-2 grid grid-cols-3 gap-2">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  value={exercise.targetSets}
+                                  onChange={e => updateImportExercise(dayIndex, exerciseIndex, { targetSets: Math.max(1, Number(e.target.value) || 1) })}
+                                  className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                                />
+                                <input
+                                  value={exercise.targetReps}
+                                  onChange={e => updateImportExercise(dayIndex, exerciseIndex, { targetReps: e.target.value })}
+                                  className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                                />
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={15}
+                                  value={exercise.restSeconds}
+                                  onChange={e => updateImportExercise(dayIndex, exerciseIndex, { restSeconds: Math.max(0, Number(e.target.value) || 0) })}
+                                  className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => addPreviewExercise(dayIndex)}
+                          className="mt-3 rounded-lg border border-[var(--border-soft)] px-3 py-2 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+                        >
+                          Add exercise
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex flex-col gap-3 border-t border-[var(--border-soft)] px-4 py-4 sm:flex-row sm:px-5">
               <button
                 type="button"
-                onClick={() => setShowImportPlan(false)}
+                onClick={resetImportPlanState}
                 className="flex-1 rounded-lg border border-[var(--border-soft)] py-2.5 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={handleImportPlan}
+                onClick={handlePreviewImportPlan}
                 disabled={!importText.trim() || isImporting}
+                className="flex-1 rounded-lg border border-[var(--border-soft)] py-2.5 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Preview
+              </button>
+              <button
+                type="button"
+                onClick={handleImportPlan}
+                disabled={!importPreview?.name.trim() || importPreview.days.length === 0 || isImporting}
                 className="flex-1 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] disabled:cursor-not-allowed disabled:opacity-40"
                 style={{ backgroundColor: 'var(--accent-strong)' }}
               >

@@ -2335,6 +2335,25 @@ function parseClockTime(value?: string) {
   return null;
 }
 
+/** Format a time string (e.g. "14:30", "2:30 PM") into pretty 12-hour format like "2:30 PM" */
+function formatTimePretty(value?: string): string | null {
+  const parsed = parseClockTime(value);
+  if (!parsed) return null;
+  const h = parsed.hours % 12 || 12;
+  const m = parsed.minutes.toString().padStart(2, '0');
+  const ampm = parsed.hours < 12 ? 'AM' : 'PM';
+  return m === '00' ? `${h} ${ampm}` : `${h}:${m} ${ampm}`;
+}
+
+/** Build a time range string like "2:30 PM – 4:00 PM" from start/end time values */
+function formatTimeRange(start?: string, end?: string): string {
+  const s = formatTimePretty(start);
+  const e = formatTimePretty(end);
+  if (s && e) return `${s} – ${e}`;
+  if (s) return s;
+  return '';
+}
+
 function toTwentyFourHourKey(value?: string) {
   const parsed = parseClockTime(value);
   if (!parsed) return '';
@@ -2897,17 +2916,21 @@ function maybeResolveCalendarUpdateConflict(
   payload: NewGoogleCalendarEvent,
   events: GoogleCalendarEvent[],
   existingEvent: GoogleCalendarEvent,
-  calendarSummary?: string,
-  scoreStudySlot?: (dateKey: string, startMinutes: number, durationMinutes: number) => number,
+  _calendarSummary?: string,
+  _scoreStudySlot?: (dateKey: string, startMinutes: number, durationMinutes: number) => number,
 ) {
-  const remainingEvents = events.filter(event => !(event.id === existingEvent.id && event.calendarId === existingEvent.calendarId));
-  return maybeResolveCalendarCreateConflict(
-    row,
+  // For updates, always respect the exact time the AI specified.
+  // The user and AI already agreed on the time — don't silently reschedule.
+  const timedDetails = getTimedPayloadDetails(payload);
+  return {
     payload,
-    remainingEvents,
-    calendarSummary,
-    scoreStudySlot,
-  );
+    adjusted: false,
+    dateKey: timedDetails?.dateKey ?? null,
+    requestedStartMinutes: timedDetails?.startMinutes ?? null,
+    durationMinutes: timedDetails?.durationMinutes ?? null,
+    selectedStartMinutes: timedDetails?.startMinutes ?? null,
+    candidates: [],
+  } as SlotResolutionResult;
 }
 
 function buildSyntheticCalendarEvent(
@@ -3101,7 +3124,24 @@ function resolvePreferredCalendarCandidates(
       return matches;
     }
     if (matches.length > 1) {
-      return matches;
+      // Multiple matches at this strategy level — don't give up yet.
+      // If a stricter strategy (with date+start) found 0 matches but a
+      // looser one found multiple, try to pick the closest match by date.
+      if (row.dueDate) {
+        const onDate = matches.filter(e => getEventDateKey(e) === row.dueDate?.trim());
+        if (onDate.length === 1) return onDate;
+      }
+      // If there's a start time, try to narrow by closest start time
+      if (row.startTime) {
+        const targetStart = toTwentyFourHourKey(row.startTime);
+        if (targetStart) {
+          const withStart = matches.filter(e => getEventStartKey(e) === targetStart);
+          if (withStart.length === 1) return withStart;
+        }
+      }
+      // Still ambiguous — return the most recently updated / first match on the target date
+      lastMatches = matches;
+      continue;
     }
     lastMatches = matches;
   }
@@ -3426,6 +3466,23 @@ function MessageBubble({
   // Ensure no undefined/null segments
   segments = segments.filter((s): s is Segment => s != null && typeof s === 'object' && 'type' in s);
 
+  // While streaming, strip any trailing incomplete import/csv code block from the last text segment
+  // so the raw fenced block doesn't flash before the closing ``` arrives.
+  if (isStreaming && segments.length > 0) {
+    const last = segments[segments.length - 1];
+    if (last.type === 'text' && last.content) {
+      const partialFence = last.content.search(/```(?:import:[^\n]*|csv)\n[\s\S]*$/);
+      if (partialFence !== -1) {
+        const trimmed = last.content.slice(0, partialFence).trim();
+        if (trimmed) {
+          segments[segments.length - 1] = { type: 'text', content: trimmed };
+        } else {
+          segments.pop();
+        }
+      }
+    }
+  }
+
   return (
     <div className="flex justify-start">
       <div className="max-w-[92%]">
@@ -3557,7 +3614,7 @@ function ActionBundleCard({
   const [results, setResults] = useState<Record<string, number>>({});
   const frozenDeleteGroupsRef = useRef<{ label: string; resolvedTitle: string; valid: boolean }[] | null>(null);
   const frozenCalendarGroupsRef = useRef<{
-    creates: { label: string; valid: boolean }[];
+    creates: { label: string; valid: boolean; mode: 'create' | 'update' }[];
     updates: { label: string; valid: boolean; reason: string }[];
     deletes: { label: string; valid: boolean; reason: string }[];
     deleteTargetsByKey: Record<string, GoogleCalendarEvent[]>;
@@ -3725,8 +3782,9 @@ function ActionBundleCard({
               payload,
             )
           : null;
+        const timeRange = formatTimeRange(row.startTime, row.endTime);
         return {
-          label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${row.dueDate ? ` · ${row.dueDate}` : ''}`,
+          label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${row.dueDate ? ` · ${row.dueDate}` : ''}${timeRange ? ` · ${timeRange}` : ''}`,
           valid: Boolean(payload),
           mode: replacementMatch ? 'update' as const : 'create' as const,
         };
@@ -3737,8 +3795,9 @@ function ActionBundleCard({
       .flatMap(block => block.rows.map(row => {
         const matches = resolvePreferredCalendarCandidates(calendarEvents, calendarCalendars, row);
         const valid = matches.length === 1 && Boolean(buildCalendarEventPayload(row, 'update'));
+        const newTimeRange = formatTimeRange(row.newStartTime, row.newEndTime);
         return {
-          label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}`,
+          label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${newTimeRange ? ` · → ${newTimeRange}` : ''}`,
           valid,
           reason: valid
             ? ''
@@ -3765,8 +3824,9 @@ function ActionBundleCard({
 
           const matches = resolveCalendarDeleteCandidates(calendarEvents, calendarCalendars, selectedCalendarId, row, recentCalendarTargets);
           deleteTargetsByKey[deleteRequestKey] = matches;
+          const delTime = formatTimePretty(row.startTime);
           return [{
-            label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${matches.length > 1 ? ` · ${matches.length} matches` : ''}`,
+            label: `${row.title}${row.calendar ? ` · ${row.calendar}` : ''}${row.dueDate ? ` · ${row.dueDate}` : ''}${delTime ? ` · ${delTime}` : ''}${matches.length > 1 ? ` · ${matches.length} matches` : ''}`,
             valid: matches.length > 0,
             reason: matches.length === 0 ? 'event not found' : '',
           }];

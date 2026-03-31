@@ -891,6 +891,7 @@ export function AppShell({ user }: AppShellProps) {
               path="/gym"
               element={
                 <GymPage
+                  userId={user.id}
                   plans={gym.plans}
                   dayTemplates={gym.dayTemplates}
                   exercises={gym.exercises}

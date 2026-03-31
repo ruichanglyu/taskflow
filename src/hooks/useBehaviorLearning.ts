@@ -503,6 +503,14 @@ function buildScoreMaps(events: BehaviorLearningEvent[], appEvents: AppBehaviorE
   return { weekdayScores, overallScores };
 }
 
+function shouldTreatAppEventAsLearningSignal(entity: AppBehaviorEntity, action: string) {
+  if (entity === 'ai' && (action === 'view-open' || action === 'panel-open')) {
+    return false;
+  }
+
+  return true;
+}
+
 function choosePreferredStartMinute(
   events: BehaviorLearningEvent[],
   appEvents: AppBehaviorEvent[],
@@ -954,6 +962,7 @@ export function useBehaviorLearning(userId: string) {
   const [events, setEvents] = useState<BehaviorLearningEvent[]>(() => loadEventsFromStorage(userId));
   const [appEvents, setAppEvents] = useState<AppBehaviorEvent[]>(() => loadAppEventsFromStorage(userId));
   const [aiTestingMode, setAiTestingModeState] = useState<boolean>(() => loadAiTestingMode(userId));
+  const hydrationVersionRef = useRef(0);
 
   useEffect(() => {
     const handleUpdate = (event: Event) => {
@@ -972,6 +981,7 @@ export function useBehaviorLearning(userId: string) {
     if (!userId || !supabase) return;
 
     let cancelled = false;
+    const hydrateVersion = ++hydrationVersionRef.current;
 
     async function hydrateFromSupabase() {
       const localEvents = loadEventsFromStorage(userId);
@@ -1006,7 +1016,7 @@ export function useBehaviorLearning(userId: string) {
         ]);
 
         if (settingsError || scheduleError || appError) {
-          if (cancelled) return;
+          if (cancelled || hydrateVersion !== hydrationVersionRef.current) return;
           setEvents(localEvents);
           setAppEvents(localAppEvents);
           setAiTestingModeState(localTestingMode);
@@ -1063,7 +1073,7 @@ export function useBehaviorLearning(userId: string) {
           ]);
 
           if (settingsError || scheduleError || appError) {
-            if (cancelled) return;
+            if (cancelled || hydrateVersion !== hydrationVersionRef.current) return;
             setEvents(localEvents);
             setAppEvents(localAppEvents);
             setAiTestingModeState(localTestingMode);
@@ -1071,7 +1081,7 @@ export function useBehaviorLearning(userId: string) {
           }
         }
 
-        if (cancelled) return;
+        if (cancelled || hydrateVersion !== hydrationVersionRef.current) return;
 
         const nextEvents = (scheduleRows ?? []).map(mapScheduleRowToEvent).reverse();
         const nextAppEvents = (appRows ?? []).map(mapAppRowToEvent).reverse();
@@ -1089,7 +1099,7 @@ export function useBehaviorLearning(userId: string) {
         saveAiTestingMode(userId, nextTestingMode);
         saveHasMigrated(userId, true);
       } catch {
-        if (cancelled) return;
+        if (cancelled || hydrateVersion !== hydrationVersionRef.current) return;
         setEvents(localEvents);
         setAppEvents(localAppEvents);
         setAiTestingModeState(localTestingMode);
@@ -1161,6 +1171,7 @@ export function useBehaviorLearning(userId: string) {
   }, [aiTestingMode]);
 
   const clearBehaviorHistory = useCallback(() => {
+    hydrationVersionRef.current += 1;
     setEvents([]);
     setAppEvents([]);
     clearBehaviorStorage(userId);
@@ -1248,7 +1259,7 @@ export function useBehaviorLearning(userId: string) {
     options?: BehaviorLearningActionOptions,
     detail?: string | null,
   ) => {
-    const countsForLearning = shouldCountForLearning(options);
+    const countsForLearning = shouldCountForLearning(options) && shouldTreatAppEventAsLearningSignal(entity, action);
     persistAppEvent({
       id: crypto.randomUUID(),
       source: options?.source ?? 'manual',
@@ -1786,6 +1797,23 @@ export function useBehaviorLearning(userId: string) {
     recordAppAction('project', 'create', params.name, params.options, params.description?.trim() || null);
   }, [recordAppAction]);
 
+  const logProjectUpdated = useCallback((params: {
+    name: string;
+    description?: string;
+    color?: string;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'project',
+      'update',
+      params.name,
+      params.options,
+      [params.description?.trim() || null, params.color ? `color:${params.color}` : null]
+        .filter(Boolean)
+        .join(' · ') || null,
+    );
+  }, [recordAppAction]);
+
   const logProjectDeleted = useCallback((params: {
     name: string;
     description?: string;
@@ -2052,6 +2080,7 @@ export function useBehaviorLearning(userId: string) {
     logDeadlineUpdated,
     logDeadlineDeleted,
     logProjectCreated,
+    logProjectUpdated,
     logProjectDeleted,
     logDeadlineLinked,
     logDeadlineUnlinked,

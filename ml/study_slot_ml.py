@@ -9,6 +9,10 @@ import pandas as pd
 
 COURSE_PATTERN = re.compile(r"\b([A-Z]{2,}\s\d{4})\b")
 EXAM_PATTERN = re.compile(r"\b(final exam|exam\s+\d+|demo\s+\d+)\b", re.IGNORECASE)
+IGNORED_APP_EVENT_PAIRS = {
+    ("ai", "view-open"),
+    ("ai", "panel-open"),
+}
 
 
 def cyclical_components(minutes: float) -> tuple[float, float]:
@@ -220,6 +224,15 @@ def load_app_behavior_events(path: str | None) -> pd.DataFrame:
     raw["title"] = raw.get("title", "").fillna("").astype(str)
     raw["detail"] = raw.get("detail", "").fillna("").astype(str)
     raw["action"] = raw.get("action", "").fillna("").astype(str)
+    raw["entity"] = raw.get("entity", "").fillna("").astype(str)
+
+    if not raw.empty:
+        ignored_mask = raw.apply(
+            lambda row: (str(row.get("entity", "")).strip(), str(row.get("action", "")).strip()) in IGNORED_APP_EVENT_PAIRS,
+            axis=1,
+        )
+        raw = raw[~ignored_mask].copy()
+
     return raw.dropna(subset=["created_at"]).sort_values("created_at").reset_index(drop=True)
 
 

@@ -3,7 +3,27 @@
 This folder is the first ML foundation for TaskFlow's behavior-learning system.
 
 It trains a lightweight classifier on exported `behavior_learning_schedule_events`
-data from Supabase and predicts whether a study slot is likely to be kept.
+data from Supabase, optionally enriches those examples with selected
+`behavior_learning_app_events`, and predicts whether a study slot is likely to be kept.
+
+## V1 dataset contract
+
+The first model is intentionally narrow:
+
+- inputs come primarily from `behavior_learning_schedule_events`
+- labels come from study scheduling behavior:
+  - `create` -> positive
+  - `delete` -> negative
+  - `reschedule` -> previous slot negative, new slot positive
+- optional app-event context can enrich examples
+
+For app events, the training pipeline keeps only high-signal rows that survived
+the `counts_for_learning` filter. Navigation noise is explicitly ignored:
+
+- `ai:view-open`
+- `ai:panel-open`
+
+That means the first model focuses on slot quality, not generic app navigation.
 
 ## What it does
 
@@ -59,6 +79,9 @@ python3 -m venv .venv-ml
 source .venv-ml/bin/activate
 pip install -r ml/requirements.txt
 ```
+
+Optional app-event enrichment uses `public.behavior_learning_app_events`, but only
+rows that count for learning and are relevant to study-slot outcomes are retained.
 
 ## Train the baseline model
 
@@ -142,9 +165,10 @@ That gives us a clean answer to:
 1. Keep `Testing mode` on while experimenting in the app.
 2. Let real behavior accumulate.
 3. Export `behavior_learning_schedule_events`.
-4. Train the model.
-5. Compare its performance to the current heuristic scheduler.
-6. Only integrate the model into slot ranking if it clearly helps.
+4. Optionally export `behavior_learning_app_events`.
+5. Train the model.
+6. Compare its performance to the current heuristic scheduler.
+7. Only integrate the model into slot ranking if it clearly helps.
 
 ## Next steps after this baseline
 

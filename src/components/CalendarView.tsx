@@ -125,6 +125,93 @@ function getCalendarEventRenderKey(event: GoogleCalendarEvent) {
   return `${event.calendarId || ''}:${event.id || ''}:${startValue}`;
 }
 
+/**
+ * Google Calendar–style overlap layout.
+ *
+ * Groups overlapping events into clusters, assigns each event a column index
+ * within its cluster, and returns layout info (column, totalColumns) so the
+ * renderer can set percentage-based `left` and `width`.
+ */
+interface EventLayout {
+  column: number;
+  totalColumns: number;
+}
+
+function computeOverlapLayout(
+  events: GoogleCalendarEvent[],
+  getStart: (e: GoogleCalendarEvent) => number | null,
+  getEnd: (e: GoogleCalendarEvent) => number | null,
+): Map<GoogleCalendarEvent, EventLayout> {
+  const result = new Map<GoogleCalendarEvent, EventLayout>();
+  if (events.length === 0) return result;
+
+  // Build a list of events with resolved start/end minutes.
+  const items = events
+    .map(event => ({
+      event,
+      start: getStart(event),
+      end: getEnd(event),
+    }))
+    .filter((item): item is { event: GoogleCalendarEvent; start: number; end: number } =>
+      item.start !== null && item.end !== null,
+    )
+    // Sort by start time, then by longest duration first (so wider events anchor left).
+    .sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+
+  // Process events into overlap clusters using a sweep-line approach.
+  let clusterEnd = -1;
+  let cluster: typeof items = [];
+
+  const flushCluster = () => {
+    if (cluster.length === 0) return;
+
+    // Greedily assign columns: for each event pick the first column whose
+    // previous occupant has already ended.
+    const columns: number[] = []; // end-time of the last event in each column
+    const assignments = new Map<GoogleCalendarEvent, number>();
+
+    for (const item of cluster) {
+      let placed = false;
+      for (let col = 0; col < columns.length; col++) {
+        if (item.start >= columns[col]) {
+          columns[col] = item.end;
+          assignments.set(item.event, col);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        assignments.set(item.event, columns.length);
+        columns.push(item.end);
+      }
+    }
+
+    const totalColumns = columns.length;
+    for (const item of cluster) {
+      result.set(item.event, {
+        column: assignments.get(item.event) ?? 0,
+        totalColumns,
+      });
+    }
+  };
+
+  for (const item of items) {
+    if (cluster.length === 0 || item.start < clusterEnd) {
+      // Overlaps with current cluster — absorb it.
+      cluster.push(item);
+      clusterEnd = Math.max(clusterEnd, item.end);
+    } else {
+      // No overlap — flush previous cluster and start a new one.
+      flushCluster();
+      cluster = [item];
+      clusterEnd = item.end;
+    }
+  }
+  flushCluster();
+
+  return result;
+}
+
 function getEventSectionLabel(date?: { date?: string; dateTime?: string }) {
   if (date?.date) {
     return new Date(`${date.date}T00:00:00`).toLocaleDateString('en-US', {
@@ -680,6 +767,20 @@ function WeekCalendarGrid({
   const hourRows = Array.from({ length: 24 }, (_, index) => weekStartHour + index);
   const rowHeight = 40;
   const todayKey = formatDateKey(new Date());
+  const [nowMinutes, setNowMinutes] = useState(() => {
+    const n = new Date();
+    return n.getHours() * 60 + n.getMinutes();
+  });
+
+  useEffect(() => {
+    const tick = () => {
+      const n = new Date();
+      setNowMinutes(n.getHours() * 60 + n.getMinutes());
+    };
+    const id = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
   const [hoverSlot, setHoverSlot] = useState<{ dateKey: string; startMinutes: number } | null>(null);
   const [dragSelection, setDragSelection] = useState<{
     dateKey: string;
@@ -744,6 +845,21 @@ function WeekCalendarGrid({
     }
     return map;
   }, [timedEvents]);
+
+  const layoutByDay = useMemo(() => {
+    const layouts = new Map<string, Map<GoogleCalendarEvent, EventLayout>>();
+    for (const [key, dayEvents] of eventsByDay) {
+      layouts.set(
+        key,
+        computeOverlapLayout(
+          dayEvents,
+          e => getMinutesFromStart(e.start?.dateTime),
+          e => getMinutesFromStart(e.end?.dateTime),
+        ),
+      );
+    }
+    return layouts;
+  }, [eventsByDay]);
 
   const allDayByDay = useMemo(() => {
     const map = new Map<string, GoogleCalendarEvent[]>();
@@ -999,6 +1115,18 @@ function WeekCalendarGrid({
 
                   if (top < 0 || top > hourRows.length * rowHeight) return null;
 
+                  const dayLayout = layoutByDay.get(key);
+                  const layout = dayLayout?.get(event);
+                  const column = layout?.column ?? 0;
+                  const totalColumns = layout?.totalColumns ?? 1;
+
+                  // Percentage-based left/width with a small gap between columns
+                  const colWidthPct = 100 / totalColumns;
+                  const leftPct = column * colWidthPct;
+                  // Small padding: 6px on the outer edges, 2px between columns
+                  const paddingLeft = column === 0 ? 6 : 2;
+                  const paddingRight = column === totalColumns - 1 ? 6 : 2;
+
                   return (
                     <button
                       key={getCalendarEventRenderKey(event)}
@@ -1013,24 +1141,38 @@ function WeekCalendarGrid({
                           height: rect.height,
                         });
                       }}
-                      className="absolute left-1.5 right-1.5 overflow-hidden rounded-lg px-2 py-1 text-left shadow-sm"
+                      className="absolute overflow-hidden rounded-lg px-2 py-1 text-left shadow-sm"
                       style={{
                         top: `${top}px`,
                         height: `${height}px`,
+                        left: `calc(${leftPct}% + ${paddingLeft}px)`,
+                        width: `calc(${colWidthPct}% - ${paddingLeft + paddingRight}px)`,
                         backgroundColor: `${event.calendarColor || '#818cf8'}22`,
                         borderLeft: `3px solid ${event.calendarColor || '#818cf8'}`,
+                        zIndex: column + 1,
                       }}
                     >
-                      <div className="truncate text-[10px] font-semibold text-[var(--text-primary)]">
+                      <div className="text-[10px] font-semibold leading-tight text-[var(--text-primary)]">
                         {event.summary || 'Untitled event'}
                       </div>
-                      <div className="truncate text-[10px] text-[var(--text-muted)]">
+                      <div className="text-[10px] leading-tight text-[var(--text-muted)]">
                         {getEventTimeLabel(event.start)}
                         {event.end?.dateTime ? ` - ${getEventTimeLabel(event.end)}` : ''}
                       </div>
                     </button>
                   );
                 })}
+
+                {/* Current time indicator (red line + dot) */}
+                {key === todayKey && (
+                  <div
+                    className="pointer-events-none absolute left-0 right-0 z-30"
+                    style={{ top: `${((nowMinutes - weekStartHour * 60) / 60) * rowHeight}px` }}
+                  >
+                    <div className="absolute -left-[5px] -top-[5px] h-[10px] w-[10px] rounded-full bg-red-500" />
+                    <div className="absolute left-0 right-0 top-0 h-[2px] bg-red-500" />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -1048,6 +1190,7 @@ export function CalendarView({
   studyBlockOutcomesLoading,
   onSetStudyBlockOutcome,
 }: CalendarViewProps) {
+  const hasCalendarSurface = calendar.isConnected || calendar.isLoading;
   const [searchParams, setSearchParams] = useSearchParams();
   const viewMode = useMemo<CalendarViewMode>(
     () => parseCalendarViewMode(searchParams.get('view')),
@@ -1220,7 +1363,7 @@ export function CalendarView({
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-          {calendar.isConnected && (
+          {hasCalendarSurface && (
             <div className="flex overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)]">
               <button
                 type="button"
@@ -1261,7 +1404,7 @@ export function CalendarView({
             </div>
           )}
 
-          {calendar.isConnected ? (
+          {hasCalendarSurface ? (
             <>
               <button
                 type="button"
@@ -1316,7 +1459,7 @@ export function CalendarView({
         </div>
       )}
 
-      {!calendar.isConnected ? (
+      {!hasCalendarSurface ? (
         <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
           <section className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
             <div className="flex items-center gap-2">

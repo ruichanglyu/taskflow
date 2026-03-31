@@ -531,8 +531,6 @@ SCHEDULING RULES (CRITICAL — you MUST follow these when creating calendar even
 - If the user says "delete them", "move them", "change them", or "reschedule them" after you just enumerated real calendar events, interpret "them" as those exact listed events and preserve the exact dates/start times in the import block.
 
 STRICT RESPONSE RULES FOR NORMAL CHAT:
-- Use plain sentences or short paragraphs.
-- Do not use markdown headings, bold, or bullet-heavy formatting unless the user explicitly asks for structure or you are emitting an import/CSV block.
 - Do not describe title/course similarity as if it created a link; only a real \`import:deadline-links\` block does that.
 - TRANSPARENCY: Every import block you emit MUST be explicitly mentioned in your text response. Never silently create, update, or delete something without announcing it. If you are creating a calendar event for MATH 3012, say so in the text before the import block.
 - Import blocks are only suggested changes until the user clicks Apply/Approve in the app. Never say you already created, deleted, updated, removed, or scheduled something when you only emitted an import block. Say you prepared or suggested changes instead.
@@ -547,14 +545,17 @@ title,status,priority,course,due_date,description,recurrence
 When generating CSVs, wrap them in a fenced code block with language "csv".
 
 STYLE RULES:
-- Talk like a normal helpful assistant inside the app, not like a blog post or formal document.
-- For normal replies, use plain sentences or short paragraphs.
-- Do NOT use markdown headings, section dividers, or excessive bullet lists unless the user explicitly asks for a structured list.
-- Do NOT wrap lots of words in bold or italics.
-- Avoid filler like "How to get started" unless the user asked for instructions.
-- Keep the tone natural, direct, and conversational.
-
-Be concise, helpful, and friendly. Use the user's actual data to answer questions about their schedule.`;
+- Be direct and confident. Answer first, context second.
+- Match length to complexity. One-sentence questions get one-sentence answers. Complex requests get structured responses.
+- Use markdown naturally: bullet lists when listing things, **bold** for key terms, headers for longer structured responses, code blocks for code. Don't over-format short conversational replies.
+- Never open with filler like "Sure!", "Great question!", "Certainly!", "Of course!", or "Absolutely!".
+- Don't narrate what you're about to do before an action card — the card already shows it. One short line of context is fine, nothing more.
+- Don't end every message with a follow-up question. Only ask a follow-up when you genuinely need a decision to proceed. If the answer stands on its own, let it stand.
+- When you don't have data for something, say so in one sentence and move on. Don't over-explain what data you do or don't have access to.
+- Tone: warm, honest, a little casual. Like a smart friend who knows your schedule — not a customer service bot.
+- Use "I" naturally. "Here's what I've got:" is fine. "I have prepared the following items for your review:" is not.
+- When writing math, use LaTeX notation so it renders properly: inline math with $...$ and display/block math with $$...$$. For example: $f(x, y) = x^2y$, $$\frac{1}{\text{Area}(R)} \iint_R f(x,y)\,dA$$. Never write raw math as plain ASCII like "x^2" or "integral" spelled out — use LaTeX.
+- When the user sends an image containing a math problem, homework question, or any question — answer it directly. Don't describe what the image shows. Just solve it step by step like you would if the user had typed the question out. Show your work clearly with labeled steps.`;
 }
 
 /** Parse import blocks from AI response */
@@ -789,10 +790,12 @@ function stripAttachmentPayload(message: ChatMessage): ChatMessage {
   if (!message.images?.length) return message;
   return {
     ...message,
+    // Strip base64 (large, only needed for API calls) but keep preview
+    // so the image thumbnail still displays when restoring from storage.
     images: message.images.map(img => ({
       base64: '',
       mimeType: img.mimeType,
-      preview: '',
+      preview: img.preview,
     })),
   };
 }
@@ -987,19 +990,44 @@ function saveThreads(userId: string, threads: ChatThread[]) {
   } catch { /* storage full — ignore */ }
 }
 
-function buildInitialChatState(userId: string) {
-  const initialThreads = loadSavedThreads(userId);
-  let initialChatId = initialThreads[0]?.id ?? makeNewThread().id;
+function getStoredActiveChatId(userId: string, threads: ChatThread[]) {
   try {
-    const saved = localStorage.getItem(activeChatStorage(userId));
-    if (saved && initialThreads.some(thread => thread.id === saved)) {
-      initialChatId = saved;
+    const saved = sessionStorage.getItem(activeChatStorage(userId));
+    if (saved && threads.some(thread => thread.id === saved)) {
+      return saved;
     }
   } catch { /* ignore */ }
+  return null;
+}
+
+function getFreshLandingThread(initialThreads: ChatThread[]) {
+  const reusable = initialThreads.find(thread => thread.title === 'New chat' && thread.messages.length === 0);
+  return reusable ?? makeNewThread();
+}
+
+// Fresh page load should land on a new chat once.
+// Later remounts in the same tab session (like minimize/reopen) should restore the active thread.
+let shouldStartFreshOnNextMount = true;
+
+function buildInitialChatState(userId: string) {
+  const initialThreads = loadSavedThreads(userId);
+  const savedActiveChatId = getStoredActiveChatId(userId, initialThreads);
+  const shouldStartFresh = shouldStartFreshOnNextMount || !savedActiveChatId;
+
+  if (shouldStartFresh) {
+    shouldStartFreshOnNextMount = false;
+    const freshThread = getFreshLandingThread(initialThreads);
+    return {
+      threads: initialThreads.some(thread => thread.id === freshThread.id)
+        ? initialThreads
+        : [freshThread, ...initialThreads],
+      activeChatId: freshThread.id,
+    };
+  }
 
   return {
     threads: initialThreads,
-    activeChatId: initialChatId,
+    activeChatId: savedActiveChatId ?? initialThreads[0]?.id ?? makeNewThread().id,
   };
 }
 
@@ -1218,8 +1246,12 @@ export function useAI(userId: string) {
   const remoteSyncSignatureRef = useRef('');
   const remoteSaveRequestedRef = useRef(false);
   const remoteSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const initializedUserIdRef = useRef(userId);
 
   useEffect(() => {
+    if (initializedUserIdRef.current === userId) return;
+    initializedUserIdRef.current = userId;
+
     const nextState = buildInitialChatState(userId);
     initialStateRef.current = nextState;
     threadsRef.current = nextState.threads;
@@ -1319,7 +1351,7 @@ export function useAI(userId: string) {
   useEffect(() => {
     if (!isStreaming) {
       saveThreads(userId, threads);
-      localStorage.setItem(activeChatStorage(userId), activeChatId);
+      sessionStorage.setItem(activeChatStorage(userId), activeChatId);
       localStorage.removeItem(LEGACY_CHAT_STORAGE);
     }
   }, [threads, activeChatId, isStreaming, userId]);

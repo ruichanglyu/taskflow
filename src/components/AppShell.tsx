@@ -929,7 +929,7 @@ export function AppShell({ user }: AppShellProps) {
           </Routes>
         </main>
 
-        {aiOpen && aiMode === 'sidebar' && (
+        {aiOpen && (
           <AIPanel
             open={aiOpen}
             mode={aiMode}
@@ -1091,86 +1091,9 @@ export function AppShell({ user }: AppShellProps) {
         </button>
       )}
 
-      {aiOpen && aiMode === 'floating' && (
-        <AIPanel
-          open={aiOpen}
-          mode={aiMode}
-          onModeChange={setAiMode}
-          onClose={() => setAiOpen(false)}
-          onOpenDataSettings={() => {
-            setAiOpen(false);
-            setProfileInitialTab('data');
-            setProfileOpen(true);
-          }}
-          userId={user.id}
-          tasks={store.tasks}
-          deadlines={deadlineStore.deadlines}
-          projects={store.projects}
-          plans={gym.plans}
-          dayTemplates={gym.dayTemplates}
-          exercises={gym.exercises}
-          dayExercises={gym.dayExercises}
-          calendarEvents={calendar.events}
-          calendarCalendars={calendar.calendars}
-          selectedCalendarId={calendar.selectedCalendarId}
-          getCalendarEventsForRange={calendar.getEventsForRange}
-          onAddTask={handleAddTask}
-          onUpdateTask={handleUpdateTask}
-          onAddDeadline={handleAddDeadline}
-          onUpdateDeadline={handleUpdateDeadline}
-          onAddProject={handleAddProject}
-          onAddSubtask={handleAddSubtask}
-          onDeleteTask={handleDeleteTask}
-          onLinkTask={handleLinkTask}
-          onCreateCalendarEvent={handleCreateCalendarEvent}
-          onUpdateCalendarEvent={handleUpdateCalendarEvent}
-          onDeleteCalendarEvent={handleDeleteCalendarEvent}
-          aiLearningEnabled={learning.aiLearningEnabled}
-          onAiLearningEnabledChange={learning.setAiLearningEnabled}
-          scoreStudySlot={learning.scoreStudySlot}
-          behaviorSummary={learning.behaviorInsights.summary}
-          draftPrompt={queuedAiPrompt}
-          onDraftPromptConsumed={() => setQueuedAiPrompt(null)}
-          onAiPromptSubmitted={(prompt, hasImages) => learning.logAiPromptSubmitted({
-            prompt,
-            hasImages,
-            options: { source: 'manual', learn: true },
-          })}
-          onAiActionsApplied={(blockType, appliedCount, skippedCount) => learning.logAiActionsApplied({
-            blockType,
-            appliedCount,
-            skippedCount,
-            options: { source: 'manual', learn: true },
-          })}
-          onAiSuggestionAccepted={(blockType, actionCount) => learning.logAiSuggestionAccepted({
-            blockType,
-            actionCount,
-            options: { source: 'manual', learn: true },
-          })}
-          onAiSuggestionEdited={(blockType, actionCount) => learning.logAiSuggestionEdited({
-            blockType,
-            actionCount,
-            options: { source: 'manual', learn: true },
-          })}
-          onAiSuggestionRejected={(blockTypes, actionCount) => learning.logAiSuggestionRejected({
-            blockTypes,
-            actionCount,
-            options: { source: 'manual', learn: true },
-          })}
-          onStudyBlockLinkedTarget={(params) => learning.logStudyBlockLinkedTarget({
-            ...params,
-            options: { source: 'manual', learn: true },
-          })}
-          onStudySlotCandidatesLogged={(params) => learning.logStudySlotCandidates({
-            ...params,
-            options: { source: 'manual', learn: true },
-          })}
-          habits={habits.habits}
-          onAddHabit={handleAddHabit}
-          onToggleHabit={handleToggleHabit}
-          onDeleteHabit={handleDeleteHabit}
-        />
-      )}
+      {/* AIPanel is rendered once above (inside the sidebar layout slot).
+         It uses createPortal internally when mode === 'floating', so no
+         duplicate instance is needed here. */}
 
       <div className="pointer-events-none fixed right-4 top-20 z-[80] flex w-full max-w-sm flex-col gap-2 sm:right-6">
         {toasts.map(toast => (

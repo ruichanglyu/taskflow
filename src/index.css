@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* KaTeX math rendering — inherit text color so it works on dark backgrounds */
+.katex { color: inherit; font-size: 1em; }
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.25rem 0; }
+
 @keyframes onboarding-slide-forward {
   from {
     opacity: 0;

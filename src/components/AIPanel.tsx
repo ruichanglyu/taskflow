@@ -1,6 +1,13 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Component, type ReactNode } from 'react';
-import { Minus, Send, Sparkles, Square, Check, AlertCircle, Download, ImagePlus, Plus, Mic, MicOff, CopyPlus, FileSearch, CheckCircle2, ChevronDown, LayoutPanelLeft, PanelRightOpen, Wand2, Pencil, Trash2 } from 'lucide-react';
+import { Minus, Send, Sparkles, Square, Check, AlertCircle, Download, ImagePlus, Plus, Mic, MicOff, CopyPlus, FileSearch, CheckCircle2, ChevronDown, LayoutPanelLeft, PanelRightOpen, Wand2, Pencil, Trash2, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useAI, getAPIKey, getAPIKeyCached, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow, type ImageAttachment, type ChatThread } from '../hooks/useAI';
 import type { BehaviorLearningActionOptions } from '../hooks/useBehaviorLearning';
 import type { Habit } from '../hooks/useHabits';
@@ -533,8 +540,12 @@ export function AIPanel({
 
   useEffect(() => {
     let cancelled = false;
-    const syncKey = () => {
-      setKeyLoading(true);
+
+    const syncKey = (showLoading: boolean) => {
+      // Only show the loading spinner when we have no cached key at all.
+      // Tab-focus and re-open re-syncs happen silently in the background
+      // so the chat doesn't flash a spinner.
+      if (showLoading) setKeyLoading(true);
       void getAPIKey(userId).then(key => {
         if (cancelled) return;
         setHasKey(!!key);
@@ -542,16 +553,17 @@ export function AIPanel({
       });
     };
 
-    syncKey();
+    // First load: only show spinner if we have no cached key
+    syncKey(!getAPIKeyCached(userId));
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        syncKey();
+        syncKey(false);
       }
     };
 
     const handleFocus = () => {
-      syncKey();
+      syncKey(false);
     };
 
     document.addEventListener('visibilitychange', handleVisibility);
@@ -727,7 +739,7 @@ export function AIPanel({
     setIsDictating(false);
     setDictationSeconds(0);
     setShowAttachmentMenu(false);
-    const msg = input.trim() || (pendingImages.length ? 'What do you see in this image?' : '');
+    const msg = input.trim() || '';
     const images = pendingImages.length ? [...pendingImages] : undefined;
     const matchedCalendar = messageLooksLikeCalendarListingRequest(msg)
       ? findCalendarMention(msg, calendarCalendars)
@@ -3257,6 +3269,89 @@ function matchDeadlineCandidates(deadlines: Deadline[], projects: Project[], raw
 }
 
 // --- Message Bubble ---
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+      components={{
+        // Headings
+        h1: ({ children }) => <h1 className="mb-2 mt-3 text-base font-bold first:mt-0">{children}</h1>,
+        h2: ({ children }) => <h2 className="mb-1.5 mt-2.5 text-sm font-bold first:mt-0">{children}</h2>,
+        h3: ({ children }) => <h3 className="mb-1 mt-2 text-sm font-semibold first:mt-0">{children}</h3>,
+        // Paragraphs
+        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+        // Bold & italic
+        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+        em: ({ children }) => <em className="italic">{children}</em>,
+        // Lists
+        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-0.5 last:mb-0">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-0.5 last:mb-0">{children}</ol>,
+        li: ({ children }) => <li className="text-sm">{children}</li>,
+        // Code blocks
+        code: ({ className, children, ...props }) => {
+          const match = /language-(\w+)/.exec(className || '');
+          const codeString = String(children).replace(/\n$/, '');
+          if (match) {
+            return (
+              <div className="my-2 overflow-hidden rounded-lg">
+                <div className="flex items-center justify-between bg-[#282c34] px-3 py-1.5">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-white/40">{match[1]}</span>
+                  <button
+                    type="button"
+                    className="text-[10px] text-white/40 transition hover:text-white/70"
+                    onClick={() => navigator.clipboard.writeText(codeString)}
+                  >
+                    Copy
+                  </button>
+                </div>
+                <SyntaxHighlighter
+                  style={oneDark}
+                  language={match[1]}
+                  PreTag="div"
+                  customStyle={{ margin: 0, borderRadius: 0, fontSize: '12px' }}
+                >
+                  {codeString}
+                </SyntaxHighlighter>
+              </div>
+            );
+          }
+          return (
+            <code className="rounded bg-black/20 px-1 py-0.5 text-xs" {...props}>
+              {children}
+            </code>
+          );
+        },
+        // Tables
+        table: ({ children }) => (
+          <div className="my-2 overflow-x-auto rounded-lg border border-white/10">
+            <table className="w-full text-xs">{children}</table>
+          </div>
+        ),
+        thead: ({ children }) => <thead className="bg-white/5">{children}</thead>,
+        th: ({ children }) => <th className="whitespace-nowrap px-3 py-1.5 text-left font-semibold">{children}</th>,
+        td: ({ children }) => <td className="whitespace-nowrap border-t border-white/5 px-3 py-1.5">{children}</td>,
+        // Blockquotes
+        blockquote: ({ children }) => (
+          <blockquote className="my-2 border-l-2 border-[var(--accent)] pl-3 text-[var(--text-muted)]">
+            {children}
+          </blockquote>
+        ),
+        // Horizontal rules
+        hr: () => <hr className="my-3 border-white/10" />,
+        // Links
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] underline decoration-[var(--accent)]/30 hover:decoration-[var(--accent)]">
+            {children}
+          </a>
+        ),
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
+
 function MessageBubble({
   userId,
   message,
@@ -3340,7 +3435,7 @@ function MessageBubble({
             if (segment.type === 'text') {
               return segment.content ? (
                 <div key={i} className="rounded-xl rounded-bl-sm bg-[var(--surface-muted)] px-3.5 py-2 text-sm text-[var(--text-primary)]">
-                  <div className="whitespace-pre-wrap">{segment.content}</div>
+                  <MarkdownContent content={segment.content} />
                 </div>
               ) : null;
             }

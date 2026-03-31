@@ -23,6 +23,29 @@ function getStorageKey(userId: string, suffix: string) {
   return `${STORAGE_KEY_PREFIX}:${userId}:${suffix}`;
 }
 
+/** Max age for cached calendars/events before they're considered stale (5 minutes). */
+const CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+
+function readJsonCache<T>(key: string, maxAge = CACHE_MAX_AGE_MS): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw) as { ts: number; data: T };
+    if (Date.now() - ts > maxAge) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function writeJsonCache<T>(key: string, data: T) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }));
+  } catch {
+    // storage full — non-critical
+  }
+}
+
 const CALENDAR_HISTORY_BUFFER_DAYS = 365;
 const CALENDAR_FUTURE_BUFFER_DAYS = 365;
 
@@ -92,6 +115,8 @@ export function useGoogleCalendar(userId: string) {
   const tokenStorageKey = useMemo(() => getStorageKey(userId, 'access-token'), [userId]);
   const tokenExpiryStorageKey = useMemo(() => getStorageKey(userId, 'access-token-expiry'), [userId]);
   const connectedStorageKey = useMemo(() => getStorageKey(userId, 'connected'), [userId]);
+  const calendarsCacheKey = useMemo(() => getStorageKey(userId, 'calendars-cache'), [userId]);
+  const eventsCacheKey = useMemo(() => getStorageKey(userId, 'events-cache'), [userId]);
   const [hasStoredConnection, setHasStoredConnection] = useState(() => localStorage.getItem(connectedStorageKey) === 'true');
   const [eventRange, setEventRange] = useState<{ timeMin?: string; timeMax?: string }>(() => getDefaultCalendarRange());
 
@@ -107,8 +132,10 @@ export function useGoogleCalendar(userId: string) {
     localStorage.removeItem(tokenStorageKey);
     localStorage.removeItem(tokenExpiryStorageKey);
     localStorage.removeItem(connectedStorageKey);
+    localStorage.removeItem(calendarsCacheKey);
+    localStorage.removeItem(eventsCacheKey);
     setHasStoredConnection(false);
-  }, [calendarStorageKey, connectedStorageKey, tokenExpiryStorageKey, tokenStorageKey, visibleCalendarsStorageKey]);
+  }, [calendarStorageKey, calendarsCacheKey, connectedStorageKey, eventsCacheKey, tokenExpiryStorageKey, tokenStorageKey, visibleCalendarsStorageKey]);
 
   useEffect(() => {
     setHasStoredConnection(localStorage.getItem(connectedStorageKey) === 'true');
@@ -138,9 +165,29 @@ export function useGoogleCalendar(userId: string) {
     if (!shouldReconnect) {
       localStorage.removeItem(tokenStorageKey);
       localStorage.removeItem(tokenExpiryStorageKey);
+      setHasHydratedStoredToken(true);
+      return;
     }
+
+    // Restore cached access token if it's still valid (> 60 s remaining)
+    const storedToken = localStorage.getItem(tokenStorageKey);
+    const storedExpiry = Number(localStorage.getItem(tokenExpiryStorageKey));
+    if (storedToken && Number.isFinite(storedExpiry) && Date.now() < storedExpiry - 60_000) {
+      setAccessToken(storedToken);
+    }
+
+    // Hydrate cached calendars + events so the UI renders instantly
+    const cachedCalendars = readJsonCache<GoogleCalendarListItem[]>(calendarsCacheKey);
+    if (cachedCalendars && cachedCalendars.length > 0) {
+      setCalendars(cachedCalendars);
+    }
+    const cachedEvents = readJsonCache<GoogleCalendarEvent[]>(eventsCacheKey);
+    if (cachedEvents && cachedEvents.length > 0) {
+      setEvents(cachedEvents);
+    }
+
     setHasHydratedStoredToken(true);
-  }, [connectedStorageKey, tokenExpiryStorageKey, tokenStorageKey]);
+  }, [calendarsCacheKey, connectedStorageKey, eventsCacheKey, tokenExpiryStorageKey, tokenStorageKey]);
 
   useEffect(() => {
     if (selectedCalendarId) {
@@ -157,6 +204,7 @@ export function useGoogleCalendar(userId: string) {
   useEffect(() => {
     if (accessToken) {
       localStorage.setItem(connectedStorageKey, 'true');
+      localStorage.setItem(tokenStorageKey, accessToken);
     } else {
       localStorage.removeItem(tokenStorageKey);
     }
@@ -215,7 +263,8 @@ export function useGoogleCalendar(userId: string) {
       });
 
     setEvents(mergedEvents);
-  }, [eventRange]);
+    writeJsonCache(eventsCacheKey, mergedEvents);
+  }, [eventRange, eventsCacheKey]);
 
   const loadCalendarData = useCallback(async (token: string, nextCalendarId?: string) => {
     setIsLoading(true);
@@ -224,6 +273,7 @@ export function useGoogleCalendar(userId: string) {
     try {
       const googleCalendars = await fetchGoogleCalendars(token);
       setCalendars(googleCalendars);
+      writeJsonCache(calendarsCacheKey, googleCalendars);
 
       const fallbackCalendarId =
         nextCalendarId ||
@@ -257,7 +307,7 @@ export function useGoogleCalendar(userId: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [clearLocalConnectionState, eventRange, loadEventsForCalendars, selectedCalendarId, visibleCalendarsStorageKey]);
+  }, [calendarsCacheKey, clearLocalConnectionState, eventRange, loadEventsForCalendars, selectedCalendarId, visibleCalendarsStorageKey]);
 
   const postGoogleCalendarOAuth = useCallback(async (body: Record<string, unknown>) => {
     const { supabase } = await import('../lib/supabase');
@@ -374,7 +424,11 @@ export function useGoogleCalendar(userId: string) {
 
   useEffect(() => {
     const shouldReconnect = localStorage.getItem(connectedStorageKey) === 'true';
-    if (!hasHydratedStoredToken || !shouldReconnect || accessToken || !isGoogleCalendarConfigured) return;
+    if (!hasHydratedStoredToken || !shouldReconnect || !isGoogleCalendarConfigured) return;
+
+    // If the hydration effect already restored a valid cached token, just
+    // do a background data refresh — no need for a server token round-trip.
+    if (accessToken) return;
 
     let cancelled = false;
 

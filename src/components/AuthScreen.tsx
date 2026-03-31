@@ -121,6 +121,7 @@ export function AuthScreen() {
           email,
           password,
           options: {
+            emailRedirectTo: window.location.origin,
             data: {
               full_name: fullName.trim(),
             },
@@ -177,7 +178,7 @@ export function AuthScreen() {
                     type="text"
                     value={fullName}
                     onChange={event => setFullName(event.target.value)}
-                    placeholder="Rui Chang Lyu"
+                    placeholder="First Name Last Name"
                     className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                   />
                 </label>
@@ -192,7 +193,7 @@ export function AuthScreen() {
                   type="email"
                   value={email}
                   onChange={event => setEmail(event.target.value)}
-                  placeholder="name@school.edu"
+                  placeholder="name@work-email.com"
                   autoComplete="email"
                   className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent)]"
                   required

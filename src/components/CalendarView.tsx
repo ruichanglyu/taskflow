@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, List, LayoutGrid, Pencil, Plus, RefreshCcw, Trash2, Unplug } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, List, LayoutGrid, Pencil, Plus, RefreshCcw, Trash2, Unplug, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { GoogleCalendarEvent } from '../lib/googleCalendar';
+import { buildAcademicPlanMetadataDescription, parseAcademicPlanMetadata } from '../lib/academicPlanning';
 import { CreateEventModal } from './CreateEventModal';
 import { CalendarGrid } from './CalendarGrid';
 import { cn } from '../utils/cn';
@@ -9,6 +10,7 @@ import { isStudyBlockLikeCalendarEvent } from '../utils/studyBlockDetection';
 import type { GoogleCalendarController } from '../hooks/useGoogleCalendar';
 import type { StudyBlockOutcome } from '../hooks/useStudyBlockOutcomes';
 import type { StudyBlockOutcomeStatus } from '../types';
+import { getCalendarEventPresentation } from '../utils/calendarEventPresentation';
 
 type CalendarViewMode = 'month' | 'week' | 'list';
 type StudyBlockOutcomeMap = Record<string, StudyBlockOutcome>;
@@ -273,6 +275,19 @@ function OutcomeBadge({ status }: { status: StudyBlockOutcomeStatus }) {
   );
 }
 
+function getOutcomeDescription(status: StudyBlockOutcomeStatus) {
+  switch (status) {
+    case 'completed':
+      return 'This session happened as planned, so future scheduling can lean on similar timing.';
+    case 'partial':
+      return 'You got some of it done. The planner can keep the topic but may shorten the next block.';
+    case 'skipped':
+      return 'This slot did not happen. Future plans should avoid overloading similar windows.';
+    case 'rescheduled':
+      return 'You moved this work instead of doing it here. The planner can learn from that timing shift.';
+  }
+}
+
 function CalendarChecklist({
   calendars,
   visibleCalendarIds,
@@ -494,6 +509,7 @@ function DayPanel({
   deadlines = [],
   onDelete,
   onEdit,
+  onOpenDetails,
   deletingId,
   onCreateEvent,
   studyBlockOutcomes,
@@ -506,6 +522,7 @@ function DayPanel({
   deadlines?: import('../types').Deadline[];
   onDelete: (id: string) => void;
   onEdit: (event: GoogleCalendarEvent) => void;
+  onOpenDetails: (event: GoogleCalendarEvent) => void;
   deletingId: string | null;
   onCreateEvent: () => void;
   studyBlockOutcomes: StudyBlockOutcomeMap;
@@ -668,44 +685,73 @@ function DayPanel({
             </div>
           ))}
           {events.map(event => (
-            <div
-              key={getCalendarEventRenderKey(event)}
-              className="group flex items-start gap-3 rounded-lg bg-[var(--surface-muted)] p-3"
-            >
-              <div
-                className="mt-1 flex h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: event.calendarColor || '#818cf8' }}
-              />
-              <div className="min-w-0 flex-1">
-                {(() => {
-                  const currentOutcome = getStudyBlockOutcome(event);
-                  return (
-                    <div className="flex items-center gap-2">
+            (() => {
+              const currentOutcome = getStudyBlockOutcome(event);
+              const presentation = getCalendarEventPresentation(event);
+              return (
+                <button
+                  key={getCalendarEventRenderKey(event)}
+                  type="button"
+                  onClick={() => onOpenDetails(event)}
+                  className={cn(
+                    'group flex w-full items-start gap-3 rounded-lg p-3 text-left transition hover:brightness-[1.02]',
+                    presentation.isSuggested ? 'border' : 'bg-[var(--surface-muted)]'
+                  )}
+                  style={presentation.isSuggested ? {
+                    backgroundColor: presentation.surfaceColor,
+                    borderColor: presentation.borderColor,
+                  } : undefined}
+                >
+                  <div
+                    className="mt-1 flex h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: presentation.accentColor }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
                       <h4 className="truncate text-sm font-medium text-[var(--text-primary)]">
                         {event.summary || 'Untitled event'}
                       </h4>
+                      {presentation.badgeLabel && (
+                        <span className="rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">
+                          {presentation.badgeLabel}
+                        </span>
+                      )}
                       {currentOutcome && <OutcomeBadge status={currentOutcome.status} />}
                     </div>
-                  );
-                })()}
-                <p className="text-xs text-[var(--text-muted)]">
-                  {getEventTimeLabel(event.start)}
-                </p>
-                {event.location && (
-                  <p className="mt-1 text-xs text-[var(--text-faint)] truncate">{event.location}</p>
-                )}
-              </div>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      {getEventTimeLabel(event.start)}
+                    </p>
+                    {presentation.metadata?.deadlineTitle && (
+                      <p className="mt-1 text-[11px] font-medium text-[var(--accent)]">
+                        Linked to {presentation.metadata.deadlineTitle}
+                      </p>
+                    )}
+                    {presentation.description && (
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-[var(--text-faint)]">
+                        {presentation.description}
+                      </p>
+                    )}
+                    {event.location && (
+                      <p className="mt-1 text-xs text-[var(--text-faint)] truncate">{event.location}</p>
+                    )}
+                  </div>
               <div className="flex shrink-0 items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => onEdit(event)}
+                  onClick={clickEvent => {
+                    clickEvent.stopPropagation();
+                    onEdit(event);
+                  }}
                   className="rounded-full p-1.5 text-[var(--text-faint)] opacity-100 transition hover:text-[var(--text-primary)] md:opacity-0 md:group-hover:opacity-100"
                 >
                   <Pencil size={13} />
                 </button>
                 <button
                   type="button"
-                  onClick={() => onDelete(event.id)}
+                  onClick={clickEvent => {
+                    clickEvent.stopPropagation();
+                    onDelete(event.id);
+                  }}
                   disabled={deletingId === event.id}
                   className="rounded-full p-1.5 text-[var(--text-faint)] opacity-100 transition hover:text-red-400 disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
                 >
@@ -716,16 +762,205 @@ function DayPanel({
                     href={event.htmlLink}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={clickEvent => clickEvent.stopPropagation()}
                     className="rounded-full p-1.5 text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
                   >
                     <ExternalLink size={13} />
                   </a>
                 )}
               </div>
-            </div>
+                </button>
+              );
+            })()
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function CalendarEventDetailModal({
+  event,
+  currentOutcome,
+  isSavingOutcome,
+  onClose,
+  onEdit,
+  onDelete,
+  onSetOutcome,
+}: {
+  event: GoogleCalendarEvent;
+  currentOutcome?: StudyBlockOutcome;
+  isSavingOutcome: boolean;
+  onClose: () => void;
+  onEdit: (event: GoogleCalendarEvent) => void;
+  onDelete: (eventId: string) => void;
+  onSetOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => Promise<void>;
+}) {
+  const presentation = getCalendarEventPresentation(event);
+  const eventDateKey = getEventDateKey(event);
+  const isStudyBlock = isStudyBlockLikeCalendarEvent(event);
+  const eventEnded = hasEventEnded(event);
+  const reviewReady = isStudyBlock && eventEnded;
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-xl rounded-[26px] border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-[0_24px_80px_rgba(15,23,42,0.18)]"
+        onClick={modalEvent => modalEvent.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border-soft)] px-6 py-5">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="truncate text-xl font-semibold tracking-tight text-[var(--text-primary)]">
+                {event.summary || 'Untitled event'}
+              </h2>
+              {presentation.badgeLabel && (
+                <span className="rounded-full bg-black/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--text-secondary)]">
+                  {presentation.badgeLabel}
+                </span>
+              )}
+              {currentOutcome && <OutcomeBadge status={currentOutcome.status} />}
+            </div>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              {getEventStartLabel(event.start)}
+              {event.end?.dateTime ? ` · ${getEventTimeLabel(event.start)} – ${getEventTimeLabel(event.end)}` : ''}
+              {event.calendarSummary ? ` · ${event.calendarSummary}` : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-[var(--border-soft)] p-2 text-[var(--text-faint)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-6 py-5">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">Timing</p>
+              <p className="mt-2 text-sm text-[var(--text-primary)]">
+                {getEventStartLabel(event.start)}
+                {event.end?.dateTime ? ` · ${getEventTimeLabel(event.start)} – ${getEventTimeLabel(event.end)}` : ''}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">Context</p>
+              <div className="mt-2 space-y-1.5 text-sm text-[var(--text-primary)]">
+                <p>{presentation.badgeLabel ?? 'Manual or AI-assisted event'}</p>
+                {presentation.metadata?.deadlineTitle ? (
+                  <p className="font-medium text-[var(--accent)]">Linked to {presentation.metadata.deadlineTitle}</p>
+                ) : (
+                  <p className="text-[var(--text-muted)]">No linked deadline</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {event.location && (
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">Location</p>
+              <p className="mt-2 text-sm text-[var(--text-primary)]">{event.location}</p>
+            </div>
+          )}
+
+          {(presentation.metadata?.explanation || presentation.description) && (
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">
+                {presentation.metadata?.explanation ? 'Why this slot' : 'Notes'}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+                {presentation.metadata?.explanation ?? presentation.description}
+              </p>
+            </div>
+          )}
+
+          {presentation.metadata?.notes && presentation.metadata.explanation && (
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">Notes</p>
+              <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">{presentation.metadata.notes}</p>
+            </div>
+          )}
+
+          {isStudyBlock && (
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">Study review</p>
+                  <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                    {reviewReady
+                      ? 'Mark what actually happened so the next plan gets smarter.'
+                      : eventDateKey
+                        ? `This block can be reviewed after it ends${eventDateKey ? ` on ${new Date(`${eventDateKey}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}.`
+                        : 'This block can be reviewed after it ends.'}
+                  </p>
+                </div>
+                {currentOutcome && <OutcomeBadge status={currentOutcome.status} />}
+              </div>
+
+              {reviewReady ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {STUDY_OUTCOME_OPTIONS.map(option => {
+                    const selected = currentOutcome?.status === option.status;
+                    return (
+                      <button
+                        key={option.status}
+                        type="button"
+                        onClick={() => void onSetOutcome(event, option.status)}
+                        disabled={isSavingOutcome}
+                        className={cn(
+                          'rounded-full border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
+                          selected
+                            ? getOutcomeTone(option.status)
+                            : 'border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]',
+                        )}
+                      >
+                        {isSavingOutcome && selected ? 'Saving…' : option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {currentOutcome && (
+                <p className="mt-3 text-xs leading-5 text-[var(--text-faint)]">
+                  {getOutcomeDescription(currentOutcome.status)}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border-soft)] px-6 py-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onEdit(event)}
+              className="rounded-xl border border-[var(--border-soft)] px-3.5 py-2 text-sm font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(event.id)}
+              className="rounded-xl border border-red-500/20 px-3.5 py-2 text-sm font-medium text-red-400 transition hover:border-red-500/40"
+            >
+              Delete
+            </button>
+          </div>
+          {event.htmlLink && (
+            <a
+              href={event.htmlLink}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl px-3.5 py-2 text-sm font-medium text-[var(--accent)] transition hover:bg-[var(--accent-soft)]"
+            >
+              Open in Google Calendar
+            </a>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -741,6 +976,7 @@ function WeekCalendarGrid({
   onNextWeek,
   onToday,
   onSelectDate,
+  onOpenEventDetails,
   onEditEvent,
   onCreateEventAt,
 }: {
@@ -754,6 +990,7 @@ function WeekCalendarGrid({
   onNextWeek: () => void;
   onToday: () => void;
   onSelectDate: (date: string) => void;
+  onOpenEventDetails: (event: GoogleCalendarEvent) => void;
   onEditEvent: (event: GoogleCalendarEvent, anchorRect?: { top: number; left: number; width: number; height: number }) => void;
   onCreateEventAt: (
     date: string,
@@ -964,13 +1201,30 @@ function WeekCalendarGrid({
             <div key={key} className="min-h-[52px] border-r border-[var(--border-soft)] px-2 py-2 last:border-r-0">
               <div className="space-y-1">
                 {dayEvents.slice(0, 2).map(event => (
-                  <div
-                    key={getCalendarEventRenderKey(event)}
-                    className="flex items-center gap-1.5 truncate rounded-md px-1.5 py-1 text-[10px] font-medium text-[var(--text-secondary)]"
-                  >
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: event.calendarColor || '#818cf8' }} />
-                    <span className="truncate">{event.summary || 'Untitled'}</span>
-                  </div>
+                  (() => {
+                    const presentation = getCalendarEventPresentation(event);
+                    return (
+                      <div
+                        key={getCalendarEventRenderKey(event)}
+                        className={cn(
+                          'flex items-center gap-1.5 truncate rounded-md px-1.5 py-1 text-[10px] font-medium text-[var(--text-secondary)]',
+                          presentation.isSuggested && 'border'
+                        )}
+                        style={presentation.isSuggested ? {
+                          backgroundColor: presentation.mutedSurfaceColor,
+                          borderColor: presentation.borderColor,
+                        } : undefined}
+                      >
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: presentation.accentColor }} />
+                        <span className="truncate">{event.summary || 'Untitled'}</span>
+                        {presentation.isSuggested && (
+                          <span className="shrink-0 rounded-full bg-black/5 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-[var(--text-secondary)]">
+                            AI
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()
                 ))}
                 {dayDeadlines.slice(0, Math.max(0, 2 - dayEvents.length)).map(dl => (
                   <div
@@ -1109,6 +1363,7 @@ function WeekCalendarGrid({
                   const startMinutes = getMinutesFromStart(event.start?.dateTime);
                   const endMinutes = getMinutesFromStart(event.end?.dateTime);
                   if (startMinutes === null || endMinutes === null) return null;
+                  const presentation = getCalendarEventPresentation(event);
 
                   const top = ((startMinutes - weekStartHour * 60) / 60) * rowHeight;
                   const height = Math.max(((endMinutes - startMinutes) / 60) * rowHeight, 24);
@@ -1133,13 +1388,7 @@ function WeekCalendarGrid({
                       type="button"
                       onClick={e => {
                         onSelectDate(key);
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        onEditEvent(event, {
-                          top: rect.top + window.scrollY,
-                          left: rect.left + window.scrollX,
-                          width: rect.width,
-                          height: rect.height,
-                        });
+                        onOpenEventDetails(event);
                       }}
                       className="absolute overflow-hidden rounded-lg px-2 py-1 text-left shadow-sm"
                       style={{
@@ -1147,11 +1396,19 @@ function WeekCalendarGrid({
                         height: `${height}px`,
                         left: `calc(${leftPct}% + ${paddingLeft}px)`,
                         width: `calc(${colWidthPct}% - ${paddingLeft + paddingRight}px)`,
-                        backgroundColor: `${event.calendarColor || '#818cf8'}22`,
-                        borderLeft: `3px solid ${event.calendarColor || '#818cf8'}`,
+                        backgroundColor: presentation.surfaceColor,
+                        borderLeft: `3px solid ${presentation.accentColor}`,
+                        borderTop: presentation.isSuggested ? `1px solid ${presentation.borderColor}` : undefined,
+                        borderRight: presentation.isSuggested ? `1px solid ${presentation.borderColor}` : undefined,
+                        borderBottom: presentation.isSuggested ? `1px solid ${presentation.borderColor}` : undefined,
                         zIndex: column + 1,
                       }}
                     >
+                      {presentation.badgeLabel && height >= 42 && (
+                        <div className="mb-0.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-[var(--text-secondary)]">
+                          {presentation.badgeLabel}
+                        </div>
+                      )}
                       <div className="text-[10px] font-semibold leading-tight text-[var(--text-primary)]">
                         {event.summary || 'Untitled event'}
                       </div>
@@ -1159,6 +1416,11 @@ function WeekCalendarGrid({
                         {getEventTimeLabel(event.start)}
                         {event.end?.dateTime ? ` - ${getEventTimeLabel(event.end)}` : ''}
                       </div>
+                      {presentation.metadata?.deadlineTitle && height >= 68 && (
+                        <div className="mt-0.5 truncate text-[9px] leading-tight text-[var(--accent)]">
+                          {presentation.metadata.deadlineTitle}
+                        </div>
+                      )}
                     </button>
                   );
                 })}
@@ -1198,12 +1460,14 @@ export function CalendarView({
   );
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<GoogleCalendarEvent | null>(null);
+  const [detailEvent, setDetailEvent] = useState<GoogleCalendarEvent | null>(null);
   const [createDate, setCreateDate] = useState<string | undefined>(undefined);
   const [createStartTime, setCreateStartTime] = useState<string | undefined>(undefined);
   const [createEndTime, setCreateEndTime] = useState<string | undefined>(undefined);
   const [createAnchorRect, setCreateAnchorRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const [weekDraftPreview, setWeekDraftPreview] = useState<{ dateKey: string; startMinutes: number; endMinutes: number } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [savingDetailOutcomeId, setSavingDetailOutcomeId] = useState<string | null>(null);
   const [showCalendarList, setShowCalendarList] = useState(true);
 
   const now = new Date();
@@ -1310,10 +1574,39 @@ export function CalendarView({
     setEditingEvent(null);
   };
 
-  const handleSaveEvent = async (event: import('../lib/googleCalendar').NewGoogleCalendarEvent, calendarId?: string) => {
+  const handleSaveEvent = async (
+    event: import('../lib/googleCalendar').NewGoogleCalendarEvent,
+    options?: {
+      calendarId?: string;
+      linkedDeadlineId?: string | null;
+      metadataOrigin?: import('../lib/academicPlanning').AcademicPlanOrigin | null;
+    },
+  ) => {
+    const linkedDeadline = options?.linkedDeadlineId
+      ? deadlines.find(deadline => deadline.id === options.linkedDeadlineId) ?? null
+      : null;
+    const existingMetadata = editingEvent ? parseAcademicPlanMetadata(editingEvent.description) : null;
+    const eventDescription = event.description?.trim() || null;
+    const eventToSave = linkedDeadline
+      ? {
+          ...event,
+          description: buildAcademicPlanMetadataDescription({
+            deadlineId: linkedDeadline.id,
+            deadlineTitle: linkedDeadline.title,
+            deadlineDate: linkedDeadline.dueDate,
+            deadlineType: linkedDeadline.type,
+            explanation: existingMetadata?.explanation ?? null,
+            notes: eventDescription,
+            origin: options?.metadataOrigin ?? existingMetadata?.origin ?? 'manual',
+          }),
+        }
+      : {
+          ...event,
+          description: eventDescription || undefined,
+        };
     const ok = editingEvent
-      ? await calendar.updateEvent(editingEvent.id, event, calendarId ?? editingEvent.calendarId, editingEvent)
-      : await calendar.createEvent(event, calendarId);
+      ? await calendar.updateEvent(editingEvent.id, eventToSave, options?.calendarId ?? editingEvent.calendarId, editingEvent)
+      : await calendar.createEvent(eventToSave, options?.calendarId);
     if (ok) {
       setWeekDraftPreview(null);
       setEditingEvent(null);
@@ -1322,6 +1615,9 @@ export function CalendarView({
   };
 
   const handleDelete = async (eventId: string) => {
+    if (detailEvent?.id === eventId) {
+      setDetailEvent(null);
+    }
     setDeletingId(eventId);
     await calendar.deleteEvent(eventId);
     setDeletingId(null);
@@ -1331,6 +1627,7 @@ export function CalendarView({
     event: GoogleCalendarEvent,
     anchorRect?: { top: number; left: number; width: number; height: number },
   ) => {
+    setDetailEvent(null);
     setEditingEvent(event);
     setCreateDate(undefined);
     setCreateStartTime(undefined);
@@ -1353,6 +1650,26 @@ export function CalendarView({
       return groups;
     }, {});
   }, [calendar.events]);
+
+  const deadlineOptions = useMemo(() => (
+    [...deadlines]
+      .filter(deadline => deadline.status !== 'done' && deadline.status !== 'missed')
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+      .map(deadline => ({
+        id: deadline.id,
+        label: `${deadline.title} · ${new Date(`${deadline.dueDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      }))
+  ), [deadlines]);
+
+  const handleOpenEventDetails = (event: GoogleCalendarEvent) => {
+    setDetailEvent(event);
+  };
+
+  const handleDetailOutcome = async (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => {
+    setSavingDetailOutcomeId(event.id);
+    await onSetStudyBlockOutcome(event, status);
+    setSavingDetailOutcomeId(current => (current === event.id ? null : current));
+  };
 
   return (
     <div className="space-y-6">
@@ -1517,6 +1834,7 @@ export function CalendarView({
               events={selectedDayEvents}
               deadlines={deadlines}
               onEdit={event => handleEditEvent(event)}
+              onOpenDetails={handleOpenEventDetails}
               onDelete={id => void handleDelete(id)}
               deletingId={deletingId}
               onCreateEvent={() => handleCreateFromDate(selectedDate)}
@@ -1541,6 +1859,7 @@ export function CalendarView({
               onNextWeek={() => setViewDate(formatDateKey(addDays(viewAnchor, 7)))}
               onToday={handleToday}
               onSelectDate={selectDate}
+              onOpenEventDetails={handleOpenEventDetails}
               onEditEvent={handleEditEvent}
               onCreateEventAt={handleCreateFromWeekSlot}
             />
@@ -1571,6 +1890,7 @@ export function CalendarView({
                 events={selectedDayEvents}
                 deadlines={deadlines}
                 onEdit={event => handleEditEvent(event)}
+                onOpenDetails={handleOpenEventDetails}
                 onDelete={id => void handleDelete(id)}
                 deletingId={deletingId}
                 onCreateEvent={() => handleCreateFromDate(selectedDate)}
@@ -1583,29 +1903,7 @@ export function CalendarView({
           </div>
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <div className="space-y-4">
-            <CalendarMiniMonth
-              year={year}
-              month={month}
-              selectedDate={selectedDate}
-              onPrevMonth={() => handleShiftMonth(-1)}
-              onNextMonth={() => handleShiftMonth(1)}
-              onSelectDate={selectDate}
-            />
-
-            <CalendarChecklist
-              calendars={calendar.calendars}
-              visibleCalendarIds={calendar.visibleCalendarIds}
-              selectedCalendarId={calendar.selectedCalendarId}
-              isLoading={calendar.isLoading}
-              open={showCalendarList}
-              onToggleOpen={() => setShowCalendarList(open => !open)}
-              onToggleVisibility={id => void calendar.toggleCalendarVisibility(id)}
-              onChooseCalendar={id => void calendar.chooseCalendar(id)}
-            />
-          </div>
-
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
           <section className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
             <div className="mb-6 flex items-center justify-between gap-3">
               <div>
@@ -1632,46 +1930,70 @@ export function CalendarView({
                     <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">{section}</h3>
                     <div className="mt-3 space-y-3">
                       {events.map(event => (
-                        <article
-                          key={getCalendarEventRenderKey(event)}
-                          className="group rounded-lg bg-[var(--surface-muted)] p-4"
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="min-w-0">
-                              {(() => {
-                                const currentOutcome = getStudyBlockOutcome(event);
-                                return (
-                                  <div className="flex items-center gap-2">
+                        (() => {
+                          const currentOutcome = getStudyBlockOutcome(event);
+                          const presentation = getCalendarEventPresentation(event);
+                          return (
+                            <article
+                              key={getCalendarEventRenderKey(event)}
+                              onClick={() => handleOpenEventDetails(event)}
+                              className={cn(
+                                'group cursor-pointer rounded-lg p-4 transition hover:brightness-[1.02]',
+                                presentation.isSuggested ? 'border' : 'bg-[var(--surface-muted)]'
+                              )}
+                              style={presentation.isSuggested ? {
+                                backgroundColor: presentation.surfaceColor,
+                                borderColor: presentation.borderColor,
+                              } : undefined}
+                            >
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <h4 className="truncate text-sm font-semibold text-[var(--text-primary)]">
                                       {event.summary || 'Untitled event'}
                                     </h4>
+                                    {presentation.badgeLabel && (
+                                      <span className="rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">
+                                        {presentation.badgeLabel}
+                                      </span>
+                                    )}
                                     {currentOutcome && <OutcomeBadge status={currentOutcome.status} />}
                                   </div>
-                                );
-                              })()}
-                              <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                                {getEventStartLabel(event.start)}
-                              </p>
-                              {event.location && (
-                                <p className="mt-2 text-xs text-[var(--text-faint)]">{event.location}</p>
-                              )}
-                              {event.description && (
-                                <p className="mt-2 line-clamp-3 text-xs text-[var(--text-faint)]">
-                                  {event.description}
-                                </p>
-                              )}
-                            </div>
+                                  <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                                    {getEventStartLabel(event.start)}
+                                  </p>
+                                  {presentation.metadata?.deadlineTitle && (
+                                    <p className="mt-2 text-xs font-medium text-[var(--accent)]">
+                                      Linked to {presentation.metadata.deadlineTitle}
+                                    </p>
+                                  )}
+                                  <p className="mt-2 text-xs text-[var(--text-faint)]">
+                                    {event.location
+                                      ? event.location
+                                      : presentation.description
+                                        ? presentation.metadata?.explanation
+                                          ? 'Open details to see why this slot was chosen.'
+                                          : presentation.description
+                                        : 'Open details for the full context.'}
+                                  </p>
+                                </div>
                             <div className="flex shrink-0 items-center gap-1.5">
                               <button
                                 type="button"
-                                onClick={() => handleEditEvent(event)}
+                                onClick={clickEvent => {
+                                  clickEvent.stopPropagation();
+                                  handleEditEvent(event);
+                                }}
                                 className="rounded-full border border-[var(--border-soft)] p-2 text-[var(--text-faint)] opacity-100 transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] md:opacity-0 md:group-hover:opacity-100"
                               >
                                 <Pencil size={14} />
                               </button>
                               <button
                                 type="button"
-                                onClick={() => void handleDelete(event.id)}
+                                onClick={clickEvent => {
+                                  clickEvent.stopPropagation();
+                                  void handleDelete(event.id);
+                                }}
                                 disabled={deletingId === event.id}
                                 className="rounded-full border border-[var(--border-soft)] p-2 text-[var(--text-faint)] opacity-100 transition hover:border-red-500/30 hover:text-red-400 disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
                               >
@@ -1682,14 +2004,17 @@ export function CalendarView({
                                   href={event.htmlLink}
                                   target="_blank"
                                   rel="noreferrer"
+                                  onClick={clickEvent => clickEvent.stopPropagation()}
                                   className="rounded-full border border-[var(--border-soft)] p-2 text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
                                 >
                                   <ExternalLink size={14} />
                                 </a>
                               )}
                             </div>
-                          </div>
-                        </article>
+                              </div>
+                            </article>
+                          );
+                        })()
                       ))}
                     </div>
                   </div>
@@ -1697,6 +2022,28 @@ export function CalendarView({
               </div>
             )}
           </section>
+
+          <div className="space-y-4">
+            <CalendarMiniMonth
+              year={year}
+              month={month}
+              selectedDate={selectedDate}
+              onPrevMonth={() => handleShiftMonth(-1)}
+              onNextMonth={() => handleShiftMonth(1)}
+              onSelectDate={selectDate}
+            />
+
+            <CalendarChecklist
+              calendars={calendar.calendars}
+              visibleCalendarIds={calendar.visibleCalendarIds}
+              selectedCalendarId={calendar.selectedCalendarId}
+              isLoading={calendar.isLoading}
+              open={showCalendarList}
+              onToggleOpen={() => setShowCalendarList(open => !open)}
+              onToggleVisibility={id => void calendar.toggleCalendarVisibility(id)}
+              onChooseCalendar={id => void calendar.chooseCalendar(id)}
+            />
+          </div>
         </div>
       )}
 
@@ -1707,9 +2054,12 @@ export function CalendarView({
           initialStartTime={editingEvent?.start?.dateTime ? new Date(editingEvent.start.dateTime).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: false }) : createStartTime}
           initialEndTime={editingEvent?.end?.dateTime ? new Date(editingEvent.end.dateTime).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: false }) : createEndTime}
           initialSummary={editingEvent?.summary || ''}
-          initialDescription={editingEvent?.description || ''}
+          initialDescription={editingEvent ? (parseAcademicPlanMetadata(editingEvent.description)?.notes ?? editingEvent.description ?? '') : ''}
           initialLocation={editingEvent?.location || ''}
           initialAllDay={Boolean(editingEvent?.start?.date && !editingEvent?.start?.dateTime)}
+          deadlineOptions={deadlineOptions}
+          initialLinkedDeadlineId={editingEvent ? parseAcademicPlanMetadata(editingEvent.description)?.deadlineId ?? null : null}
+          initialMetadataOrigin={editingEvent ? parseAcademicPlanMetadata(editingEvent.description)?.origin ?? null : null}
           calendars={calendar.calendars}
           initialCalendarId={editingEvent?.calendarId || calendar.selectedCalendarId}
           compact={viewMode === 'week'}
@@ -1717,6 +2067,18 @@ export function CalendarView({
           mode={editingEvent ? 'edit' : 'create'}
           onSave={handleSaveEvent}
           onClose={handleCloseCreateModal}
+        />
+      )}
+
+      {detailEvent && (
+        <CalendarEventDetailModal
+          event={detailEvent}
+          currentOutcome={getStudyBlockOutcome(detailEvent)}
+          isSavingOutcome={savingDetailOutcomeId === detailEvent.id}
+          onClose={() => setDetailEvent(null)}
+          onEdit={handleEditEvent}
+          onDelete={handleDelete}
+          onSetOutcome={handleDetailOutcome}
         />
       )}
     </div>

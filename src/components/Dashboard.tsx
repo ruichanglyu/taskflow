@@ -19,6 +19,16 @@ interface DashboardProps {
   behaviorSummary?: string;
   proactivePrompts?: string[];
   onUseBehaviorPrompt?: (prompt: string) => void;
+  planningMetrics?: {
+    generated: number;
+    accepted: number;
+    edited: number;
+    rejected: number;
+    acceptanceRate: number | null;
+    completionRate: number | null;
+  };
+  onPlanNextDeadlines?: () => void;
+  nextPlanningTarget?: Deadline | null;
 }
 
 const STUDY_OUTCOME_OPTIONS: { status: StudyBlockOutcomeStatus; label: string }[] = [
@@ -32,6 +42,13 @@ function getEventDateKey(event: GoogleCalendarEvent): string | null {
   if (event.start?.date) return event.start.date;
   if (event.start?.dateTime) return event.start.dateTime.slice(0, 10);
   return null;
+}
+
+function getTaskCreatedDateKey(task: Task) {
+  if (typeof task.createdAt !== 'string') return null;
+  const parsed = new Date(task.createdAt);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
 }
 
 function hasEventEnded(event: GoogleCalendarEvent, now = new Date()) {
@@ -133,6 +150,9 @@ export function Dashboard({
   behaviorSummary,
   proactivePrompts = [],
   onUseBehaviorPrompt,
+  planningMetrics,
+  onPlanNextDeadlines,
+  nextPlanningTarget,
 }: DashboardProps) {
   const [savingOutcomeId, setSavingOutcomeId] = useState<string | null>(null);
   const lastPromptKeyRef = useRef<string>('');
@@ -159,7 +179,8 @@ export function Dashboard({
       const dayStr = d.toISOString().slice(0, 10);
       const label = d.toLocaleDateString('en-US', { weekday: 'short' });
       const count = tasks.filter(t => {
-        const created = t.createdAt.slice(0, 10);
+        const created = getTaskCreatedDateKey(t);
+        if (!created) return false;
         return created === dayStr;
       }).length;
       days.push({ label, count });
@@ -245,6 +266,40 @@ export function Dashboard({
             <SummaryPill label="active tasks" value={`${activeTasksCount}`} pulse />
             <SummaryPill label="upcoming deadlines" value={`${upcomingDeadlinesCount}`} />
             <SummaryPill label="courses" value={`${projects.length}`} />
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-2">
+              <Target size={18} className="text-[var(--accent)]" />
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">Academic planning loop</h3>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
+              {nextPlanningTarget
+                ? `Your next best planning target is ${nextPlanningTarget.title}, due ${nextPlanningTarget.dueDate}. Turn it into a reviewable study plan before anything touches the calendar.`
+                : 'Pick an upcoming deadline and turn it into a realistic study plan before anything touches the calendar.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SummaryPill label="plans generated" value={`${planningMetrics?.generated ?? 0}`} />
+            <SummaryPill label="accepted" value={`${planningMetrics?.accepted ?? 0}`} />
+            {planningMetrics?.acceptanceRate !== null && planningMetrics?.acceptanceRate !== undefined && (
+              <SummaryPill label="accept rate" value={`${planningMetrics.acceptanceRate}%`} />
+            )}
+            {planningMetrics?.completionRate !== null && planningMetrics?.completionRate !== undefined && (
+              <SummaryPill label="completion" value={`${planningMetrics.completionRate}%`} />
+            )}
+            <button
+              type="button"
+              onClick={onPlanNextDeadlines}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] transition"
+              style={{ backgroundColor: 'var(--accent-strong)' }}
+            >
+              Plan my next deadlines
+            </button>
           </div>
         </div>
       </div>

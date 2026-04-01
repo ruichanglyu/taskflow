@@ -24,6 +24,102 @@ function getStorageKey(baseKey: string, userId: string): string {
   return `${baseKey}:${userId}`;
 }
 
+function isObjectLike(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object';
+}
+
+function normalizeIsoString(value: unknown) {
+  if (typeof value !== 'string') return new Date().toISOString();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : value;
+}
+
+function normalizePriority(value: unknown): Priority {
+  return value === 'high' || value === 'medium' || value === 'low' ? value : 'medium';
+}
+
+function normalizeTaskStatus(value: unknown): TaskStatus {
+  return value === 'todo' || value === 'in-progress' || value === 'done' ? value : 'todo';
+}
+
+function normalizeRecurrence(value: unknown): Recurrence {
+  return value === 'daily' || value === 'weekly' || value === 'monthly' || value === 'none' ? value : 'none';
+}
+
+function normalizeSubtask(value: unknown, taskId: string, index: number): Subtask | null {
+  if (!isObjectLike(value) || typeof value.title !== 'string' || !value.title.trim()) return null;
+
+  return {
+    id: typeof value.id === 'string' && value.id ? value.id : `${taskId}:subtask:${index}`,
+    taskId,
+    title: value.title,
+    done: Boolean(value.done),
+    position: typeof value.position === 'number' && Number.isFinite(value.position) ? value.position : index,
+  };
+}
+
+function normalizeComment(value: unknown, taskId: string, index: number): TaskComment | null {
+  if (!isObjectLike(value) || typeof value.text !== 'string' || !value.text.trim()) return null;
+
+  return {
+    id: typeof value.id === 'string' && value.id ? value.id : `${taskId}:comment:${index}`,
+    taskId,
+    text: value.text,
+    createdAt: normalizeIsoString(value.createdAt),
+  };
+}
+
+function normalizeStoredTask(value: unknown): Task | null {
+  if (!isObjectLike(value) || typeof value.title !== 'string' || !value.title.trim()) return null;
+
+  const taskId = typeof value.id === 'string' && value.id ? value.id : crypto.randomUUID();
+  const subtasks = Array.isArray(value.subtasks)
+    ? value.subtasks
+        .map((subtask, index) => normalizeSubtask(subtask, taskId, index))
+        .filter((subtask): subtask is Subtask => Boolean(subtask))
+    : [];
+  const comments = Array.isArray(value.comments)
+    ? value.comments
+        .map((comment, index) => normalizeComment(comment, taskId, index))
+        .filter((comment): comment is TaskComment => Boolean(comment))
+    : [];
+
+  return {
+    id: taskId,
+    title: value.title,
+    description: typeof value.description === 'string' ? value.description : '',
+    status: normalizeTaskStatus(value.status),
+    priority: normalizePriority(value.priority),
+    projectId: typeof value.projectId === 'string' ? value.projectId : null,
+    createdAt: normalizeIsoString(value.createdAt),
+    dueDate: typeof value.dueDate === 'string' && value.dueDate ? value.dueDate : null,
+    recurrence: normalizeRecurrence(value.recurrence),
+    subtasks,
+    comments,
+  };
+}
+
+function normalizeStoredProject(value: unknown): Project | null {
+  if (!isObjectLike(value) || typeof value.name !== 'string' || !value.name.trim()) return null;
+
+  return {
+    id: typeof value.id === 'string' && value.id ? value.id : crypto.randomUUID(),
+    name: value.name,
+    description: typeof value.description === 'string' ? value.description : '',
+    color: typeof value.color === 'string' && value.color ? value.color : PROJECT_COLORS[0],
+    createdAt: normalizeIsoString(value.createdAt),
+    canvasCourseId: typeof value.canvasCourseId === 'string' ? value.canvasCourseId : null,
+  };
+}
+
+function normalizeStoredSnapshot<T>(baseKey: string, userId: string, normalizer: (value: unknown) => T | null): T[] {
+  const snapshot = getStoredSnapshot<unknown[]>(baseKey, userId);
+  if (!Array.isArray(snapshot)) return [];
+  return snapshot
+    .map(normalizer)
+    .filter((value): value is T => Boolean(value));
+}
+
 interface ProjectRow {
   id: string;
   name: string;
@@ -168,8 +264,8 @@ const seedTasks: Task[] = [
 export function useStore(userId: string) {
   const taskStorageKey = getStorageKey(STORAGE_KEY_TASKS, userId);
   const projectStorageKey = getStorageKey(STORAGE_KEY_PROJECTS, userId);
-  const initialTasks = getStoredSnapshot<Task[]>(STORAGE_KEY_TASKS, userId) ?? [];
-  const initialProjects = getStoredSnapshot<Project[]>(STORAGE_KEY_PROJECTS, userId) ?? [];
+  const initialTasks = normalizeStoredSnapshot<Task>(STORAGE_KEY_TASKS, userId, normalizeStoredTask);
+  const initialProjects = normalizeStoredSnapshot<Project>(STORAGE_KEY_PROJECTS, userId, normalizeStoredProject);
   const hasInitialSnapshot = initialTasks.length > 0 || initialProjects.length > 0;
   const [tasks, setTasks] = useState<Task[]>(() => initialTasks);
   const [projects, setProjects] = useState<Project[]>(() => initialProjects);

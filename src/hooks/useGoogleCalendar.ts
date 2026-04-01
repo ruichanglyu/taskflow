@@ -97,6 +97,21 @@ function dedupeCalendarEvents(events: GoogleCalendarEvent[]) {
   return [...byIdentity.values()];
 }
 
+function chooseFallbackCalendarId(
+  calendars: GoogleCalendarListItem[],
+  selectedCalendarId: string,
+  visibleCalendarIds: string[],
+) {
+  if (selectedCalendarId && calendars.some(calendar => calendar.id === selectedCalendarId)) {
+    return selectedCalendarId;
+  }
+
+  const firstVisible = visibleCalendarIds.find(id => calendars.some(calendar => calendar.id === id));
+  if (firstVisible) return firstVisible;
+
+  return calendars.find(calendar => calendar.primary)?.id || calendars[0]?.id || '';
+}
+
 export function useGoogleCalendar(userId: string) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [hasHydratedStoredToken, setHasHydratedStoredToken] = useState(false);
@@ -108,6 +123,7 @@ export function useGoogleCalendar(userId: string) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const errorRef = useRef<string | null>(null);
   const visibleCalendarIdsRef = useRef<string[]>([]);
 
   const calendarStorageKey = useMemo(() => getStorageKey(userId, 'selected-calendar'), [userId]);
@@ -180,6 +196,7 @@ export function useGoogleCalendar(userId: string) {
     const cachedCalendars = readJsonCache<GoogleCalendarListItem[]>(calendarsCacheKey);
     if (cachedCalendars && cachedCalendars.length > 0) {
       setCalendars(cachedCalendars);
+      setSelectedCalendarId(current => chooseFallbackCalendarId(cachedCalendars, current, visibleCalendarIdsRef.current));
     }
     const cachedEvents = readJsonCache<GoogleCalendarEvent[]>(eventsCacheKey);
     if (cachedEvents && cachedEvents.length > 0) {
@@ -564,15 +581,43 @@ export function useGoogleCalendar(userId: string) {
   }, [calendars, ensureAccessToken, loadEventsForCalendars, selectedCalendarId, visibleCalendarIds]);
 
   const createEvent = useCallback(async (event: NewGoogleCalendarEvent, calendarIdOverride?: string): Promise<boolean> => {
-    const targetCalendarId = calendarIdOverride || selectedCalendarId;
+    errorRef.current = null;
+    let activeCalendars = calendars;
     const token = await ensureAccessToken();
-    if (!token || !targetCalendarId) return false;
+    if (!token) {
+      const message = 'Google Calendar is not ready yet. Please reconnect and try again.';
+      errorRef.current = message;
+      setError(message);
+      return false;
+    }
+    if (activeCalendars.length === 0) {
+      try {
+        activeCalendars = await fetchGoogleCalendars(token);
+        if (activeCalendars.length > 0) {
+          setCalendars(activeCalendars);
+          writeJsonCache(calendarsCacheKey, activeCalendars);
+          const hydratedCalendarId = chooseFallbackCalendarId(activeCalendars, selectedCalendarId, visibleCalendarIdsRef.current);
+          if (hydratedCalendarId) {
+            setSelectedCalendarId(hydratedCalendarId);
+          }
+        }
+      } catch {
+        // Leave activeCalendars empty and let the user-facing error below handle it.
+      }
+    }
+    const targetCalendarId = calendarIdOverride || chooseFallbackCalendarId(activeCalendars, selectedCalendarId, visibleCalendarIdsRef.current);
+    if (!targetCalendarId) {
+      const message = 'Choose a calendar first before scheduling a study block.';
+      errorRef.current = message;
+      setError(message);
+      return false;
+    }
 
     setError(null);
 
     try {
       const created = await createGoogleCalendarEvent(token, targetCalendarId, event);
-      const calendarMeta = calendars.find(calendar => calendar.id === targetCalendarId);
+      const calendarMeta = activeCalendars.find(calendar => calendar.id === targetCalendarId);
       setEvents(prev => {
         const next = [
           ...prev,
@@ -592,10 +637,12 @@ export function useGoogleCalendar(userId: string) {
       });
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create event.');
+      const message = err instanceof Error ? err.message : 'Failed to create event.';
+      errorRef.current = message;
+      setError(message);
       return false;
     }
-  }, [calendars, ensureAccessToken, selectedCalendarId]);
+  }, [calendars, calendarsCacheKey, ensureAccessToken, selectedCalendarId]);
 
   const updateEvent = useCallback(async (
     eventId: string,
@@ -608,9 +655,13 @@ export function useGoogleCalendar(userId: string) {
     const targetCalendarId =
       calendarIdOverride ||
       existingEvent?.calendarId ||
-      selectedCalendarId;
+      chooseFallbackCalendarId(calendars, selectedCalendarId, visibleCalendarIdsRef.current);
     const token = await ensureAccessToken();
-    if (!token || !targetCalendarId || !existingEvent) return false;
+    if (!token || !targetCalendarId || !existingEvent) {
+      if (!token) setError('Google Calendar is not ready yet. Please reconnect and try again.');
+      if (!targetCalendarId) setError('Choose a calendar first before updating this event.');
+      return false;
+    }
 
     setError(null);
 
@@ -721,9 +772,13 @@ export function useGoogleCalendar(userId: string) {
     const targetCalendarId =
       calendarIdOverride ||
       events.find(existing => eventMatchesIdentity(existing, eventId, calendarIdOverride))?.calendarId ||
-      selectedCalendarId;
+      chooseFallbackCalendarId(calendars, selectedCalendarId, visibleCalendarIdsRef.current);
     const token = await ensureAccessToken();
-    if (!token || !targetCalendarId) return false;
+    if (!token || !targetCalendarId) {
+      if (!token) setError('Google Calendar is not ready yet. Please reconnect and try again.');
+      if (!targetCalendarId) setError('Choose a calendar first before deleting this event.');
+      return false;
+    }
 
     setError(null);
 
@@ -735,7 +790,7 @@ export function useGoogleCalendar(userId: string) {
       setError(err instanceof Error ? err.message : 'Failed to delete event.');
       return false;
     }
-  }, [ensureAccessToken, events, selectedCalendarId]);
+  }, [calendars, ensureAccessToken, events, selectedCalendarId]);
 
   const getEventsForRange = useCallback(async (
     range: { timeMin?: string; timeMax?: string },
@@ -799,6 +854,7 @@ export function useGoogleCalendar(userId: string) {
     updateEvent,
     deleteEvent,
     getEventsForRange,
+    getLastError: () => errorRef.current,
   };
 }
 

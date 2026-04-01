@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Upload, ChevronDown, ChevronUp, Filter, StickyNote, Link2, Trash2, X, Pencil, CheckCircle2, AlertCircle, Search } from 'lucide-react';
+import { Plus, Upload, ChevronDown, ChevronUp, Filter, StickyNote, Link2, Trash2, X, Pencil, CheckCircle2, AlertCircle, Search, Sparkles, Mail, CalendarDays } from 'lucide-react';
 import { Deadline, DeadlineStatus, DeadlineType, Project, Task } from '../types';
 import { cn } from '../utils/cn';
+import type { GoogleCalendarEvent } from '../lib/googleCalendar';
+import { parseAcademicPlanMetadata, parseEmailIntoDeadlineImport } from '../lib/academicPlanning';
 
 interface DeadlinesPageProps {
+  userId: string;
   deadlines: Deadline[];
   projects: Project[];
   tasks: Task[];
+  calendarEvents: GoogleCalendarEvent[];
   initialCourseFilter?: string | null;
   initialDetailId?: string | null;
-  onAdd: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus) => Promise<boolean>;
+  onAdd: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus, source?: { sourceType: Deadline['sourceType']; sourceId: string; sourceUrl?: string }) => Promise<boolean>;
   onAddProject: (name: string, description: string) => Promise<string | null> | void;
   onUpdate: (id: string, updates: Partial<Pick<Deadline, 'title' | 'projectId' | 'status' | 'type' | 'dueDate' | 'dueTime' | 'notes'>>) => Promise<boolean>;
   onDelete: (id: string) => void;
@@ -17,8 +21,10 @@ interface DeadlinesPageProps {
   onLinkTask: (deadlineId: string, taskId: string) => Promise<boolean>;
   onUnlinkTask: (deadlineId: string, taskId: string) => void;
   onCreateTask: (title: string, description: string, projectId: string | null, dueDate: string | null) => Promise<string | null>;
+  onCreateLinkedTask: (title: string, projectId: string | null, dueDate: string | null) => Promise<string | null>;
   onNavigateToCourse?: (projectId: string) => void;
   onNavigateToTasks?: (projectId: string) => void;
+  onOpenPlanner?: (deadlineIds?: string[]) => void;
 }
 
 type SortField = 'dueDate' | 'title' | 'type' | 'status' | 'course';
@@ -35,6 +41,9 @@ interface ParsedImportRow {
   status: DeadlineStatus;
   type: DeadlineType;
   notes: string;
+  prepTaskTitle?: string | null;
+  sourceType?: Deadline['sourceType'];
+  sourceId?: string | null;
 }
 
 interface ImportPreview {
@@ -61,6 +70,24 @@ const TYPE_OPTIONS: { value: DeadlineType; label: string }[] = [
 
 function statusMeta(status: DeadlineStatus) {
   return STATUS_OPTIONS.find(s => s.value === status) ?? STATUS_OPTIONS[0];
+}
+
+function getDeadlineSourceMeta(sourceType: Deadline['sourceType']) {
+  switch (sourceType) {
+    case 'canvas_assignment':
+    case 'canvas_quiz':
+      return {
+        label: 'Canvas',
+        className: 'bg-orange-500/10 text-orange-400',
+      };
+    case 'email_import':
+      return {
+        label: 'Email',
+        className: 'bg-sky-500/10 text-sky-300',
+      };
+    default:
+      return null;
+  }
 }
 
 function groupDeadlinesByCourse(deadlines: Deadline[], projects: Project[]) {
@@ -281,7 +308,27 @@ function parseDeadlineCsv(fileName: string, text: string): ImportPreview {
   return { fileName, rows: parsedRows, skippedRows };
 }
 
-export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter = null, initialDetailId = null, onAdd, onAddProject, onUpdate, onDelete, onDeleteAll, onLinkTask, onUnlinkTask, onCreateTask, onNavigateToCourse, onNavigateToTasks }: DeadlinesPageProps) {
+export function DeadlinesPage({
+  userId,
+  deadlines,
+  projects,
+  tasks,
+  calendarEvents,
+  initialCourseFilter = null,
+  initialDetailId = null,
+  onAdd,
+  onAddProject,
+  onUpdate,
+  onDelete,
+  onDeleteAll,
+  onLinkTask,
+  onUnlinkTask,
+  onCreateTask,
+  onCreateLinkedTask,
+  onNavigateToCourse,
+  onNavigateToTasks,
+  onOpenPlanner,
+}: DeadlinesPageProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
@@ -380,34 +427,22 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
 
   const leadingCompletedCount = useMemo(() => {
     if (!canCollapseCompletedHistory) return 0;
-    let count = 0;
-    for (const deadline of filtered) {
-      if (deadline.status === 'done' || deadline.status === 'missed') {
-        count++;
-      } else {
-        break;
-      }
-    }
-    return count;
+    return filtered.filter(deadline => deadline.status === 'done' || deadline.status === 'missed').length;
   }, [canCollapseCompletedHistory, filtered]);
 
-  const visibleDeadlines = useMemo(() => {
-    if (!canCollapseCompletedHistory || showCompletedHistory || leadingCompletedCount === 0) {
-      return filtered;
-    }
-    return filtered.slice(leadingCompletedCount);
-  }, [canCollapseCompletedHistory, filtered, leadingCompletedCount, showCompletedHistory]);
-
-  const activeDeadlines = visibleDeadlines;
+  const activeDeadlines = useMemo(() => {
+    if (!canCollapseCompletedHistory) return filtered;
+    return filtered.filter(deadline => deadline.status !== 'done' && deadline.status !== 'missed');
+  }, [canCollapseCompletedHistory, filtered]);
 
   const historyDeadlines = useMemo(() => {
     if (!canCollapseCompletedHistory || leadingCompletedCount === 0) return [];
-    return filtered.slice(0, leadingCompletedCount);
+    return filtered.filter(deadline => deadline.status === 'done' || deadline.status === 'missed');
   }, [canCollapseCompletedHistory, filtered, leadingCompletedCount]);
 
   const groupedByCourse = useMemo(
-    () => groupDeadlinesByCourse(visibleDeadlines, projects),
-    [projects, visibleDeadlines]
+    () => groupDeadlinesByCourse(activeDeadlines, projects),
+    [activeDeadlines, projects]
   );
 
   const historyGroupedByCourse = useMemo(
@@ -460,10 +495,27 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
         continue;
       }
 
-      const ok = await onAdd(row.title, projectId, row.type, row.dueDate, row.dueTime, row.notes, row.status);
+      const ok = await onAdd(
+        row.title,
+        projectId,
+        row.type,
+        row.dueDate,
+        row.dueTime,
+        row.notes,
+        row.status,
+        row.sourceType && row.sourceId
+          ? {
+              sourceType: row.sourceType,
+              sourceId: row.sourceId,
+            }
+          : undefined,
+      );
       if (ok) {
         importedCount++;
         existingSignatures.add(signature);
+        if (row.prepTaskTitle?.trim()) {
+          await onCreateLinkedTask(row.prepTaskTitle.trim(), projectId, row.dueDate);
+        }
       }
     }
 
@@ -513,7 +565,16 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
               className="flex h-10 items-center gap-1.5 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
             >
               <Upload size={14} />
-              Import CSV
+              Import
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenPlanner?.()}
+              disabled={!onOpenPlanner}
+              className="flex h-10 items-center gap-1.5 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Sparkles size={14} />
+              Plan next deadlines
             </button>
             <button
               type="button"
@@ -1044,11 +1105,15 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                           <span className={cn('text-sm', dl.status === 'done' ? 'text-[var(--text-faint)] line-through' : 'text-[var(--text-primary)]')}>
                             {dl.title}
                           </span>
-                          {dl.sourceType !== 'manual' && (
-                            <span className="shrink-0 rounded bg-orange-500/10 px-1.5 py-0.5 text-[9px] font-medium text-orange-400" title={dl.sourceUrl ?? undefined}>
-                              Canvas
-                            </span>
-                          )}
+                          {(() => {
+                            const sourceMeta = getDeadlineSourceMeta(dl.sourceType);
+                            if (!sourceMeta) return null;
+                            return (
+                              <span className={cn('shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium', sourceMeta.className)} title={dl.sourceUrl ?? undefined}>
+                                {sourceMeta.label}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td className="px-3 py-2.5">
@@ -1208,11 +1273,15 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
                             <span className={cn('text-sm', dl.status === 'done' ? 'text-[var(--text-faint)] line-through' : 'text-[var(--text-primary)]')}>
                               {dl.title}
                             </span>
-                            {dl.sourceType !== 'manual' && (
-                              <span className="shrink-0 rounded bg-orange-500/10 px-1.5 py-0.5 text-[9px] font-medium text-orange-400" title={dl.sourceUrl ?? undefined}>
-                                Canvas
-                              </span>
-                            )}
+                            {(() => {
+                              const sourceMeta = getDeadlineSourceMeta(dl.sourceType);
+                              if (!sourceMeta) return null;
+                              return (
+                                <span className={cn('shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium', sourceMeta.className)} title={dl.sourceUrl ?? undefined}>
+                                  {sourceMeta.label}
+                                </span>
+                              );
+                            })()}
                           </div>
                         </td>
                         <td className="px-3 py-2.5">
@@ -1282,6 +1351,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
 
       {showImportModal && (
         <ImportDeadlinesModal
+          userId={userId}
           existingDeadlines={deadlines}
           existingProjects={projects}
           onImport={handleImport}
@@ -1328,6 +1398,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
           deadline={detailDeadline}
           projects={projects}
           tasks={tasks}
+          calendarEvents={calendarEvents}
           onUpdate={async (updates) => {
             return onUpdate(detailDeadline.id, updates);
           }}
@@ -1342,6 +1413,7 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
           }}
           onNavigateToCourse={onNavigateToCourse}
           onNavigateToTasks={onNavigateToTasks}
+          onPlanDeadline={() => onOpenPlanner?.([detailDeadline.id])}
           onClose={() => setDetailId(null)}
         />
       )}
@@ -1349,16 +1421,19 @@ export function DeadlinesPage({ deadlines, projects, tasks, initialCourseFilter 
   );
 }
 
-function ImportDeadlinesModal({ existingDeadlines, existingProjects, onImport, onClose }: {
+function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onImport, onClose }: {
+  userId: string;
   existingDeadlines: Deadline[];
   existingProjects: Project[];
   onImport: (preview: ImportPreview) => Promise<void>;
   onClose: () => void;
 }) {
+  const [mode, setMode] = useState<'csv' | 'email'>('csv');
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailText, setEmailText] = useState('');
 
   const existingSignatures = useMemo(() => {
     return new Set(
@@ -1392,6 +1467,36 @@ function ImportDeadlinesModal({ existingDeadlines, existingProjects, onImport, o
     }
   };
 
+  const handleEmailParse = async () => {
+    setIsParsing(true);
+    setError(null);
+
+    try {
+      const parsed = await parseEmailIntoDeadlineImport(userId, emailText);
+      setPreview({
+        fileName: 'Pasted email',
+        rows: parsed.rows.map(row => ({
+          title: row.title,
+          course: row.course,
+          dueDate: row.dueDate,
+          dueTime: row.dueTime,
+          status: 'not-started',
+          type: row.type,
+          notes: row.notes,
+          prepTaskTitle: row.prepTaskTitle ?? null,
+          sourceType: row.sourceType,
+          sourceId: row.sourceId,
+        })),
+        skippedRows: parsed.skippedRows,
+      });
+    } catch (err) {
+      setPreview(null);
+      setError(err instanceof Error ? err.message : 'Could not parse the email content.');
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
   const handleImport = async () => {
     if (!preview) return;
     setIsImporting(true);
@@ -1412,8 +1517,8 @@ function ImportDeadlinesModal({ existingDeadlines, existingProjects, onImport, o
       <div className="w-full max-w-3xl rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Import Deadlines from CSV</h2>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">Upload your semester tracker and we’ll map it into Deadlines and Courses.</p>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Import deadlines</h2>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">Use the same intake flow for semester CSVs or pasted email content, then review the normalized deadlines before saving them.</p>
           </div>
           <button onClick={onClose} className="text-[var(--text-faint)] transition hover:text-[var(--text-primary)]">
             <X size={18} />
@@ -1421,17 +1526,78 @@ function ImportDeadlinesModal({ existingDeadlines, existingProjects, onImport, o
         </div>
 
         <div className="space-y-4 p-5">
-          <label className="block rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-6 text-center transition hover:border-[var(--accent)]">
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              className="hidden"
-              onChange={e => void handleFile(e.target.files?.[0] ?? null)}
-            />
-            <Upload size={20} className="mx-auto mb-2 text-[var(--text-faint)]" />
-            <div className="text-sm font-medium text-[var(--text-primary)]">Choose a CSV file</div>
-            <div className="mt-1 text-xs text-[var(--text-faint)]">Expected columns: Status, Course, Date, Time, Title, Type, Notes</div>
-          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => { setMode('csv'); setPreview(null); setError(null); }}
+              className={cn(
+                'rounded-full border px-3 py-1.5 text-xs font-medium transition',
+                mode === 'csv'
+                  ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                  : 'border-[var(--border-soft)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]'
+              )}
+            >
+              CSV upload
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('email'); setPreview(null); setError(null); }}
+              className={cn(
+                'rounded-full border px-3 py-1.5 text-xs font-medium transition',
+                mode === 'email'
+                  ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                  : 'border-[var(--border-soft)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]'
+              )}
+            >
+              Paste email
+            </button>
+          </div>
+
+          {mode === 'csv' ? (
+            <label className="block rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-6 text-center transition hover:border-[var(--accent)]">
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={e => void handleFile(e.target.files?.[0] ?? null)}
+              />
+              <Upload size={20} className="mx-auto mb-2 text-[var(--text-faint)]" />
+              <div className="text-sm font-medium text-[var(--text-primary)]">Choose a CSV file</div>
+              <div className="mt-1 text-xs text-[var(--text-faint)]">Expected columns: Status, Course, Date, Time, Title, Type, Notes</div>
+            </label>
+          ) : (
+            <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 text-[var(--accent)]">
+                  <Mail size={16} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-[var(--text-primary)]">Paste an email or announcement</div>
+                  <p className="mt-1 text-xs leading-5 text-[var(--text-faint)]">
+                    Paste copied Gmail or Outlook email content here. We’ll extract the dated academic work and turn it into deadlines in the same import pipeline.
+                  </p>
+                </div>
+              </div>
+              <textarea
+                value={emailText}
+                onChange={event => setEmailText(event.target.value)}
+                rows={10}
+                placeholder="Paste the email body here..."
+                className="mt-4 w-full resize-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+              />
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void handleEmailParse()}
+                  disabled={!emailText.trim() || isParsing}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{ backgroundColor: 'var(--accent-strong)' }}
+                >
+                  {isParsing ? 'Extracting...' : 'Extract deadlines'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {isParsing && (
             <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-muted)]">
@@ -1480,6 +1646,7 @@ function ImportDeadlinesModal({ existingDeadlines, existingProjects, onImport, o
                         <th className="px-3 py-2">Title</th>
                         <th className="px-3 py-2">Type</th>
                         <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Prep task</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1491,6 +1658,7 @@ function ImportDeadlinesModal({ existingDeadlines, existingProjects, onImport, o
                           <td className="px-3 py-2 text-[var(--text-primary)]">{row.title}</td>
                           <td className="px-3 py-2 text-[var(--text-faint)] uppercase">{row.type}</td>
                           <td className="px-3 py-2 text-[var(--text-faint)]">{statusMeta(row.status).label}</td>
+                          <td className="px-3 py-2 text-[var(--text-faint)]">{row.prepTaskTitle || '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1650,16 +1818,18 @@ function AddDeadlineModal({ projects, onAdd, onClose }: {
 
 /* ─── Deadline Detail Modal ─── */
 
-function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, onUnlinkTask, onCreateTask, onNavigateToCourse, onNavigateToTasks, onClose }: {
+function DeadlineDetailModal({ deadline, projects, tasks, calendarEvents, onUpdate, onLinkTask, onUnlinkTask, onCreateTask, onNavigateToCourse, onNavigateToTasks, onPlanDeadline, onClose }: {
   deadline: Deadline;
   projects: Project[];
   tasks: Task[];
+  calendarEvents: GoogleCalendarEvent[];
   onUpdate: (updates: Partial<Pick<Deadline, 'title' | 'projectId' | 'status' | 'type' | 'dueDate' | 'dueTime' | 'notes'>>) => Promise<boolean>;
   onLinkTask: (taskId: string) => Promise<boolean>;
   onUnlinkTask: (taskId: string) => void;
   onCreateTask: (title: string) => Promise<boolean>;
   onNavigateToCourse?: (projectId: string) => void;
   onNavigateToTasks?: (projectId: string) => void;
+  onPlanDeadline?: () => void;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(deadline.title);
@@ -1677,6 +1847,12 @@ function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, 
   const linkedTasks = tasks.filter(t => deadline.linkedTaskIds.includes(t.id));
   const availableTasks = tasks.filter(t => !deadline.linkedTaskIds.includes(t.id));
   const project = projects.find(p => p.id === deadline.projectId);
+  const relatedStudyBlocks = useMemo(() => (
+    calendarEvents.filter(event => {
+      const metadata = parseAcademicPlanMetadata(event.description);
+      return metadata?.deadlineId === deadline.id;
+    })
+  ), [calendarEvents, deadline.id]);
 
   const handleSave = async () => {
     if (!title.trim() || !dueDate || isSaving) return;
@@ -1726,7 +1902,23 @@ function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, 
               >
                 View course tasks
               </button>
+              <button
+                type="button"
+                onClick={onPlanDeadline}
+                className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--accent)]"
+              >
+                Build study plan
+              </button>
             </div>
+          )}
+          {!project && onPlanDeadline && (
+            <button
+              type="button"
+              onClick={onPlanDeadline}
+              className="w-fit rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--accent)]"
+            >
+              Build study plan
+            </button>
           )}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Title</label>
@@ -1890,6 +2082,36 @@ function DeadlineDetailModal({ deadline, projects, tasks, onUpdate, onLinkTask, 
               ))}
               {linkedTasks.length === 0 && (
                 <p className="text-[10px] text-[var(--text-faint)] py-1">No linked tasks. Link existing tasks or create new ones from here.</p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="text-xs font-medium text-[var(--text-muted)]">Planned study blocks</label>
+              <span className="text-[10px] text-[var(--text-faint)]">{relatedStudyBlocks.length} scheduled</span>
+            </div>
+            <div className="space-y-2">
+              {relatedStudyBlocks.length > 0 ? (
+                relatedStudyBlocks.map(event => {
+                  const metadata = parseAcademicPlanMetadata(event.description);
+                  const timeLabel = event.start?.dateTime && event.end?.dateTime
+                    ? `${new Date(event.start.dateTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${new Date(event.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} – ${new Date(event.end.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+                    : event.start?.date
+                      ? `${event.start.date} · All day`
+                      : 'Scheduled';
+                  return (
+                    <div key={`${event.id}-${timeLabel}`} className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2.5">
+                      <div className="text-xs font-medium text-[var(--text-primary)]">{event.summary || 'Study block'}</div>
+                      <div className="mt-1 text-[11px] text-[var(--text-faint)]">{timeLabel}</div>
+                      {metadata?.explanation && (
+                        <div className="mt-1 text-[11px] leading-5 text-[var(--text-muted)]">{metadata.explanation}</div>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="text-[10px] text-[var(--text-faint)] py-1">No accepted study blocks are linked to this deadline yet.</p>
               )}
             </div>
           </div>

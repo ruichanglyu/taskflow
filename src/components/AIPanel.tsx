@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Component, type ReactNode } from 'react';
-import { Minus, Send, Sparkles, Square, Check, AlertCircle, Download, ImagePlus, Plus, Mic, MicOff, CopyPlus, FileSearch, CheckCircle2, ChevronDown, LayoutPanelLeft, PanelRightOpen, Wand2, Pencil, Trash2, X } from 'lucide-react';
+import { Minus, Send, Sparkles, Square, Check, AlertCircle, Download, ImagePlus, Plus, Mic, MicOff, CopyPlus, FileSearch, CheckCircle2, ChevronDown, LayoutPanelLeft, PanelRightOpen, Wand2, Pencil, Trash2, X, CalendarDays } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -16,6 +16,7 @@ import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
 import type { GoogleCalendarEvent, GoogleCalendarListItem, NewGoogleCalendarEvent } from '../lib/googleCalendar';
 import { isStudyBlockLikeEvent, normalizeCalendarSummary } from '../utils/studyBlockDetection';
+import { buildAcademicPlanMetadataDescription, parseAcademicPlanMetadata } from '../lib/academicPlanning';
 
 /* Error boundary — prevents the entire app from crashing if AI panel rendering fails */
 class AIPanelErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
@@ -244,6 +245,10 @@ function resetAIPersonality(userId: string) {
   } catch {
     // ignore storage failures
   }
+}
+
+function isScrolledNearBottom(element: HTMLDivElement, threshold = 96) {
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
 }
 
 function loadRecentCalendarTargets(userId: string) {
@@ -505,6 +510,7 @@ interface AIPanelProps {
   onCreateCalendarEvent: (event: NewGoogleCalendarEvent, calendarId?: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onUpdateCalendarEvent: (eventId: string, event: Partial<NewGoogleCalendarEvent>, calendarId?: string, options?: BehaviorLearningActionOptions, existingEvent?: GoogleCalendarEvent) => Promise<boolean>;
   onDeleteCalendarEvent: (eventId: string, calendarId?: string, options?: BehaviorLearningActionOptions, existingEvent?: GoogleCalendarEvent) => Promise<boolean>;
+  onOpenAcademicPlanner?: (deadlineIds?: string[]) => void;
   habits: Habit[];
   onAddHabit: (title: string, frequency?: 'daily' | 'weekly', options?: BehaviorLearningActionOptions) => Promise<void>;
   onToggleHabit: (id: string, options?: BehaviorLearningActionOptions) => Promise<void>;
@@ -517,6 +523,7 @@ export function AIPanel({
   calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot, behaviorSummary, draftPrompt, onDraftPromptConsumed, onAiPromptSubmitted, onAiActionsApplied, onAiSuggestionAccepted, onAiSuggestionEdited, onAiSuggestionRejected, onStudyBlockLinkedTarget, onStudySlotCandidatesLogged,
   onAddTask, onUpdateTask, onAddDeadline, onUpdateDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
   onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
+  onOpenAcademicPlanner,
   habits, onAddHabit, onToggleHabit, onDeleteHabit,
 }: AIPanelProps) {
   const {
@@ -598,6 +605,7 @@ export function AIPanel({
   const [speechSupported, setSpeechSupported] = useState(false);
   const [isComposerDragActive, setIsComposerDragActive] = useState(false);
   const [dictationSeconds, setDictationSeconds] = useState(0);
+  const [stickToBottom, setStickToBottom] = useState(true);
   const aiLearningOptions = useMemo<BehaviorLearningActionOptions>(() => ({
     source: 'ai',
     learn: aiLearningEnabled,
@@ -624,9 +632,16 @@ export function AIPanel({
 
   useEffect(() => {
     if (!open) return;
+    setStickToBottom(true);
     const frame = requestAnimationFrame(() => scrollToBottom('auto'));
     return () => cancelAnimationFrame(frame);
-  }, [open, currentChatId, messages.length, scrollToBottom]);
+  }, [open, currentChatId, scrollToBottom]);
+
+  useEffect(() => {
+    if (!open || !stickToBottom) return;
+    const frame = requestAnimationFrame(() => scrollToBottom('auto'));
+    return () => cancelAnimationFrame(frame);
+  }, [messages, open, scrollToBottom, stickToBottom]);
 
   useEffect(() => {
     const recognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -782,6 +797,7 @@ export function AIPanel({
     onAiPromptSubmitted?.(msg, Boolean(images?.length));
     setInput('');
     setPendingImages([]);
+    setStickToBottom(true);
     await sendMessage(msg, {
       tasks,
       deadlines,
@@ -1006,6 +1022,8 @@ export function AIPanel({
       ...recentAiTasksRef.current.filter(recent => !tasks.some(task => task.id === recent.id)),
     ];
     let workingCalendarEvents: GoogleCalendarEvent[] = [...calendarEvents];
+    const sourceUserMessage = getSourceUserMessageForBlock(messages, blockKey);
+    const explicitEntityTarget = inferExplicitEntityTarget(sourceUserMessage);
 
     const calendarRange = buildCalendarLookupRange(collectCalendarRangeRows(block));
     if (calendarRange && getCalendarEventsForRange) {
@@ -1043,12 +1061,16 @@ export function AIPanel({
 
     if (block.type === 'delete-tasks') {
       let skipped = 0;
+      let crossEntityAmbiguous = 0;
       for (const row of block.rows) {
-        const deleteCourse = row.course ?? extractCourseFromTitle(row.title);
-        const deletePool = deleteCourse
-          ? filterTasksByCourse(workingTasks, projects, deleteCourse)
-          : workingTasks;
+        const deletePool = buildEntityScopedTaskPool(workingTasks, projects, row.title, row.course);
         const matches = matchTaskCandidates(deletePool, row.title);
+        const deadlineMatches = matchDeadlineCandidates(deadlines, projects, row.title, row.course);
+        if (matches.length === 1 && deadlineMatches.length === 1 && explicitEntityTarget !== 'task') {
+          crossEntityAmbiguous++;
+          skipped++;
+          continue;
+        }
         if (matches.length !== 1) {
           skipped++;
           continue;
@@ -1064,7 +1086,13 @@ export function AIPanel({
       }
 
       skippedForLog = skipped;
-      if (skipped > 0) {
+      if (crossEntityAmbiguous > 0) {
+        setPanelError(
+          crossEntityAmbiguous === 1
+            ? 'Skipped 1 delete because that title matches both a task and a deadline. Say whether you mean the task or the deadline and try again.'
+            : `Skipped ${crossEntityAmbiguous} deletes because those titles match both tasks and deadlines. Say whether you mean the task or the deadline and try again.`,
+        );
+      } else if (skipped > 0) {
         setPanelError(
           skipped === 1
             ? 'Skipped 1 AI delete entry because it was ambiguous, missing, or failed to delete.'
@@ -1073,12 +1101,16 @@ export function AIPanel({
       }
     } else if (block.type === 'update-tasks') {
       let skipped = 0;
+      let crossEntityAmbiguous = 0;
       for (const row of block.rows) {
-        const updateCourse = row.course ?? extractCourseFromTitle(row.title);
-        const updatePool = updateCourse
-          ? filterTasksByCourse(workingTasks, projects, updateCourse)
-          : workingTasks;
+        const updatePool = buildEntityScopedTaskPool(workingTasks, projects, row.title, row.course);
         const matches = matchTaskCandidates(updatePool, row.title);
+        const deadlineMatches = matchDeadlineCandidates(deadlines, projects, row.title, row.course);
+        if (matches.length === 1 && deadlineMatches.length === 1 && explicitEntityTarget !== 'task') {
+          crossEntityAmbiguous++;
+          skipped++;
+          continue;
+        }
         if (matches.length !== 1) {
           skipped++;
           continue;
@@ -1100,7 +1132,13 @@ export function AIPanel({
           onAiSuggestionEdited?.(block.type, 1);
         } else skipped++;
       }
-      if (skipped > 0) {
+      if (crossEntityAmbiguous > 0) {
+        setPanelError(
+          crossEntityAmbiguous === 1
+            ? 'Skipped 1 update because that title matches both a task and a deadline. Say whether you mean the task or the deadline and try again.'
+            : `Skipped ${crossEntityAmbiguous} updates because those titles match both tasks and deadlines. Say whether you mean the task or the deadline and try again.`,
+        );
+      } else if (skipped > 0) {
         setPanelError(
           skipped === 1
             ? 'Skipped 1 update because the task was ambiguous, missing, or failed to update.'
@@ -1120,6 +1158,7 @@ export function AIPanel({
         const targetCalendar = targetCalendarId
           ? calendarCalendars.find(item => item.id === targetCalendarId)
           : undefined;
+        const linkedTarget = resolveStudyBlockLinkedDeadline(row, row.title, deadlines, projects);
 
         const rawPayload = buildCalendarEventPayload(row, 'create');
         if (!rawPayload || !targetCalendarId) {
@@ -1127,9 +1166,13 @@ export function AIPanel({
           continue;
         }
 
+        const decoratedPayload = isStudyBlockAutoScheduleTarget(row, targetCalendar?.summary ?? row.calendar)
+          ? attachAcademicStudyMetadata(rawPayload, row, linkedTarget)
+          : rawPayload;
+
         const resolved = maybeResolveCalendarCreateConflict(
           row,
-          rawPayload,
+          decoratedPayload,
           workingCalendarEvents,
           targetCalendar?.summary ?? row.calendar,
           scoreStudySlot,
@@ -1142,7 +1185,7 @@ export function AIPanel({
           ) {
             const linkedTarget = resolveStudyBlockLinkedDeadline(row, rawPayload.summary, deadlines, projects);
             onStudySlotCandidatesLogged?.({
-              title: rawPayload.summary,
+              title: decoratedPayload.summary,
               calendarSummary: targetCalendar?.summary ?? row.calendar,
               course: linkedTarget?.course ?? row.course ?? extractCourseFromTitle(row.title) ?? extractLeadingCourseCode(rawPayload.summary),
               dateKey: resolved.dateKey,
@@ -1224,7 +1267,6 @@ export function AIPanel({
             resolved.durationMinutes !== null &&
             resolved.requestedStartMinutes !== null
           ) {
-            const linkedTarget = resolveStudyBlockLinkedDeadline(row, resolved.payload.summary, deadlines, projects);
             if (linkedTarget) {
               onStudyBlockLinkedTarget?.({
                 title: resolved.payload.summary,
@@ -1289,6 +1331,11 @@ export function AIPanel({
         const targetCalendarSummary = row.newCalendar
           ? calendarCalendars.find(item => item.id === targetCalendarId)?.summary ?? row.newCalendar
           : matches[0].calendarSummary;
+        const linkedTarget = resolveStudyBlockLinkedDeadline(row, payload.summary, deadlines, projects);
+
+        if (isStudyBlockAutoScheduleTarget(row, targetCalendarSummary)) {
+          payload = attachAcademicStudyMetadata(payload, row, linkedTarget, matches[0].description ?? null);
+        }
 
         const updateResolution = maybeResolveCalendarUpdateConflict(
           row,
@@ -1360,7 +1407,6 @@ export function AIPanel({
             updateResolution.durationMinutes !== null &&
             updateResolution.requestedStartMinutes !== null
           ) {
-            const linkedTarget = resolveStudyBlockLinkedDeadline(row, payload.summary, deadlines, projects);
             if (linkedTarget) {
               onStudyBlockLinkedTarget?.({
                 title: payload.summary,
@@ -1566,6 +1612,7 @@ export function AIPanel({
       skippedForLog = taskResults.length - imported;
     } else if (block.type === 'deadlines') {
       let skipped = 0;
+      let crossEntityAmbiguous = 0;
       for (const row of block.rows) {
         if (!row.dueDate) {
           skipped++;
@@ -1575,6 +1622,15 @@ export function AIPanel({
         const type = (['assignment', 'exam', 'quiz', 'lab', 'project', 'other'].includes(row.type ?? '') ? row.type : 'other') as DeadlineType;
         const status = (['not-started', 'in-progress', 'done', 'missed'].includes(row.status ?? '') ? row.status : 'not-started') as DeadlineStatus;
         const matches = matchDeadlineCandidates(deadlines, projects, row.title, row.course);
+        const taskMatches = matchTaskCandidates(
+          buildEntityScopedTaskPool(workingTasks, projects, row.title, row.course),
+          row.title,
+        );
+        if (matches.length === 1 && taskMatches.length === 1 && explicitEntityTarget !== 'deadline') {
+          crossEntityAmbiguous++;
+          skipped++;
+          continue;
+        }
         const ok = matches.length === 1
           ? await onUpdateDeadline(matches[0].id, {
               title: row.title,
@@ -1604,6 +1660,19 @@ export function AIPanel({
         } else skipped++;
       }
       skippedForLog = skipped;
+      if (crossEntityAmbiguous > 0) {
+        setPanelError(
+          crossEntityAmbiguous === 1
+            ? 'Skipped 1 deadline update because that title matches both a task and a deadline. Say whether you mean the task or the deadline and try again.'
+            : `Skipped ${crossEntityAmbiguous} deadline updates because those titles match both tasks and deadlines. Say whether you mean the task or the deadline and try again.`,
+        );
+      } else if (skipped > 0) {
+        setPanelError(
+          skipped === 1
+            ? 'Skipped 1 deadline entry because it was incomplete, ambiguous, or failed to save.'
+            : `Skipped ${skipped} deadline entries because they were incomplete, ambiguous, or failed to save.`,
+        );
+      }
     } else if (block.type === 'habits-create') {
       for (const row of block.rows) {
         const freq = (row.frequency === 'weekly' ? 'weekly' : 'daily') as 'daily' | 'weekly';
@@ -1667,8 +1736,15 @@ export function AIPanel({
 
   const handleStarterPrompt = (prompt: string) => {
     setInput(prompt);
+    setStickToBottom(true);
     requestAnimationFrame(() => inputRef.current?.focus());
   };
+
+  const handleMessagesScroll = useCallback(() => {
+    const element = messagesScrollRef.current;
+    if (!element) return;
+    setStickToBottom(isScrolledNearBottom(element));
+  }, []);
 
   const panelContent = (
       <div
@@ -1834,7 +1910,7 @@ export function AIPanel({
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <section className="min-w-0 flex-1 flex min-h-0 flex-col">
             {/* Messages */}
-            <div key={currentChatId} ref={messagesScrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <div key={currentChatId} ref={messagesScrollRef} onScroll={handleMessagesScroll} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               <AIPanelErrorBoundary>
                 {keyLoading ? (
                   <div className="flex h-full items-center justify-center">
@@ -1871,14 +1947,15 @@ export function AIPanel({
                     </div>
                   </div>
                 ) : messages.length === 0 ? (
-                  <WelcomeScreen userId={userId} hasKey={hasKey} onUsePrompt={handleStarterPrompt} />
+                  <WelcomeScreen userId={userId} hasKey={hasKey} onUsePrompt={handleStarterPrompt} onOpenAcademicPlanner={onOpenAcademicPlanner} />
                 ) : (
                   <div className="space-y-4">
-                    {messages.map(msg => (
+                    {messages.map((msg, index) => (
                       <MessageBubble
                         key={msg.id}
                         userId={userId}
                         message={msg}
+                        promptContext={getPriorUserPrompt(messages, index)}
                         tasks={tasks}
                         deadlines={deadlines}
                         projects={projects}
@@ -2100,7 +2177,7 @@ export function AIPanel({
 }
 
 // --- Welcome Screen ---
-function WelcomeScreen({ userId, hasKey, onUsePrompt }: { userId: string; hasKey: boolean; onUsePrompt: (prompt: string) => void }) {
+function WelcomeScreen({ userId, hasKey, onUsePrompt, onOpenAcademicPlanner }: { userId: string; hasKey: boolean; onUsePrompt: (prompt: string) => void; onOpenAcademicPlanner?: (deadlineIds?: string[]) => void }) {
   const badgeOptions = ['✨', '🎓', '🪄', '🧠', '🌿', '👑', '🦆', '🌶️', '🪐', '🍅', '🎀', '🧢'];
   const [showPersonalize, setShowPersonalize] = useState(false);
   const [personalizeOpen, setPersonalizeOpen] = useState(false);
@@ -2165,6 +2242,16 @@ function WelcomeScreen({ userId, hasKey, onUsePrompt }: { userId: string; hasKey
       </p>
       {hasKey && (
         <div className="mt-8 grid w-full max-w-md gap-2.5 text-left">
+          <button
+            type="button"
+            onClick={() => onOpenAcademicPlanner?.()}
+            className="group flex w-full items-center gap-3 rounded-[20px] border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-left text-sm text-[var(--text-secondary)] transition duration-150 hover:-translate-y-0.5 hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)] transition group-hover:scale-105">
+              <CalendarDays size={15} />
+            </span>
+            <span className="font-medium">Open the study planner</span>
+          </button>
           {starterPrompts.map(item => {
             const Icon = item.icon;
             return (
@@ -2646,6 +2733,45 @@ function resolveStudyBlockLinkedDeadline(
   };
 }
 
+function attachAcademicStudyMetadata(
+  payload: NewGoogleCalendarEvent,
+  row: ParsedImportRow,
+  linkedTarget: ReturnType<typeof resolveStudyBlockLinkedDeadline> | null,
+  existingDescription?: string | null,
+) {
+  const payloadMetadata = parseAcademicPlanMetadata(payload.description ?? null);
+  const existingMetadata = parseAcademicPlanMetadata(existingDescription ?? null);
+  const metadata = payloadMetadata ?? existingMetadata;
+  const plainDescription = payloadMetadata ? '' : (payload.description ?? '').trim();
+
+  if (!linkedTarget && !metadata) {
+    return payload;
+  }
+
+  const deadlineId = linkedTarget?.deadline.id ?? metadata?.deadlineId;
+  const deadlineTitle = linkedTarget?.deadline.title ?? metadata?.deadlineTitle;
+  const deadlineDate = linkedTarget?.deadline.dueDate ?? metadata?.deadlineDate;
+  const deadlineType = linkedTarget?.deadline.type ?? metadata?.deadlineType;
+
+  if (!deadlineId || !deadlineTitle || !deadlineDate || !deadlineType) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    description: buildAcademicPlanMetadataDescription({
+      deadlineId,
+      deadlineTitle,
+      deadlineDate,
+      deadlineType,
+      courseName: linkedTarget?.course ?? metadata?.courseName ?? row.course ?? null,
+      explanation: metadata?.explanation ?? 'AI-suggested study block linked from chat.',
+      notes: plainDescription || row.notes?.trim() || row.description?.trim() || metadata?.notes || null,
+      origin: metadata?.origin ?? 'ai-assisted',
+    }),
+  } satisfies NewGoogleCalendarEvent;
+}
+
 function getTimedPayloadDetails(payload: NewGoogleCalendarEvent) {
   if (!('dateTime' in payload.start) || !('dateTime' in payload.end)) return null;
 
@@ -3052,6 +3178,41 @@ function resolvePreferredTaskCandidates(tasks: Task[], rawTitle: string, recentT
   return matches.filter(task => task.id === recentMatch.id);
 }
 
+function getSourceUserMessageForBlock(messages: ChatMessage[], blockKey: string) {
+  const messageId = blockKey.split(':block:')[0];
+  const assistantIndex = messages.findIndex(message => message.id === messageId);
+  if (assistantIndex <= 0) return '';
+
+  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+    const candidate = messages[index];
+    if (candidate.role === 'user') {
+      return candidate.content ?? '';
+    }
+  }
+
+  return '';
+}
+
+function inferExplicitEntityTarget(prompt: string): 'task' | 'deadline' | 'both' | 'unknown' {
+  const normalized = prompt.trim().toLowerCase();
+  if (!normalized) return 'unknown';
+
+  const mentionsTask = /\btask\b|\btasks\b|\btodo\b|\btodos\b|\bin tasks\b/.test(normalized);
+  const mentionsDeadline = /\bdeadline\b|\bdeadlines\b|\bin deadlines\b|\bdeadline tracker\b/.test(normalized);
+
+  if (mentionsTask && mentionsDeadline) return 'both';
+  if (mentionsTask) return 'task';
+  if (mentionsDeadline) return 'deadline';
+  return 'unknown';
+}
+
+function buildEntityScopedTaskPool(tasks: Task[], projects: Project[], rawTitle: string, course?: string) {
+  const resolvedCourse = course ?? extractCourseFromTitle(rawTitle);
+  return resolvedCourse
+    ? filterTasksByCourse(tasks, projects, resolvedCourse)
+    : tasks;
+}
+
 function matchCalendarCandidatesWithOptions(
   events: GoogleCalendarEvent[],
   calendars: GoogleCalendarListItem[],
@@ -3392,9 +3553,101 @@ function MarkdownContent({ content }: { content: string }) {
   );
 }
 
+function getPriorUserPrompt(messages: ChatMessage[], index: number) {
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const candidate = messages[cursor];
+    if (candidate?.role === 'user' && candidate.content.trim()) {
+      return candidate.content.trim();
+    }
+  }
+  return '';
+}
+
+function getThinkingStatuses(prompt: string) {
+  const normalized = prompt.toLowerCase();
+
+  if (/(schedule|calendar|event|availability|free time|open time|time block|study block|reschedul|move this)/.test(normalized)) {
+    return [
+      'Checking your schedule',
+      'Finding an open window',
+      'Shaping the best fit',
+    ];
+  }
+
+  if (/(deadline|exam|quiz|assignment|lab|project|study|plan my|prep)/.test(normalized)) {
+    return [
+      'Looking at your deadlines',
+      'Finding a realistic study window',
+      'Building a clean plan',
+    ];
+  }
+
+  if (/(create|update|delete|remove|mark|rename|edit|link|unlink)/.test(normalized)) {
+    return [
+      'Checking the right item',
+      'Preparing the change',
+      'Making sure it stays consistent',
+    ];
+  }
+
+  if (/(import|email|paste|syllabus|image|screenshot|upload)/.test(normalized)) {
+    return [
+      'Reading what you sent',
+      'Pulling out the useful bits',
+      'Organizing it for you',
+    ];
+  }
+
+  return [
+    'Thinking through it',
+    'Pulling the right context',
+    'Finishing up your answer',
+  ];
+}
+
+function AssistantThinkingBubble({ promptContext }: { promptContext: string }) {
+  const statuses = useMemo(() => getThinkingStatuses(promptContext), [promptContext]);
+  const [visible, setVisible] = useState(false);
+  const [statusIndex, setStatusIndex] = useState(0);
+
+  useEffect(() => {
+    setVisible(false);
+    setStatusIndex(0);
+    const timer = window.setTimeout(() => setVisible(true), 180);
+    return () => window.clearTimeout(timer);
+  }, [promptContext]);
+
+  useEffect(() => {
+    if (!visible || statuses.length <= 1) return undefined;
+    const interval = window.setInterval(() => {
+      setStatusIndex(prev => (prev + 1) % statuses.length);
+    }, 1050);
+    return () => window.clearInterval(interval);
+  }, [visible, statuses]);
+
+  if (!visible) return null;
+
+  return (
+    <div className="rounded-2xl rounded-bl-sm border border-[var(--border-soft)] bg-[var(--surface-muted)]/88 px-3.5 py-3 shadow-[0_10px_30px_-22px_var(--shadow-color)]">
+      <div className="flex items-center gap-2.5">
+        <div className="ai-thinking-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
+          <Sparkles size={15} />
+        </div>
+        <p key={statuses[statusIndex]} className="ai-thinking-status text-sm font-medium text-[var(--text-primary)]">
+          {statuses[statusIndex]}
+        </p>
+      </div>
+      <div className="mt-3 h-1 overflow-hidden rounded-full bg-[var(--border-soft)]/75">
+        <div className="ai-thinking-progress h-full w-full rounded-full" />
+      </div>
+    </div>
+  );
+}
+
 function MessageBubble({
   userId,
   message,
+  promptContext,
   tasks,
   deadlines,
   projects,
@@ -3407,6 +3660,7 @@ function MessageBubble({
 }: {
   userId: string;
   message: ChatMessage;
+  promptContext: string;
   tasks: Task[];
   deadlines: Deadline[];
   projects: Project[];
@@ -3451,10 +3705,11 @@ function MessageBubble({
 
   // Assistant message: parse import blocks safely
   const content = message.content ?? '';
+  const isThinkingPlaceholder = content.trim() === '*Thinking...*';
   let importBlocks: ImportBlock[] = [];
   let segments: Segment[] = [];
   try {
-    if (content) {
+    if (content && !isThinkingPlaceholder) {
       importBlocks = parseImportBlocks(content);
       segments = renderContentWithBlocks(content, importBlocks);
     }
@@ -3487,6 +3742,9 @@ function MessageBubble({
     <div className="flex justify-start">
       <div className="max-w-[92%]">
         <div className="space-y-2">
+          {isThinkingPlaceholder ? (
+            <AssistantThinkingBubble promptContext={promptContext} />
+          ) : null}
           {segments.map((segment, i) => {
             if (!segment?.type) return null;
             if (segment.type === 'text') {
@@ -3522,8 +3780,10 @@ function MessageBubble({
               onImport={onImport}
             />
           )}
-          {isStreaming && (
-            <span className="ml-1 inline-block h-2 w-2 animate-pulse rounded-full bg-[var(--accent)]" />
+          {isStreaming && !isThinkingPlaceholder && (
+            <div className="ml-1 mt-1 h-1 w-24 overflow-hidden rounded-full bg-[var(--border-soft)]/75">
+              <div className="ai-thinking-progress h-full w-full rounded-full" />
+            </div>
           )}
         </div>
       </div>
@@ -4015,7 +4275,12 @@ function ActionBundleCard({
                 if (row.status) changes.push(`status: ${row.status}`);
                 if (row.description) changes.push('description updated');
                 if (row.recurrence) changes.push(`repeat: ${row.recurrence}`);
-                return changes.length > 0 ? `${row.title} → ${changes.join(', ')}` : row.title;
+                const taskPool = buildEntityScopedTaskPool(tasks, projects, row.title, row.course);
+                const collidesWithDeadline =
+                  matchTaskCandidates(taskPool, row.title).length === 1 &&
+                  matchDeadlineCandidates(deadlines, projects, row.title, row.course).length === 1;
+                const label = changes.length > 0 ? `${row.title} → ${changes.join(', ')}` : row.title;
+                return collidesWithDeadline ? `${label} · also matches a deadline` : label;
               }))}
             />
           )}
@@ -4030,7 +4295,13 @@ function ActionBundleCard({
             <ActionSection
               label="Deadlines"
               tone="default"
-              items={safeBlocks.filter(block => block.type === 'deadlines').flatMap(block => block.rows.map(row => row.title))}
+              items={safeBlocks.filter(block => block.type === 'deadlines').flatMap(block => block.rows.map(row => {
+                const taskPool = buildEntityScopedTaskPool(tasks, projects, row.title, row.course);
+                const collidesWithTask =
+                  matchDeadlineCandidates(deadlines, projects, row.title, row.course).length === 1 &&
+                  matchTaskCandidates(taskPool, row.title).length === 1;
+                return collidesWithTask ? `${row.title} · also matches a task` : row.title;
+              }))}
             />
           )}
           {summary.calendarCreates > 0 && (

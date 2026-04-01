@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { GoogleCalendarListItem, NewGoogleCalendarEvent } from '../lib/googleCalendar';
+import type { AcademicPlanOrigin } from '../lib/academicPlanning';
 
 function addOneDay(dateKey: string) {
   const date = new Date(`${dateKey}T00:00:00`);
@@ -30,12 +31,22 @@ interface CreateEventModalProps {
   initialDescription?: string;
   initialLocation?: string;
   initialAllDay?: boolean;
+  deadlineOptions?: Array<{ id: string; label: string }>;
+  initialLinkedDeadlineId?: string | null;
+  initialMetadataOrigin?: AcademicPlanOrigin | null;
   calendars?: GoogleCalendarListItem[];
   initialCalendarId?: string;
   compact?: boolean;
   anchorRect?: { top: number; left: number; width: number; height: number } | null;
   mode?: 'create' | 'edit';
-  onSave: (event: NewGoogleCalendarEvent, calendarId?: string) => Promise<boolean>;
+  onSave: (
+    event: NewGoogleCalendarEvent,
+    options?: {
+      calendarId?: string;
+      linkedDeadlineId?: string | null;
+      metadataOrigin?: AcademicPlanOrigin | null;
+    },
+  ) => Promise<boolean>;
   onClose: () => void;
 }
 
@@ -48,6 +59,9 @@ export function CreateEventModal({
   initialDescription,
   initialLocation,
   initialAllDay = false,
+  deadlineOptions = [],
+  initialLinkedDeadlineId = null,
+  initialMetadataOrigin = null,
   calendars = [],
   initialCalendarId,
   compact = false,
@@ -65,6 +79,7 @@ export function CreateEventModal({
   const [endDate, setEndDate] = useState(initialEndDate ?? initialDate ?? '');
   const [endTime, setEndTime] = useState(initialEndTime ?? '10:00');
   const [calendarId, setCalendarId] = useState(initialCalendarId ?? '');
+  const [linkedDeadlineId, setLinkedDeadlineId] = useState(initialLinkedDeadlineId ?? '');
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -86,7 +101,11 @@ export function CreateEventModal({
           : { dateTime: buildLocalDateTimeString(endDate || startDate, endTime), timeZone },
       };
 
-      const ok = await onSave(event, calendarId || undefined);
+      const ok = await onSave(event, {
+        calendarId: calendarId || undefined,
+        linkedDeadlineId: linkedDeadlineId || null,
+        metadataOrigin: initialMetadataOrigin,
+      });
       if (ok) onClose();
     } finally {
       setIsSaving(false);
@@ -221,6 +240,24 @@ export function CreateEventModal({
                   <option key={item.id} value={item.id}>
                     {item.summary}
                     {item.primary ? ' (Primary)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {deadlineOptions.length > 0 && (
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">Link to deadline</label>
+              <select
+                value={linkedDeadlineId}
+                onChange={e => setLinkedDeadlineId(e.target.value)}
+                className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+              >
+                <option value="">No linked deadline</option>
+                {deadlineOptions.map(option => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
                   </option>
                 ))}
               </select>

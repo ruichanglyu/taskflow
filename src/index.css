@@ -40,6 +40,61 @@
   animation-name: onboarding-slide-backward;
 }
 
+@keyframes ai-thinking-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.82;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+@keyframes ai-thinking-fade {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ai-thinking-shimmer {
+  0% {
+    transform: translateX(-62%);
+  }
+  100% {
+    transform: translateX(175%);
+  }
+}
+
+.ai-thinking-icon {
+  animation: ai-thinking-pulse 1.8s ease-in-out infinite;
+}
+
+.ai-thinking-status {
+  animation: ai-thinking-fade 180ms ease-out;
+}
+
+.ai-thinking-progress {
+  position: relative;
+  background: linear-gradient(90deg, transparent, var(--accent-soft), transparent);
+}
+
+.ai-thinking-progress::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 42%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(255,255,255,0), var(--accent), rgba(255,255,255,0));
+  opacity: 0.82;
+  animation: ai-thinking-shimmer 1.5s ease-in-out infinite;
+}
+
 /* ===== NEUTRAL ===== */
 :root, :root[data-palette="neutral"][data-mode="dark"], :root[data-theme="dark"] {
   --bg-app: #080b11;

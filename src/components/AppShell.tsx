@@ -25,12 +25,21 @@ import { ProfileModal } from './ProfileModal';
 import { AIPanel } from './AIPanel';
 import { HabitsPanel } from './HabitsPanel';
 import { AuthOnboarding } from './AuthOnboarding';
+import { AcademicPlanningModal } from './AcademicPlanningModal';
 import { migrateLegacyAIData } from '../hooks/useAI';
 import { useHabits } from '../hooks/useHabits';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import { useBehaviorLearning, type BehaviorLearningActionOptions } from '../hooks/useBehaviorLearning';
 import { useStudyBlockOutcomes } from '../hooks/useStudyBlockOutcomes';
 import type { StudyBlockOutcomeStatus } from '../types';
+import {
+  buildAcademicPlanEvent,
+  buildAcademicPlanProposal,
+  removeAcademicPlanBlock,
+  summarizeAcademicPlanningMetrics,
+  type AcademicPlanProposal,
+  updateAcademicPlanBlock,
+} from '../lib/academicPlanning';
 
 interface AppShellProps {
   user: User;
@@ -43,6 +52,12 @@ interface Toast {
   tone: ToastTone;
   title: string;
   message?: string;
+}
+
+interface AcademicPlanningDraftState {
+  source: 'dashboard' | 'deadline' | 'ai';
+  targetIds: string[];
+  proposal: AcademicPlanProposal;
 }
 
 function isBehaviorLearningActionOptions(value: unknown): value is BehaviorLearningActionOptions {
@@ -69,10 +84,55 @@ function getViewFromPath(pathname: string): View {
   return 'dashboard';
 }
 
+function haveSameIds(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  const leftSorted = [...left].sort();
+  const rightSorted = [...right].sort();
+  return leftSorted.every((value, index) => value === rightSorted[index]);
+}
+
+function academicPlanningDraftStorageKey(userId: string) {
+  return `taskflow_academic_planning_draft_${userId}`;
+}
+
+function readAcademicPlanningDraft(userId: string): AcademicPlanningDraftState | null {
+  try {
+    const raw = window.sessionStorage.getItem(academicPlanningDraftStorageKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<AcademicPlanningDraftState> | null;
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (parsed.source !== 'dashboard' && parsed.source !== 'deadline' && parsed.source !== 'ai') return null;
+    if (!Array.isArray(parsed.targetIds) || parsed.targetIds.some(id => typeof id !== 'string')) return null;
+    if (!parsed.proposal || typeof parsed.proposal !== 'object') return null;
+    if (!Array.isArray(parsed.proposal.deadlineIds) || !Array.isArray(parsed.proposal.blocks)) return null;
+    return {
+      source: parsed.source,
+      targetIds: parsed.targetIds,
+      proposal: parsed.proposal as AcademicPlanProposal,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeAcademicPlanningDraft(userId: string, draft: AcademicPlanningDraftState | null) {
+  const storageKey = academicPlanningDraftStorageKey(userId);
+  try {
+    if (!draft) {
+      window.sessionStorage.removeItem(storageKey);
+      return;
+    }
+    window.sessionStorage.setItem(storageKey, JSON.stringify(draft));
+  } catch {
+    // Ignore session storage failures and fall back to in-memory behavior.
+  }
+}
+
 export function AppShell({ user }: AppShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const currentView = getViewFromPath(location.pathname);
+  const initialAcademicPlanningDraft = useMemo(() => readAcademicPlanningDraft(user.id), [user.id]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState<boolean>(() => {
     const stored = window.localStorage.getItem('taskflow_sidebar_collapsed');
@@ -90,6 +150,19 @@ export function AppShell({ user }: AppShellProps) {
   });
   const [queuedAiPrompt, setQueuedAiPrompt] = useState<string | null>(null);
   const [habitsOpen, setHabitsOpen] = useState(false);
+  const [academicPlanningOpen, setAcademicPlanningOpen] = useState(false);
+  const [academicPlanningSource, setAcademicPlanningSource] = useState<'dashboard' | 'deadline' | 'ai'>(
+    () => initialAcademicPlanningDraft?.source ?? 'dashboard',
+  );
+  const [academicPlanningTargetIds, setAcademicPlanningTargetIds] = useState<string[]>(
+    () => initialAcademicPlanningDraft?.targetIds ?? [],
+  );
+  const [academicPlanningProposal, setAcademicPlanningProposal] = useState<AcademicPlanProposal | null>(
+    () => initialAcademicPlanningDraft?.proposal ?? null,
+  );
+  const [academicPlanningGenerating, setAcademicPlanningGenerating] = useState(false);
+  const [academicPlanningApplying, setAcademicPlanningApplying] = useState(false);
+  const [academicPlanningApplyingIds, setAcademicPlanningApplyingIds] = useState<Set<string>>(new Set());
   const habitsButtonRef = useRef<HTMLButtonElement>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   // Migrate legacy AI data (global keys/chats) to this user on first load
@@ -118,6 +191,23 @@ export function AppShell({ user }: AppShellProps) {
     setAiOpen(true);
   }, [learning]);
 
+  const upcomingPlannableDeadlines = useMemo(() => (
+    [...deadlineStore.deadlines]
+      .filter(deadline => {
+        if (deadline.status === 'done' || deadline.status === 'missed') return false;
+        return deadline.dueDate >= new Date().toISOString().slice(0, 10);
+      })
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  ), [deadlineStore.deadlines]);
+
+  const academicPlanningMetrics = useMemo(() => (
+    summarizeAcademicPlanningMetrics({
+      appBehaviorEvents: learning.appBehaviorEvents,
+      calendarEvents: calendar.events,
+      getStudyBlockOutcomeStatus: event => studyBlockOutcomes.getOutcomeForEvent(event)?.status,
+    })
+  ), [calendar.events, learning.appBehaviorEvents, studyBlockOutcomes]);
+
   const pushToast = useCallback((tone: ToastTone, title: string, message?: string) => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
     setToasts(prev => [...prev, { id, tone, title, message }]);
@@ -129,6 +219,53 @@ export function AppShell({ user }: AppShellProps) {
   const dismissToast = useCallback((id: number) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   }, []);
+
+  const handleCreateCalendarEvent = useCallback(async (
+    event: Parameters<typeof calendar.createEvent>[0],
+    calendarIdOverride?: Parameters<typeof calendar.createEvent>[1],
+    options?: BehaviorLearningActionOptions,
+  ) => {
+    const ok = await calendar.createEvent(event, calendarIdOverride);
+    if (ok) {
+      const calendarId = calendarIdOverride || calendar.selectedCalendarId;
+      const calendarSummary = calendar.calendars.find(item => item.id === calendarId)?.summary ?? null;
+      learning.logCalendarCreated(event, calendarSummary, options);
+    }
+    return ok;
+  }, [calendar, learning]);
+
+  const handleUpdateCalendarEvent = useCallback(async (
+    eventId: string,
+    event: Parameters<typeof calendar.updateEvent>[1],
+    calendarIdOverride?: Parameters<typeof calendar.updateEvent>[2],
+    options?: BehaviorLearningActionOptions,
+    existingEventOverride?: Parameters<typeof learning.logCalendarUpdated>[0],
+  ) => {
+    const existingEvent = existingEventOverride
+      ?? calendar.events.find(item => item.id === eventId && (!calendarIdOverride || item.calendarId === calendarIdOverride));
+    const ok = await calendar.updateEvent(eventId, event, calendarIdOverride, existingEvent);
+    if (ok && existingEvent) {
+      const calendarId = calendarIdOverride || existingEvent.calendarId || calendar.selectedCalendarId;
+      const calendarSummary = calendar.calendars.find(item => item.id === calendarId)?.summary ?? existingEvent.calendarSummary ?? null;
+      learning.logCalendarUpdated(existingEvent, event, calendarSummary, options);
+    }
+    return ok;
+  }, [calendar, learning]);
+
+  const handleDeleteCalendarEvent = useCallback(async (
+    eventId: string,
+    calendarIdOverride?: Parameters<typeof calendar.deleteEvent>[1],
+    options?: BehaviorLearningActionOptions,
+    existingEventOverride?: Parameters<typeof learning.logCalendarDeleted>[0],
+  ) => {
+    const existingEvent = existingEventOverride
+      ?? calendar.events.find(item => item.id === eventId && (!calendarIdOverride || item.calendarId === calendarIdOverride));
+    const ok = await calendar.deleteEvent(eventId, calendarIdOverride);
+    if (ok && existingEvent) {
+      learning.logCalendarDeleted(existingEvent, options);
+    }
+    return ok;
+  }, [calendar, learning]);
 
   // After Canvas sync, reload deadlines + projects
   const handleCanvasSync = async () => {
@@ -166,6 +303,19 @@ export function AppShell({ user }: AppShellProps) {
     window.localStorage.setItem('taskflow_ai_panel_mode', aiMode);
   }, [aiMode]);
 
+  useEffect(() => {
+    if (!academicPlanningProposal || academicPlanningTargetIds.length === 0) {
+      writeAcademicPlanningDraft(user.id, null);
+      return;
+    }
+
+    writeAcademicPlanningDraft(user.id, {
+      source: academicPlanningSource,
+      targetIds: academicPlanningTargetIds,
+      proposal: academicPlanningProposal,
+    });
+  }, [academicPlanningProposal, academicPlanningSource, academicPlanningTargetIds, user.id]);
+
   const handleSignOut = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -181,6 +331,241 @@ export function AppShell({ user }: AppShellProps) {
     if (location.pathname + location.search === to) return;
     navigate(to);
   }, [location.pathname, location.search, navigate]);
+
+  const generateAcademicPlanningProposal = useCallback((source: 'dashboard' | 'deadline' | 'ai', targetIds: string[]) => {
+    const selectedDeadlines = upcomingPlannableDeadlines.filter(deadline => targetIds.includes(deadline.id));
+    const proposal = buildAcademicPlanProposal({
+      deadlines: selectedDeadlines,
+      tasks: store.tasks,
+      projects: store.projects,
+      calendarEvents: calendar.events,
+      selectedCalendarId: calendar.selectedCalendarId,
+      source,
+      scoreStudySlot: learning.scoreStudySlot,
+      completionRate: academicPlanningMetrics.completionRate,
+    });
+    setAcademicPlanningProposal(proposal);
+    learning.logAcademicPlanGenerated({
+      proposalId: proposal.id,
+      deadlineTitles: selectedDeadlines.map(deadline => deadline.title),
+      blockCount: proposal.blocks.length,
+      options: { source: 'ai', learn: true },
+    });
+    return proposal;
+  }, [academicPlanningMetrics.completionRate, calendar.events, calendar.selectedCalendarId, learning, store.projects, store.tasks, upcomingPlannableDeadlines]);
+
+  const openAcademicPlanner = useCallback((source: 'dashboard' | 'deadline' | 'ai', deadlineIds?: string[]) => {
+    if (!calendar.isConnected) {
+      pushToast('info', 'Connect Google Calendar first', 'The planner needs your calendar before it can place study blocks.');
+      return;
+    }
+
+    if (calendar.isLoading || calendar.isConnecting || calendar.calendars.length === 0) {
+      void calendar.refresh();
+      pushToast('info', 'Calendar is still loading', 'Give Google Calendar a second to finish loading, then try the planner again.');
+      return;
+    }
+
+    const targetIds = (deadlineIds?.length ? deadlineIds : upcomingPlannableDeadlines.slice(0, 3).map(deadline => deadline.id))
+      .filter(Boolean);
+
+    if (targetIds.length === 0) {
+      pushToast('info', 'No upcoming deadlines', 'Add or import an upcoming deadline first, then we can plan it.');
+      return;
+    }
+
+    const reopeningSameDraft = (
+      academicPlanningProposal
+      && academicPlanningSource === source
+      && haveSameIds(academicPlanningTargetIds, targetIds)
+    );
+
+    if (reopeningSameDraft) {
+      setAcademicPlanningOpen(true);
+      return;
+    }
+
+    setAcademicPlanningSource(source);
+    setAcademicPlanningTargetIds(targetIds);
+    setAcademicPlanningGenerating(true);
+    setAcademicPlanningOpen(true);
+
+    try {
+      generateAcademicPlanningProposal(source, targetIds);
+    } finally {
+      setAcademicPlanningGenerating(false);
+    }
+  }, [
+    academicPlanningProposal,
+    academicPlanningSource,
+    academicPlanningTargetIds,
+    calendar.isConnected,
+    generateAcademicPlanningProposal,
+    pushToast,
+    upcomingPlannableDeadlines,
+  ]);
+
+  const selectedAcademicPlanningDeadlines = useMemo(() => (
+    academicPlanningTargetIds
+      .map(id => deadlineStore.deadlines.find(deadline => deadline.id === id))
+      .filter((deadline): deadline is NonNullable<typeof deadline> => Boolean(deadline))
+  ), [academicPlanningTargetIds, deadlineStore.deadlines]);
+
+  const handleRegenerateAcademicPlan = useCallback(() => {
+    if (academicPlanningTargetIds.length === 0) return;
+    setAcademicPlanningGenerating(true);
+    try {
+      generateAcademicPlanningProposal(academicPlanningSource, academicPlanningTargetIds);
+    } finally {
+      setAcademicPlanningGenerating(false);
+    }
+  }, [academicPlanningSource, academicPlanningTargetIds, generateAcademicPlanningProposal]);
+
+  const handleUpdateAcademicPlanBlock = useCallback((blockId: string, updates: Parameters<typeof updateAcademicPlanBlock>[2]) => {
+    setAcademicPlanningProposal(current => {
+      if (!current) return current;
+      const block = current.blocks.find(item => item.id === blockId);
+      if (block) {
+        learning.logAcademicPlanEdited({
+          proposalId: current.id,
+          deadlineTitle: block.deadlineTitle,
+          blockTitle: block.title,
+          options: { source: 'manual', learn: true },
+        });
+      }
+      return updateAcademicPlanBlock(current, blockId, updates);
+    });
+  }, [learning]);
+
+  const handleRemoveAcademicPlanBlock = useCallback((blockId: string) => {
+    setAcademicPlanningProposal(current => {
+      if (!current) return current;
+      const block = current.blocks.find(item => item.id === blockId);
+      if (block) {
+        learning.logAcademicPlanEdited({
+          proposalId: current.id,
+          deadlineTitle: block.deadlineTitle,
+          blockTitle: `${block.title} removed`,
+          options: { source: 'manual', learn: true },
+        });
+      }
+      return removeAcademicPlanBlock(current, blockId);
+    });
+  }, [learning]);
+
+  const applyAcademicPlanBlocks = useCallback(async (blockIds?: string[]) => {
+    if (!academicPlanningProposal) return;
+    const targetBlocks = academicPlanningProposal.blocks.filter(block => !blockIds || blockIds.includes(block.id));
+    if (targetBlocks.length === 0) return;
+
+    setAcademicPlanningApplying(true);
+    setAcademicPlanningApplyingIds(new Set(targetBlocks.map(block => block.id)));
+
+    let acceptedCount = 0;
+    const acceptedIds = new Set<string>();
+    let lastFailureReason: string | null = null;
+
+    for (const block of targetBlocks) {
+      const event = buildAcademicPlanEvent(block);
+      const created = await handleCreateCalendarEvent(
+        event,
+        block.calendarId ?? calendar.selectedCalendarId,
+        { source: 'ai', learn: true },
+      );
+
+      if (!created) {
+        lastFailureReason = calendar.getLastError();
+        continue;
+      }
+
+      acceptedIds.add(block.id);
+      acceptedCount += 1;
+      learning.logStudyBlockLinkedTarget({
+        title: block.title,
+        calendarSummary: block.courseName ?? null,
+        course: block.courseName ?? null,
+        deadlineTitle: block.deadlineTitle,
+        deadlineDate: block.deadlineDate,
+        deadlineType: block.deadlineType,
+        options: { source: 'ai', learn: true },
+      });
+      learning.logStudySlotCandidates({
+        title: block.title,
+        calendarSummary: block.courseName ?? null,
+        course: block.courseName ?? null,
+        dateKey: block.dateKey,
+        durationMinutes: block.endMinutes - block.startMinutes,
+        requestedStartMinutes: block.startMinutes,
+        adjusted: block.edited,
+        deadlineTitle: block.deadlineTitle,
+        deadlineDate: block.deadlineDate,
+        deadlineType: block.deadlineType,
+        candidates: block.candidates.map(candidate => ({
+          startMinutes: candidate.startMinutes,
+          endMinutes: candidate.endMinutes,
+          score: candidate.score,
+          distance: candidate.distance,
+          selected: candidate.selected,
+        })),
+        options: { source: 'ai', learn: true },
+      });
+    }
+
+    setAcademicPlanningApplying(false);
+    setAcademicPlanningApplyingIds(new Set());
+
+    if (acceptedCount === 0) {
+      pushToast(
+        'error',
+        'No study blocks were scheduled',
+        lastFailureReason || 'Nothing was added to the calendar. Try editing the plan or regenerating it.',
+      );
+      return;
+    }
+
+    learning.logAcademicPlanAccepted({
+      proposalId: academicPlanningProposal.id,
+      deadlineTitles: selectedAcademicPlanningDeadlines.map(deadline => deadline.title),
+      blockCount: academicPlanningProposal.blocks.length,
+      acceptedCount,
+      options: { source: 'ai', learn: true },
+    });
+
+    setAcademicPlanningProposal(current => {
+      if (!current) return current;
+      const remainingBlocks = current.blocks.filter(block => !acceptedIds.has(block.id));
+      if (remainingBlocks.length === 0) {
+        return { ...current, blocks: [] };
+      }
+      return { ...current, blocks: remainingBlocks };
+    });
+
+    pushToast(
+      'success',
+      acceptedCount === 1 ? 'Study block scheduled' : 'Study plan scheduled',
+      acceptedCount === 1
+        ? 'The study block was added to your calendar.'
+        : `${acceptedCount} study blocks were added to your calendar.`,
+    );
+
+    if (acceptedIds.size === targetBlocks.length) {
+      setAcademicPlanningOpen(false);
+      setAcademicPlanningProposal(null);
+    }
+  }, [academicPlanningProposal, calendar, handleCreateCalendarEvent, learning, pushToast, selectedAcademicPlanningDeadlines]);
+
+  const handleRejectAcademicPlan = useCallback(() => {
+    if (academicPlanningProposal) {
+      learning.logAcademicPlanRejected({
+        proposalId: academicPlanningProposal.id,
+        deadlineTitles: selectedAcademicPlanningDeadlines.map(deadline => deadline.title),
+        blockCount: academicPlanningProposal.blocks.length,
+        options: { source: 'manual', learn: true },
+      });
+    }
+    setAcademicPlanningProposal(null);
+    setAcademicPlanningOpen(false);
+  }, [academicPlanningProposal, learning, selectedAcademicPlanningDeadlines]);
 
   const handleViewChange = useCallback((view: View) => {
     navigateInApp(VIEW_PATHS[view]);
@@ -629,53 +1014,6 @@ export function AppShell({ user }: AppShellProps) {
     }
   }, [habits, learning]);
 
-  const handleCreateCalendarEvent = useCallback(async (
-    event: Parameters<typeof calendar.createEvent>[0],
-    calendarIdOverride?: Parameters<typeof calendar.createEvent>[1],
-    options?: BehaviorLearningActionOptions,
-  ) => {
-    const ok = await calendar.createEvent(event, calendarIdOverride);
-    if (ok) {
-      const calendarId = calendarIdOverride || calendar.selectedCalendarId;
-      const calendarSummary = calendar.calendars.find(item => item.id === calendarId)?.summary ?? null;
-      learning.logCalendarCreated(event, calendarSummary, options);
-    }
-    return ok;
-  }, [calendar, learning]);
-
-  const handleUpdateCalendarEvent = useCallback(async (
-    eventId: string,
-    event: Parameters<typeof calendar.updateEvent>[1],
-    calendarIdOverride?: Parameters<typeof calendar.updateEvent>[2],
-    options?: BehaviorLearningActionOptions,
-    existingEventOverride?: Parameters<typeof learning.logCalendarUpdated>[0],
-  ) => {
-    const existingEvent = existingEventOverride
-      ?? calendar.events.find(item => item.id === eventId && (!calendarIdOverride || item.calendarId === calendarIdOverride));
-    const ok = await calendar.updateEvent(eventId, event, calendarIdOverride, existingEvent);
-    if (ok && existingEvent) {
-      const calendarId = calendarIdOverride || existingEvent.calendarId || calendar.selectedCalendarId;
-      const calendarSummary = calendar.calendars.find(item => item.id === calendarId)?.summary ?? existingEvent.calendarSummary ?? null;
-      learning.logCalendarUpdated(existingEvent, event, calendarSummary, options);
-    }
-    return ok;
-  }, [calendar, learning]);
-
-  const handleDeleteCalendarEvent = useCallback(async (
-    eventId: string,
-    calendarIdOverride?: Parameters<typeof calendar.deleteEvent>[1],
-    options?: BehaviorLearningActionOptions,
-    existingEventOverride?: Parameters<typeof learning.logCalendarDeleted>[0],
-  ) => {
-    const existingEvent = existingEventOverride
-      ?? calendar.events.find(item => item.id === eventId && (!calendarIdOverride || item.calendarId === calendarIdOverride));
-    const ok = await calendar.deleteEvent(eventId, calendarIdOverride);
-    if (ok && existingEvent) {
-      learning.logCalendarDeleted(existingEvent, options);
-    }
-    return ok;
-  }, [calendar, learning]);
-
   const calendarController = useMemo(() => ({
     ...calendar,
     createEvent: (event: Parameters<typeof calendar.createEvent>[0], calendarIdOverride?: Parameters<typeof calendar.createEvent>[1]) =>
@@ -801,6 +1139,9 @@ export function AppShell({ user }: AppShellProps) {
                   behaviorSummary={learning.behaviorInsights.summary}
                   proactivePrompts={learning.behaviorInsights.proactivePrompts}
                   onUseBehaviorPrompt={openAiWithPrompt}
+                  planningMetrics={academicPlanningMetrics}
+                  onPlanNextDeadlines={() => openAcademicPlanner('dashboard')}
+                  nextPlanningTarget={upcomingPlannableDeadlines[0] ?? null}
                 />
               }
             />
@@ -823,6 +1164,10 @@ export function AppShell({ user }: AppShellProps) {
                   onCreateTask={async (title, desc, projId, dueDate) => handleAddTask(title, desc, 'medium', projId, dueDate, 'none')}
                   onNavigateToCourse={openCourse}
                   onNavigateToTasks={openCourseTasks}
+                  onOpenPlanner={(deadlineIds) => openAcademicPlanner('deadline', deadlineIds)}
+                  userId={user.id}
+                  onCreateLinkedTask={async (title, projectId, dueDate) => handleAddTask(title, '', 'medium', projectId, dueDate, 'none')}
+                  calendarEvents={calendar.events}
                 />
               }
             />
@@ -964,6 +1309,7 @@ export function AppShell({ user }: AppShellProps) {
             onCreateCalendarEvent={handleCreateCalendarEvent}
             onUpdateCalendarEvent={handleUpdateCalendarEvent}
             onDeleteCalendarEvent={handleDeleteCalendarEvent}
+            onOpenAcademicPlanner={(deadlineIds) => openAcademicPlanner('ai', deadlineIds)}
             aiLearningEnabled={learning.aiLearningEnabled}
             onAiLearningEnabledChange={learning.setAiLearningEnabled}
             scoreStudySlot={learning.scoreStudySlot}
@@ -1080,6 +1426,22 @@ export function AppShell({ user }: AppShellProps) {
           anchorRef={habitsButtonRef}
         />
       )}
+
+      <AcademicPlanningModal
+        open={academicPlanningOpen}
+        selectedDeadlines={selectedAcademicPlanningDeadlines}
+        proposal={academicPlanningProposal}
+        isGenerating={academicPlanningGenerating}
+        isApplying={academicPlanningApplying}
+        applyingBlockIds={academicPlanningApplyingIds}
+        onClose={() => setAcademicPlanningOpen(false)}
+        onRegenerate={handleRegenerateAcademicPlan}
+        onAcceptAll={() => void applyAcademicPlanBlocks()}
+        onAcceptOne={(blockId) => void applyAcademicPlanBlocks([blockId])}
+        onRejectAll={handleRejectAcademicPlan}
+        onRemoveBlock={handleRemoveAcademicPlanBlock}
+        onUpdateBlock={handleUpdateAcademicPlanBlock}
+      />
 
       {!aiOpen && (
         <button

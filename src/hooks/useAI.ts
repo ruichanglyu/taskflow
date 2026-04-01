@@ -99,6 +99,37 @@ function dedupeRowsById<T extends { id: string }>(rows: T[]): T[] {
   return [...byId.values()];
 }
 
+function formatLocalDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getLocalClockContext(date = new Date()) {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time';
+  return {
+    todayKey: formatLocalDateKey(date),
+    timeZone,
+    dateLabel: new Intl.DateTimeFormat(undefined, {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(date),
+    timeLabel: new Intl.DateTimeFormat(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    }).format(date),
+    timeLabel24: new Intl.DateTimeFormat('en-CA', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date),
+  };
+}
+
 // --- API key: synced via Supabase, localStorage used as fast cache ---
 
 export async function getAPIKey(userId: string): Promise<string | null> {
@@ -236,15 +267,15 @@ function buildSystemPrompt(data: {
   recentListedCalendarEvents?: string[];
   behaviorSummary?: string;
 }): string {
-  const today = new Date().toISOString().split('T')[0];
+  const { todayKey, dateLabel, timeLabel, timeLabel24, timeZone } = getLocalClockContext();
 
   const activeTasks = data.tasks.filter(t => t.status !== 'done');
   const doneTasks = data.tasks.filter(t => t.status === 'done');
   const pastDeadlines = data.deadlines
-    .filter(d => d.dueDate < today)
+    .filter(d => d.dueDate < todayKey)
     .sort((a, b) => b.dueDate.localeCompare(a.dueDate));
   const upcomingDeadlines = data.deadlines
-    .filter(d => d.dueDate >= today)
+    .filter(d => d.dueDate >= todayKey)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const activePlan = data.plans.find(p => p.isActive);
 
@@ -299,7 +330,7 @@ function buildSystemPrompt(data: {
       const startDt = event.start?.dateTime ? new Date(event.start.dateTime) : null;
       const endDt = event.end?.dateTime ? new Date(event.end.dateTime) : null;
       if (!startDt) continue; // skip all-day events for free slot calc
-      const dateKey = startDt.toISOString().split('T')[0];
+      const dateKey = formatLocalDateKey(startDt);
       if (!dayMap.has(dateKey)) dayMap.set(dateKey, []);
       const startMin = startDt.getHours() * 60 + startDt.getMinutes();
       const endMin = endDt ? endDt.getHours() * 60 + endDt.getMinutes() : startMin + 60;
@@ -349,7 +380,16 @@ function buildSystemPrompt(data: {
       .join('\n');
   }
 
-  return `You are a personal AI assistant inside TaskFlow, a student life management app. Today is ${today}.
+  return `You are a personal AI assistant inside TaskFlow, a student life management app.
+
+LOCAL CLOCK (SOURCE OF TRUTH):
+- Local date: ${dateLabel}
+- Local date key: ${todayKey}
+- Local time: ${timeLabel}
+- Local 24-hour time: ${timeLabel24}
+- Local timezone: ${timeZone}
+
+Use the LOCAL CLOCK above as the source of truth for "today", "now", "current time", and relative time references like "in an hour", "tonight", and "tomorrow morning". Do not guess a different current time.
 
 USER'S DATA:
 
@@ -422,6 +462,7 @@ Exact Task Title | due: 2026-03-29 | priority: high | status: in-progress | cour
 Another Task Title | due: 2026-04-10 | status: done
 \`\`\`
 Each line must be the EXACT title of an existing task. Only include the fields that should change. Valid status values: todo, in-progress, done. Use this instead of creating a new task when the user wants to modify an existing one (e.g. "put a date on it", "mark it as done", "change priority").
+If a task and a deadline share the same or a very similar title, do not silently pick one. Ask whether the user means the task or the deadline unless they explicitly said which one to update.
 
 To delete tasks, output a fenced code block with language "import:delete-tasks":
 \`\`\`import:delete-tasks
@@ -491,6 +532,7 @@ AMBIGUITY RULES (CRITICAL):
 - When the user's intent is not clear enough to map to one safe action, ask a short follow-up question instead of emitting any import block.
 - Prefer asking over guessing for ANY destructive or modifying action: delete, move, reschedule, update, unlink, or changing calendars.
 - If there are multiple plausible tasks, deadlines, routines, or calendar events that could match, ask which one they mean.
+- If a task and a deadline both match the same request title, ask whether the user means the task or the deadline unless they explicitly said one of those words.
 - If the user uses vague references like "it", "them", "that one", "the previous one", or "the ones you just made", only act when the source-of-truth sections above make the target exact. Otherwise ask.
 - If you do not have the exact identifying details needed for a safe calendar update/delete (calendar, date, start time, or an exact recently listed/applied event), ask instead of guessing.
 - If you are unsure whether a previous suggestion was actually applied, ask before modifying or deleting it.
@@ -551,6 +593,7 @@ STYLE RULES:
 - Never open with filler like "Sure!", "Great question!", "Certainly!", "Of course!", or "Absolutely!".
 - Don't narrate what you're about to do before an action card — the card already shows it. One short line of context is fine, nothing more.
 - When creating, updating, or deleting calendar events, ALWAYS mention the specific time (and date if relevant) in your text response. For example: "I've scheduled your workout for 2:30 PM – 3:30 PM tomorrow." or "Moved your study block to 4:00 PM." Never just say "Done" or "Created the event" without the time.
+- If the user asks for the current time/date or uses relative scheduling language like "in an hour", answer using the LOCAL CLOCK values above. Never invent a different current time.
 - Don't end every message with a follow-up question. Only ask a follow-up when you genuinely need a decision to proceed. If the answer stands on its own, let it stand.
 - When you don't have data for something, say so in one sentence and move on. Don't over-explain what data you do or don't have access to.
 - Tone: warm, honest, a little casual. Like a smart friend who knows your schedule — not a customer service bot.
@@ -1447,12 +1490,6 @@ export function useAI(userId: string) {
     appData: Parameters<typeof buildSystemPrompt>[0],
     images?: ImageAttachment[],
   ) => {
-    const key = await getAPIKey(userId);
-    if (!key) {
-      setError('Please add your Gemini API key first.');
-      return;
-    }
-
     let threadId = activeChatIdRef.current;
     let thread = threadsRef.current.find(item => item.id === threadId) ?? threadsRef.current[0];
     if (!thread) {
@@ -1492,11 +1529,10 @@ export function useAI(userId: string) {
       return {
         ...item,
         title: nextTitle,
-        updatedAt: Date.now(),
-        messages: updatedMessages,
-      };
-    }));
-    setIsStreaming(true);
+      updatedAt: Date.now(),
+      messages: updatedMessages,
+    };
+  }));
     setError(null);
 
     const updateContent = (text: string) => {
@@ -1509,6 +1545,21 @@ export function useAI(userId: string) {
         };
       }));
     };
+
+    const key = await getAPIKey(userId);
+    if (!key) {
+      setThreads(prev => prev.map(item => {
+        if (item.id !== threadId) return item;
+        return {
+          ...item,
+          messages: item.messages.filter(m => m.id !== assistantMsg.id),
+        };
+      }));
+      setError('Please add your Gemini API key first.');
+      return;
+    }
+
+    setIsStreaming(true);
 
     try {
       abortRef.current = new AbortController();

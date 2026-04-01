@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { GoogleCalendarEvent } from '../lib/googleCalendar';
 import { Deadline } from '../types';
 import { cn } from '../utils/cn';
+import { getCalendarEventPresentation } from '../utils/calendarEventPresentation';
 
 interface CalendarGridProps {
   year: number;
@@ -182,16 +183,33 @@ export function CalendarGrid({
               {isCurrentMonth && (
                 <div className="mt-1 flex w-full flex-col gap-1">
                   {dayEvents.slice(0, 2).map((event, idx) => (
-                    <div
-                      key={`${event.id}-${idx}`}
-                      className="flex items-center gap-1.5 truncate rounded-md bg-transparent px-0.5 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]"
-                    >
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{ backgroundColor: event.calendarColor || '#818cf8' }}
-                      />
-                      <span className="truncate">{event.summary || 'Untitled'}</span>
-                    </div>
+                    (() => {
+                      const presentation = getCalendarEventPresentation(event);
+                      return (
+                        <div
+                          key={`${event.id}-${idx}`}
+                          className={cn(
+                            'flex items-center gap-1.5 truncate rounded-md px-1.5 py-1 text-[10px] font-medium text-[var(--text-secondary)]',
+                            presentation.isSuggested && 'border'
+                          )}
+                          style={presentation.isSuggested ? {
+                            backgroundColor: presentation.mutedSurfaceColor,
+                            borderColor: presentation.borderColor,
+                          } : undefined}
+                        >
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: presentation.accentColor }}
+                          />
+                          <span className="truncate">{event.summary || 'Untitled'}</span>
+                          {presentation.isSuggested && (
+                            <span className="shrink-0 rounded-full bg-black/5 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-[var(--text-secondary)]">
+                              AI
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()
                   ))}
                   {dayDeadlines.slice(0, Math.max(0, 2 - dayEvents.slice(0, 2).length)).map((dl, idx) => (
                     <div

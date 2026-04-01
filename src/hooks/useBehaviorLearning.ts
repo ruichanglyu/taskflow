@@ -271,6 +271,78 @@ function daysBetween(dateA: string, dateB: string) {
   return Math.round((b.getTime() - a.getTime()) / 86400000);
 }
 
+function normalizeCreatedAt(value: unknown) {
+  if (typeof value !== 'string') return new Date().toISOString();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : value;
+}
+
+function getCreatedDateKey(value: string | null | undefined) {
+  if (typeof value !== 'string') return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function normalizeStoredBehaviorEvent(event: unknown): BehaviorLearningEvent | null {
+  if (!event || typeof event !== 'object') return null;
+  const value = event as Record<string, unknown>;
+  if (typeof value.title !== 'string' || typeof value.dateKey !== 'string') return null;
+
+  const source: LearningSource = value.source === 'ai' ? 'ai' : 'manual';
+  const action: LearningAction =
+    value.action === 'reschedule' || value.action === 'delete' ? value.action : 'create';
+
+  return {
+    id: typeof value.id === 'string' && value.id ? value.id : crypto.randomUUID(),
+    source,
+    action,
+    title: value.title,
+    calendarId: typeof value.calendarId === 'string' ? value.calendarId : null,
+    calendarSummary: typeof value.calendarSummary === 'string' ? value.calendarSummary : null,
+    dateKey: value.dateKey,
+    weekday: typeof value.weekday === 'number' && Number.isFinite(value.weekday) ? value.weekday : 0,
+    startMinutes: typeof value.startMinutes === 'number' && Number.isFinite(value.startMinutes) ? value.startMinutes : 0,
+    durationMinutes: typeof value.durationMinutes === 'number' && Number.isFinite(value.durationMinutes) ? value.durationMinutes : 60,
+    previousDateKey: typeof value.previousDateKey === 'string' ? value.previousDateKey : null,
+    previousWeekday: typeof value.previousWeekday === 'number' && Number.isFinite(value.previousWeekday) ? value.previousWeekday : null,
+    previousStartMinutes: typeof value.previousStartMinutes === 'number' && Number.isFinite(value.previousStartMinutes) ? value.previousStartMinutes : null,
+    previousDurationMinutes: typeof value.previousDurationMinutes === 'number' && Number.isFinite(value.previousDurationMinutes) ? value.previousDurationMinutes : null,
+    countsForLearning: value.countsForLearning ?? true,
+    createdAt: normalizeCreatedAt(value.createdAt),
+  };
+}
+
+function normalizeStoredAppBehaviorEvent(event: unknown): AppBehaviorEvent | null {
+  if (!event || typeof event !== 'object') return null;
+  const value = event as Record<string, unknown>;
+  if (typeof value.action !== 'string' || typeof value.title !== 'string') return null;
+
+  const entity: AppBehaviorEntity =
+    value.entity === 'task' ||
+    value.entity === 'deadline' ||
+    value.entity === 'project' ||
+    value.entity === 'habit' ||
+    value.entity === 'deadline-link' ||
+    value.entity === 'calendar' ||
+    value.entity === 'ai' ||
+    value.entity === 'study-review' ||
+    value.entity === 'study-block'
+      ? value.entity
+      : 'task';
+
+  return {
+    id: typeof value.id === 'string' && value.id ? value.id : crypto.randomUUID(),
+    source: value.source === 'ai' ? 'ai' : 'manual',
+    entity,
+    action: value.action,
+    title: value.title,
+    detail: typeof value.detail === 'string' ? value.detail : null,
+    countsForLearning: value.countsForLearning ?? true,
+    createdAt: normalizeCreatedAt(value.createdAt),
+  };
+}
+
 function loadEventsFromStorage(userId: string): BehaviorLearningEvent[] {
   if (typeof window === 'undefined') return [];
 
@@ -279,10 +351,9 @@ function loadEventsFromStorage(userId: string): BehaviorLearningEvent[] {
     if (!saved) return [];
     const parsed = JSON.parse(saved);
     return Array.isArray(parsed)
-      ? parsed.map((event) => ({
-          ...event,
-          countsForLearning: event?.countsForLearning ?? true,
-        }))
+      ? parsed
+          .map(normalizeStoredBehaviorEvent)
+          .filter((event): event is BehaviorLearningEvent => Boolean(event))
       : [];
   } catch {
     return [];
@@ -302,10 +373,9 @@ function loadAppEventsFromStorage(userId: string): AppBehaviorEvent[] {
     if (!saved) return [];
     const parsed = JSON.parse(saved);
     return Array.isArray(parsed)
-      ? parsed.map((event) => ({
-          ...event,
-          countsForLearning: event?.countsForLearning ?? true,
-        }))
+      ? parsed
+          .map(normalizeStoredAppBehaviorEvent)
+          .filter((event): event is AppBehaviorEvent => Boolean(event))
       : [];
   } catch {
     return [];
@@ -636,7 +706,8 @@ function buildBehaviorInsightSummary(
   recentStudyOutcomes.forEach(event => {
     const parsed = parseStudyBlockOutcomeDetail(event.detail);
     if (!parsed) return;
-    const responseDate = event.createdAt.slice(0, 10);
+    const responseDate = getCreatedDateKey(event.createdAt);
+    if (!responseDate) return;
     const diff = daysBetween(parsed.dateKey, responseDate);
     if (diff === null) return;
     if (diff <= 0) sameDayOutcomeResponses += 1;
@@ -695,7 +766,8 @@ function buildBehaviorInsightSummary(
   taskDoneEvents.forEach(event => {
     const statusDetail = parseTaskStatusDetail(event.detail);
     if (statusDetail.nextStatus !== 'done' || !statusDetail.dueDate) return;
-    const completionDate = event.createdAt.slice(0, 10);
+    const completionDate = getCreatedDateKey(event.createdAt);
+    if (!completionDate) return;
     const diff = daysBetween(completionDate, statusDetail.dueDate);
     if (diff === null) return;
     if (diff > 0) doneEarly += 1;
@@ -705,7 +777,8 @@ function buildBehaviorInsightSummary(
   taskStartedEvents.forEach(event => {
     const statusDetail = parseTaskStatusDetail(event.detail);
     if (statusDetail.nextStatus !== 'in-progress' || !statusDetail.dueDate) return;
-    const startDate = event.createdAt.slice(0, 10);
+    const startDate = getCreatedDateKey(event.createdAt);
+    if (!startDate) return;
     const diff = daysBetween(startDate, statusDetail.dueDate);
     if (diff === null) return;
     if (diff >= 2) startedEarly += 1;
@@ -2029,6 +2102,83 @@ export function useBehaviorLearning(userId: string) {
     });
   }, [recordAppAction]);
 
+  const logAcademicPlanGenerated = useCallback((params: {
+    proposalId: string;
+    deadlineTitles: string[];
+    blockCount: number;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'study-block',
+      'plan-generated',
+      params.deadlineTitles.join(', ') || 'Study plan proposal',
+      params.options,
+      [
+        `proposal:${params.proposalId}`,
+        `deadlines:${params.deadlineTitles.length}`,
+        `blocks:${params.blockCount}`,
+      ].join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logAcademicPlanAccepted = useCallback((params: {
+    proposalId: string;
+    deadlineTitles: string[];
+    blockCount: number;
+    acceptedCount: number;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'study-block',
+      'plan-accepted',
+      params.deadlineTitles.join(', ') || 'Study plan proposal',
+      params.options,
+      [
+        `proposal:${params.proposalId}`,
+        `deadlines:${params.deadlineTitles.length}`,
+        `blocks:${params.blockCount}`,
+        `accepted:${params.acceptedCount}`,
+      ].join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logAcademicPlanEdited = useCallback((params: {
+    proposalId: string;
+    deadlineTitle: string;
+    blockTitle: string;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'study-block',
+      'plan-edited',
+      params.deadlineTitle || 'Study plan proposal',
+      params.options,
+      [
+        `proposal:${params.proposalId}`,
+        `block:${params.blockTitle}`,
+      ].join(' · '),
+    );
+  }, [recordAppAction]);
+
+  const logAcademicPlanRejected = useCallback((params: {
+    proposalId: string;
+    deadlineTitles: string[];
+    blockCount: number;
+    options?: BehaviorLearningActionOptions;
+  }) => {
+    recordAppAction(
+      'study-block',
+      'plan-rejected',
+      params.deadlineTitles.join(', ') || 'Study plan proposal',
+      params.options,
+      [
+        `proposal:${params.proposalId}`,
+        `deadlines:${params.deadlineTitles.length}`,
+        `blocks:${params.blockCount}`,
+      ].join(' · '),
+    );
+  }, [recordAppAction]);
+
   const logStudyReviewPromptShown = useCallback((params: {
     count: number;
     options?: BehaviorLearningActionOptions;
@@ -2097,6 +2247,10 @@ export function useBehaviorLearning(userId: string) {
     logViewOpened,
     logStudyBlockLinkedTarget,
     logStudySlotCandidates,
+    logAcademicPlanGenerated,
+    logAcademicPlanAccepted,
+    logAcademicPlanEdited,
+    logAcademicPlanRejected,
     recordCalendarCreate,
     recordCalendarUpdate,
     recordCalendarDelete,

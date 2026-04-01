@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Component, type ErrorInfo, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AppBootScreen } from './components/AppBootScreen';
@@ -16,6 +16,67 @@ function isRecoveryLink() {
 
 function hasCompletedOnboarding(user: User | null | undefined) {
   return Boolean(user?.user_metadata?.onboarding_completed);
+}
+
+class AppShellErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean; error: string; stack: string }> {
+  state = { hasError: false, error: '', stack: '' };
+
+  static getDerivedStateFromError(error: Error) {
+    return {
+      hasError: true,
+      error: error.message || 'Unknown render error',
+      stack: error.stack ?? '',
+    };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[AppShellErrorBoundary]', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[var(--app-bg)] px-6 py-10 text-[var(--text-primary)]">
+          <div className="mx-auto max-w-3xl rounded-2xl border border-rose-500/20 bg-[var(--surface)] p-6 shadow-sm">
+            <h1 className="text-2xl font-semibold">Something went wrong in the signed-in app</h1>
+            <p className="mt-3 text-sm text-[var(--text-muted)]">
+              We hit a runtime error after loading your session. This is much better than a blank screen because now we can see the real problem.
+            </p>
+            <div className="mt-5 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-faint)]">Error</div>
+              <pre className="mt-2 whitespace-pre-wrap break-words text-sm text-rose-400">{this.state.error}</pre>
+              {this.state.stack && (
+                <>
+                  <div className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-faint)]">Stack</div>
+                  <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words text-xs text-[var(--text-muted)]">
+                    {this.state.stack}
+                  </pre>
+                </>
+              )}
+            </div>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="rounded-lg bg-[var(--accent-strong)] px-4 py-2 text-sm font-medium text-[var(--accent-contrast)]"
+              >
+                Reload
+              </button>
+              <button
+                type="button"
+                onClick={() => this.setState({ hasError: false, error: '', stack: '' })}
+                className="rounded-lg border border-[var(--border-soft)] px-4 py-2 text-sm font-medium text-[var(--text-primary)]"
+              >
+                Try rendering again
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
 }
 
 export default function App() {
@@ -148,5 +209,9 @@ export default function App() {
     return <AppBootScreen />;
   }
 
-  return <AppShell user={session.user} />;
+  return (
+    <AppShellErrorBoundary>
+      <AppShell user={session.user} />
+    </AppShellErrorBoundary>
+  );
 }

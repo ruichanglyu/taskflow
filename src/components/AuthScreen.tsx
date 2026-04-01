@@ -232,8 +232,8 @@ export function AuthScreen() {
               <button
                 type="submit"
                 disabled={isSubmitting || isResettingPassword || isGoogleSubmitting || !isSupabaseConfigured}
-                className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ backgroundColor: 'var(--accent-strong)' }}
+                className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-50"
+               
               >
                 {isSubmitting && <LoaderCircle size={16} className="animate-spin" />}
                 {mode === 'sign-in' ? 'Continue' : 'Create account'}

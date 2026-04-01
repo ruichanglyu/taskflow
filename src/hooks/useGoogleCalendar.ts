@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { addDays } from '../utils/dateHelpers';
 import {
   createGoogleCalendarEvent,
   deleteGoogleCalendarEvent,
@@ -48,12 +49,6 @@ function writeJsonCache<T>(key: string, data: T) {
 
 const CALENDAR_HISTORY_BUFFER_DAYS = 365;
 const CALENDAR_FUTURE_BUFFER_DAYS = 365;
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
 
 function expandCalendarRange(range: { timeMin?: string; timeMax?: string }) {
   const now = new Date();

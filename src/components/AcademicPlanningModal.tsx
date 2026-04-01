@@ -274,8 +274,8 @@ export function AcademicPlanningModal({
                               type="button"
                               onClick={() => onAcceptOne(block.id)}
                               disabled={isApplying}
-                              className="flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-[var(--accent-contrast)] transition disabled:opacity-50"
-                              style={{ backgroundColor: 'var(--accent-strong)' }}
+                              className="flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:opacity-50"
+                             
                             >
                               <Check size={14} />
                               {applyingBlockIds.has(block.id) ? 'Scheduling...' : 'Accept'}
@@ -302,8 +302,8 @@ export function AcademicPlanningModal({
                             <button
                               type="button"
                               onClick={saveEditing}
-                              className="flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-[var(--accent-contrast)] transition"
-                              style={{ backgroundColor: 'var(--accent-strong)' }}
+                              className="flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition"
+                             
                             >
                               <Check size={14} />
                               Save edit
@@ -351,8 +351,8 @@ export function AcademicPlanningModal({
               type="button"
               onClick={onAcceptAll}
               disabled={!proposal || proposal.blocks.length === 0 || isGenerating || isApplying}
-              className="rounded-xl px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] transition disabled:opacity-50"
-              style={{ backgroundColor: 'var(--accent-strong)' }}
+              className="rounded-xl px-4 py-2 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:opacity-50"
+             
             >
               {isApplying ? 'Scheduling...' : 'Accept all'}
             </button>

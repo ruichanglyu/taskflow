@@ -421,8 +421,8 @@ export function ProfileModal({
                 <button
                   onClick={handleCropConfirm}
                   disabled={uploadingAvatar}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition disabled:opacity-50"
-                  style={{ backgroundColor: 'var(--accent-strong)' }}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:opacity-50"
+                 
                 >
                   {uploadingAvatar ? (
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -565,8 +565,8 @@ export function ProfileModal({
                     <button
                       onClick={handleSaveName}
                       disabled={saving || displayName.trim() === (user.user_metadata?.full_name || '')}
-                      className="rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition disabled:opacity-40"
-                      style={{ backgroundColor: 'var(--accent-strong)' }}
+                      className="rounded-xl px-4 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:opacity-40"
+                     
                     >
                       Save
                     </button>
@@ -591,8 +591,8 @@ export function ProfileModal({
                     <button
                       onClick={handleChangeEmail}
                       disabled={saving || !newEmail.trim()}
-                      className="rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition disabled:opacity-40"
-                      style={{ backgroundColor: 'var(--accent-strong)' }}
+                      className="rounded-xl px-4 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:opacity-40"
+                     
                     >
                       Update
                     </button>
@@ -647,8 +647,8 @@ export function ProfileModal({
                     <button
                       onClick={handleChangePassword}
                       disabled={saving || !currentPassword || !newPassword || !confirmPassword}
-                      className="w-full rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition disabled:opacity-40"
-                      style={{ backgroundColor: 'var(--accent-strong)' }}
+                      className="w-full rounded-xl px-4 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:opacity-40"
+                     
                     >
                       {saving ? 'Updating...' : 'Update Password'}
                     </button>
@@ -818,8 +818,8 @@ export function ProfileModal({
                       <button
                         onClick={handleSaveGeminiKey}
                         disabled={saving || !geminiKey.trim()}
-                        className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition disabled:opacity-50"
-                        style={{ backgroundColor: 'var(--accent-strong)' }}
+                        className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:opacity-50"
+                       
                       >
                         Save key
                       </button>

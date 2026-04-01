@@ -5,6 +5,8 @@ import type { StudyBlockOutcome } from '../hooks/useStudyBlockOutcomes';
 import { Task, Project, Deadline, StudyBlockOutcomeStatus } from '../types';
 import { cn } from '../utils/cn';
 import { isStudyBlockLikeCalendarEvent } from '../utils/studyBlockDetection';
+import { getEventDateKey, hasEventEnded, getEventTimeLabel } from '../utils/calendarEventHelpers';
+import { STUDY_OUTCOME_OPTIONS, getOutcomeTone, getOutcomeLabel, OutcomeBadge } from '../utils/studyOutcomes';
 
 interface DashboardProps {
   tasks: Task[];
@@ -31,18 +33,6 @@ interface DashboardProps {
   nextPlanningTarget?: Deadline | null;
 }
 
-const STUDY_OUTCOME_OPTIONS: { status: StudyBlockOutcomeStatus; label: string }[] = [
-  { status: 'completed', label: 'Done' },
-  { status: 'partial', label: 'Partial' },
-  { status: 'skipped', label: 'Skipped' },
-  { status: 'rescheduled', label: 'Rescheduled' },
-];
-
-function getEventDateKey(event: GoogleCalendarEvent): string | null {
-  if (event.start?.date) return event.start.date;
-  if (event.start?.dateTime) return event.start.dateTime.slice(0, 10);
-  return null;
-}
 
 function getTaskCreatedDateKey(task: Task) {
   if (typeof task.createdAt !== 'string') return null;
@@ -51,53 +41,6 @@ function getTaskCreatedDateKey(task: Task) {
   return parsed.toISOString().slice(0, 10);
 }
 
-function hasEventEnded(event: GoogleCalendarEvent, now = new Date()) {
-  if (event.end?.dateTime) {
-    return new Date(event.end.dateTime).getTime() <= now.getTime();
-  }
-  if (event.end?.date) {
-    return new Date(`${event.end.date}T00:00:00`).getTime() <= now.getTime();
-  }
-  const dateKey = getEventDateKey(event);
-  if (!dateKey) return false;
-  return new Date(`${dateKey}T23:59:59`).getTime() <= now.getTime();
-}
-
-function getEventTimeLabel(date?: { date?: string; dateTime?: string }) {
-  if (date?.date) return 'All day';
-  if (date?.dateTime) {
-    return new Date(date.dateTime).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  }
-  return '';
-}
-
-function getOutcomeTone(status: StudyBlockOutcomeStatus) {
-  switch (status) {
-    case 'completed':
-      return 'bg-emerald-500/12 text-emerald-300 border-emerald-500/20';
-    case 'partial':
-      return 'bg-amber-500/12 text-amber-300 border-amber-500/20';
-    case 'skipped':
-      return 'bg-rose-500/12 text-rose-300 border-rose-500/20';
-    case 'rescheduled':
-      return 'bg-sky-500/12 text-sky-300 border-sky-500/20';
-  }
-}
-
-function getOutcomeLabel(status: StudyBlockOutcomeStatus) {
-  return STUDY_OUTCOME_OPTIONS.find(option => option.status === status)?.label ?? status;
-}
-
-function OutcomeBadge({ status }: { status: StudyBlockOutcomeStatus }) {
-  return (
-    <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]', getOutcomeTone(status))}>
-      {getOutcomeLabel(status)}
-    </span>
-  );
-}
 
 function SummaryPill({ label, value, pulse }: { label: string; value: string; pulse?: boolean }) {
   return (
@@ -255,7 +198,7 @@ export function Dashboard({
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-5">
+      <div className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">
@@ -295,8 +238,8 @@ export function Dashboard({
             <button
               type="button"
               onClick={onPlanNextDeadlines}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] transition"
-              style={{ backgroundColor: 'var(--accent-strong)' }}
+              className="rounded-lg px-4 py-2 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition"
+             
             >
               Plan my next deadlines
             </button>
@@ -373,7 +316,7 @@ export function Dashboard({
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={<ListTodo size={22} />} label="Total Tasks" value={tasks.length} color="text-indigo-400" bg="bg-indigo-400/10" />
+        <StatCard icon={<ListTodo size={22} />} label="Total Tasks" value={tasks.length} color="text-[var(--chart-accent)]" bg="bg-[var(--chart-accent-soft)]" />
         <StatCard icon={<Clock size={22} />} label="In Progress" value={inProgress.length} color="text-blue-400" bg="bg-blue-400/10" />
         <StatCard icon={<CheckCircle2 size={22} />} label="Completed" value={done.length} color="text-emerald-400" bg="bg-emerald-400/10" />
         <StatCard icon={<AlertCircle size={22} />} label="Overdue" value={overdue.length} color="text-red-400" bg="bg-red-400/10" />
@@ -383,7 +326,7 @@ export function Dashboard({
         {/* Completion Progress */}
         <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
           <div className="flex items-center gap-2 mb-4">
-            <TrendingUp size={18} className="text-indigo-400" />
+            <TrendingUp size={18} className="text-[var(--chart-accent)]" />
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Completion Rate</h3>
           </div>
           <div className="flex items-center justify-center py-4">
@@ -391,7 +334,7 @@ export function Dashboard({
               <svg className="w-32 h-32 -rotate-90" viewBox="0 0 120 120">
                 <circle cx="60" cy="60" r="50" fill="none" stroke="var(--border-soft)" strokeWidth="10" />
                 <circle
-                  cx="60" cy="60" r="50" fill="none" stroke="#6366f1" strokeWidth="10"
+                  cx="60" cy="60" r="50" fill="none" stroke="var(--chart-accent)" strokeWidth="10"
                   strokeDasharray={`${completionRate * 3.14} ${314 - completionRate * 3.14}`}
                   strokeLinecap="round"
                 />
@@ -410,7 +353,7 @@ export function Dashboard({
         {/* Weekly Activity Chart */}
         <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
           <div className="flex items-center gap-2 mb-4">
-            <BarChart3 size={18} className="text-indigo-400" />
+            <BarChart3 size={18} className="text-[var(--chart-accent)]" />
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Tasks Created This Week</h3>
           </div>
           <div className="flex items-end gap-2 h-32 mt-4">
@@ -421,7 +364,7 @@ export function Dashboard({
                     className="w-full max-w-[24px] rounded-t-md transition-all"
                     style={{
                       height: `${Math.max(4, (day.count / maxWeekly) * 100)}%`,
-                      backgroundColor: day.count > 0 ? '#6366f1' : 'var(--border-soft)',
+                      backgroundColor: day.count > 0 ? 'var(--chart-accent)' : 'var(--border-soft)',
                     }}
                   />
                 </div>
@@ -434,7 +377,7 @@ export function Dashboard({
         {/* Priority Distribution */}
         <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
           <div className="flex items-center gap-2 mb-4">
-            <AlertCircle size={18} className="text-indigo-400" />
+            <AlertCircle size={18} className="text-[var(--chart-accent)]" />
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Active by Priority</h3>
           </div>
           <div className="space-y-4 mt-4">
@@ -491,7 +434,7 @@ export function Dashboard({
         {/* Upcoming Deadlines */}
         <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Target size={18} className="text-indigo-400" />
+            <Target size={18} className="text-[var(--chart-accent)]" />
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">Upcoming Deadlines</h3>
           </div>
           <div className="space-y-3">
@@ -544,7 +487,7 @@ export function Dashboard({
       {/* Courses Overview */}
       <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
         <div className="mb-4 flex items-center gap-2">
-          <FolderKanban size={18} className="text-indigo-400" />
+          <FolderKanban size={18} className="text-[var(--chart-accent)]" />
           <h3 className="text-sm font-semibold text-[var(--text-primary)]">Courses Overview</h3>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

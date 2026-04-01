@@ -275,8 +275,8 @@ export function CreateEventModal({
             <button
               type="submit"
               disabled={!summary.trim() || !startDate || isSaving}
-              className="flex-1 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-              style={{ backgroundColor: 'var(--accent-strong)' }}
+              className="flex-1 rounded-lg py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+             
             >
               {isSaving ? (mode === 'edit' ? 'Saving...' : 'Creating...') : (mode === 'edit' ? 'Save Changes' : 'Create Event')}
             </button>

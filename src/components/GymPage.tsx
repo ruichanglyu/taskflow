@@ -10,288 +10,17 @@ import type {
   WorkoutDayExercise, WorkoutSession, WorkoutExerciseLog, WorkoutSetLog,
 } from '../types';
 import { cn } from '../utils/cn';
-import { getAPIKey, getAPIKeyCached, type ImageAttachment } from '../hooks/useAI';
+import { type ImageAttachment } from '../hooks/useAI';
+import {
+  type ParsedWorkoutPlan,
+  emptyParsedWorkoutPlan,
+  parseExerciseLine,
+  parseWorkoutPlanText,
+  fileToImageAttachment,
+  extractWorkoutPlanFromImage,
+} from '../utils/workoutParsing';
 
 type GymTab = 'plan' | 'workout' | 'history' | 'library';
-
-interface ParsedWorkoutPlan {
-  name: string;
-  description: string;
-  daysPerWeek: number;
-  days: {
-    name: string;
-    notes: string;
-    exercises: {
-      name: string;
-      targetSets: number;
-      targetReps: string;
-      restSeconds: number;
-    }[];
-  }[];
-}
-
-function emptyParsedWorkoutPlan(): ParsedWorkoutPlan {
-  return {
-    name: '',
-    description: '',
-    daysPerWeek: 3,
-    days: [],
-  };
-}
-
-function normalizeWorkoutName(raw: string) {
-  return raw
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, char => char.toUpperCase());
-}
-
-function parseRestSeconds(text: string): number {
-  const minuteRange = text.match(/(\d+)\s*[–-]\s*(\d+)\s*min/i);
-  if (minuteRange) return Math.round(((Number(minuteRange[1]) + Number(minuteRange[2])) / 2) * 60);
-
-  const minuteSingle = text.match(/(\d+)\s*min/i);
-  if (minuteSingle) return Number(minuteSingle[1]) * 60;
-
-  const secondRange = text.match(/(\d+)\s*[–-]\s*(\d+)\s*sec/i);
-  if (secondRange) return Math.round((Number(secondRange[1]) + Number(secondRange[2])) / 2);
-
-  const secondSingle = text.match(/(\d+)\s*sec/i);
-  if (secondSingle) return Number(secondSingle[1]);
-
-  return 90;
-}
-
-function parseExerciseLine(line: string) {
-  const trimmed = line.replace(/^[•\-*]\s*/, '').replace(/^\d+[.)]\s*/, '').trim();
-  if (!trimmed) return null;
-
-  let name = '';
-  let prescription = '';
-
-  const dashMatch = trimmed.match(/^(.*?)\s+[—-]\s+(.+)$/);
-  const colonMatch = trimmed.match(/^(.*?):\s*(.+)$/);
-  const inlineSetRepMatch = trimmed.match(/^(.*?)(\d+\s*x\s*[\d,\s–-]+(?:AMRAP)?|AMRAP.*)$/i);
-
-  if (dashMatch) {
-    name = normalizeWorkoutName(dashMatch[1]);
-    prescription = dashMatch[2].trim();
-  } else if (colonMatch) {
-    name = normalizeWorkoutName(colonMatch[1]);
-    prescription = colonMatch[2].trim();
-  } else if (inlineSetRepMatch) {
-    name = normalizeWorkoutName(inlineSetRepMatch[1]);
-    prescription = inlineSetRepMatch[2].trim();
-  } else {
-    return null;
-  }
-
-  if (!name || !prescription) return null;
-
-  const setRepMatch = prescription.match(/(\d+)\s*x\s*([\d,\s–-]+(?:AMRAP)?|AMRAP)/i);
-  if (setRepMatch) {
-    return {
-      name,
-      targetSets: Number(setRepMatch[1]),
-      targetReps: setRepMatch[2].replace(/\s+/g, ' ').trim(),
-      restSeconds: 90,
-    };
-  }
-
-  const setsOnly = prescription.match(/(\d+)(?:\s*[–-]\s*(\d+))?\s+sets?/i);
-  if (setsOnly) {
-    const lower = Number(setsOnly[1]);
-    const upper = setsOnly[2] ? Number(setsOnly[2]) : lower;
-    return {
-      name,
-      targetSets: upper,
-      targetReps: 'AMRAP',
-      restSeconds: 90,
-    };
-  }
-
-  return {
-    name,
-    targetSets: 3,
-    targetReps: prescription,
-    restSeconds: 90,
-  };
-}
-
-async function fileToImageAttachment(file: File): Promise<ImageAttachment> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('Could not read that image.'));
-    reader.readAsDataURL(file);
-  });
-
-  const [header, base64] = dataUrl.split(',');
-  const mimeType = header.match(/data:(.*?);/)?.[1] ?? file.type ?? 'image/png';
-  return { base64, mimeType, preview: dataUrl };
-}
-
-async function extractWorkoutPlanFromImage(userId: string, image: ImageAttachment): Promise<string> {
-  const key = getAPIKeyCached(userId) ?? await getAPIKey(userId);
-  if (!key) {
-    throw new Error('Add your AI key first in Profile → Data before importing workout images.');
-  }
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
-  const prompt = [
-    'You are extracting a workout plan from an image.',
-    'Read the routine and convert it into a clean plain-text format for app import.',
-    'Output only structured plain text in this shape:',
-    'Plan Title',
-    'WEEKLY SPLIT',
-    'Day 1 - Name',
-    '- Exercise - 4x8-10',
-    '- Exercise - 3x12',
-    '',
-    'Rules:',
-    '- Keep only the workout plan content.',
-    '- Use one DAY section per workout day you can identify.',
-    '- Normalize exercise lines to "- Name - sets x reps" when possible.',
-    '- If reps are unclear, keep the visible prescription text after the second dash.',
-    '- Do not output markdown fences or commentary.',
-  ].join('\n');
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{
-        role: 'user',
-        parts: [
-          { text: prompt },
-          { inline_data: { mime_type: image.mimeType, data: image.base64 } },
-        ],
-      }],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 4096,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`Could not extract workout text from image (${response.status}). ${body.slice(0, 180)}`.trim());
-  }
-
-  const payload = await response.json();
-  const text = payload?.candidates?.[0]?.content?.parts
-    ?.map((part: { text?: string }) => part?.text ?? '')
-    .join('')
-    .trim();
-
-  if (!text) {
-    throw new Error('The image was read, but no workout text could be extracted.');
-  }
-
-  return text;
-}
-
-function isDayHeader(line: string) {
-  return /^DAY\s+\d+/i.test(line);
-}
-
-function extractDayName(header: string) {
-  const normalized = header.trim();
-  const explicitMatch = normalized.match(/^DAY\s+\d+\s*[—:-]\s*(.+)$/i);
-  if (explicitMatch) return explicitMatch[1].trim();
-
-  const implicitMatch = normalized.match(/^DAY\s+\d+\s+(.+)$/i);
-  if (implicitMatch) return implicitMatch[1].trim();
-
-  return normalized;
-}
-
-function parseWorkoutPlanText(raw: string): ParsedWorkoutPlan {
-  const normalized = raw.replace(/\r/g, '').trim();
-  if (!normalized) {
-    throw new Error('Paste a workout plan first.');
-  }
-
-  const lines = normalized.split('\n').map(line => line.trim()).filter(Boolean);
-  const name = lines[0];
-  const splitIndex = lines.findIndex(line => line.toUpperCase().startsWith('WEEKLY SPLIT'));
-
-  const dayHeaderIndexes = lines
-    .map((line, index) => (isDayHeader(line) ? index : -1))
-    .filter(index => index >= 0);
-
-  if (dayHeaderIndexes.length === 0) {
-    throw new Error('Could not find any day sections.');
-  }
-
-  const descriptionEnd = splitIndex === -1 ? dayHeaderIndexes[0] : splitIndex;
-  const descriptionParts = lines.slice(1, descriptionEnd).filter(line => !/^GOAL:?$/i.test(line) && !/^[-–—]+$/.test(line));
-  const weeklySplitStart = splitIndex === -1 ? dayHeaderIndexes[0] : splitIndex + 1;
-  const weeklySplitEnd = dayHeaderIndexes[0];
-  const weeklySplitLines = lines.slice(weeklySplitStart, weeklySplitEnd).filter(line => /^Day\s+\d+/i.test(line));
-
-  const parsedDays = dayHeaderIndexes.map((startIndex, idx) => {
-    const endIndex = dayHeaderIndexes[idx + 1] ?? lines.length;
-    const header = lines[startIndex];
-    const dayName = extractDayName(header);
-    const sectionLines = lines.slice(startIndex + 1, endIndex).filter(line => !/^[-–—]+$/.test(line));
-
-    let defaultRest = 90;
-    let inRestBlock = false;
-    const notes: string[] = [];
-    const exercises: ParsedWorkoutPlan['days'][number]['exercises'] = [];
-
-    for (const line of sectionLines) {
-      if (/^REST:?$/i.test(line)) {
-        inRestBlock = true;
-        continue;
-      }
-
-      if (/^(NOTE|CARDIO|KEY RULES?|PROGRESSION RULE|RESULT TIMELINE|FINAL GOAL):?/i.test(line)) {
-        inRestBlock = false;
-        notes.push(line.replace(/:$/, ''));
-        continue;
-      }
-
-      if (/^[•-]\s*/.test(line)) {
-        if (inRestBlock) {
-          defaultRest = parseRestSeconds(line);
-          notes.push(`Rest guidance: ${line.replace(/^[•-]\s*/, '')}`);
-          continue;
-        }
-
-        const parsedExercise = parseExerciseLine(line);
-        if (parsedExercise) {
-          exercises.push({ ...parsedExercise, restSeconds: defaultRest });
-        } else {
-          notes.push(line.replace(/^[•-]\s*/, ''));
-        }
-        continue;
-      }
-
-      if (/^OR$/i.test(line)) {
-        notes.push('OR');
-        continue;
-      }
-
-      notes.push(line);
-    }
-
-    return {
-      name: dayName,
-      notes: notes.join('\n').trim(),
-      exercises,
-    };
-  });
-
-  return {
-    name,
-    description: [descriptionParts.join('\n'), weeklySplitLines.length > 0 ? `Weekly split:\n${weeklySplitLines.join('\n')}` : ''].filter(Boolean).join('\n\n'),
-    daysPerWeek: weeklySplitLines.length || parsedDays.filter(day => day.exercises.length > 0).length || parsedDays.length,
-    days: parsedDays,
-  };
-}
 
 interface GymPageProps {
   userId: string;
@@ -347,7 +76,7 @@ export function GymPage(props: GymPageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5 sm:p-6">
+      <div className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Gym</h1>
@@ -760,8 +489,8 @@ function PlanTab(props: GymPageProps) {
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <button
                   onClick={() => setShowNewPlan(true)}
-                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)]"
-                  style={{ backgroundColor: 'var(--accent-strong)' }}
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)]"
+                 
                 >
                   <Plus size={16} />
                   New Plan
@@ -838,8 +567,8 @@ function PlanTab(props: GymPageProps) {
                       <p className="mb-4 text-xs text-[var(--text-muted)]">Each day represents a workout session in your routine (e.g. Push, Pull, Legs).</p>
                       <button
                         onClick={openDayWizard}
-                        className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium text-[var(--accent-contrast)]"
-                        style={{ backgroundColor: 'var(--accent-strong)' }}
+                        className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)]"
+                       
                       >
                         <Plus size={16} />
                         Add Your First Day
@@ -995,7 +724,7 @@ function PlanTab(props: GymPageProps) {
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
-                <button onClick={handleCreatePlan} disabled={!newPlanName.trim()} className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Create Plan</button>
+                <button onClick={handleCreatePlan} disabled={!newPlanName.trim()} className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:opacity-40">Create Plan</button>
                 <button onClick={() => setShowNewPlan(false)} className="rounded-xl border border-[var(--border-soft)] px-4 py-2.5 text-sm text-[var(--text-muted)] transition hover:border-[var(--border-strong)]">Cancel</button>
               </div>
             </div>
@@ -1209,8 +938,8 @@ function PlanTab(props: GymPageProps) {
                 type="button"
                 onClick={handleImportPlan}
                 disabled={!importPreview?.name.trim() || importPreview.days.length === 0 || isImporting}
-                className="flex-1 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] disabled:cursor-not-allowed disabled:opacity-40"
-                style={{ backgroundColor: 'var(--accent-strong)' }}
+                className="flex-1 rounded-lg py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] disabled:cursor-not-allowed disabled:opacity-40"
+               
               >
                 {isImporting ? 'Importing...' : 'Import Plan'}
               </button>
@@ -1300,8 +1029,8 @@ function PlanTab(props: GymPageProps) {
               <button
                 onClick={handleAddDay}
                 disabled={!newDayName.trim()}
-                className="rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40"
-                style={{ backgroundColor: 'var(--accent-strong)' }}
+                className="rounded-xl px-4 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] disabled:opacity-40"
+               
               >
                 Add
               </button>
@@ -1319,8 +1048,8 @@ function PlanTab(props: GymPageProps) {
                     setWizReps('10');
                     setWizRest(45);
                   }}
-                  className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)]"
-                  style={{ backgroundColor: 'var(--accent-strong)' }}
+                  className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)]"
+                 
                 >
                   Next: Add Exercises →
                 </button>
@@ -1454,8 +1183,8 @@ function PlanTab(props: GymPageProps) {
               <button
                 onClick={() => void handleWizardAddExercise()}
                 disabled={!wizExName.trim() && !wizExId}
-                className="w-full rounded-lg px-3 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40"
-                style={{ backgroundColor: 'var(--accent-strong)' }}
+                className="w-full rounded-lg px-3 py-2 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] disabled:opacity-40"
+               
               >
                 Add to Day
               </button>
@@ -1482,8 +1211,8 @@ function PlanTab(props: GymPageProps) {
                 {wizardDayIndex < selectedPlanDays.length - 1 && (
                   <button
                     onClick={() => setWizardDayIndex(wizardDayIndex + 1)}
-                    className="rounded-xl px-4 py-2 text-sm font-medium text-[var(--accent-contrast)]"
-                    style={{ backgroundColor: 'var(--accent-strong)' }}
+                    className="rounded-xl px-4 py-2 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)]"
+                   
                   >
                     Next Day →
                   </button>
@@ -1491,8 +1220,8 @@ function PlanTab(props: GymPageProps) {
                 {wizardDayIndex === selectedPlanDays.length - 1 && (
                   <button
                     onClick={() => setWizardStep(null)}
-                    className="rounded-xl px-4 py-2 text-sm font-medium text-[var(--accent-contrast)]"
-                    style={{ backgroundColor: 'var(--accent-strong)' }}
+                    className="rounded-xl px-4 py-2 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)]"
+                   
                   >
                     Finish ✓
                   </button>
@@ -1896,7 +1625,7 @@ function ExerciseLibrary({
           </div>
 
           <div className="flex gap-2">
-            <button onClick={handleAdd} disabled={!name.trim()} className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)] disabled:opacity-40" style={{ backgroundColor: 'var(--accent-strong)' }}>Add</button>
+            <button onClick={handleAdd} disabled={!name.trim()} className="rounded-lg px-3 py-1.5 text-xs font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] disabled:opacity-40">Add</button>
             <button onClick={() => setShowAdd(false)} className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-[var(--text-muted)]">Cancel</button>
           </div>
         </div>
@@ -2142,8 +1871,8 @@ function ExerciseEditorModal({
             type="button"
             onClick={() => void handleSave()}
             disabled={!name.trim() || isSaving}
-            className="rounded-xl px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] disabled:opacity-40"
-            style={{ backgroundColor: 'var(--accent-strong)' }}
+            className="rounded-xl px-4 py-2 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] disabled:opacity-40"
+           
           >
             {isSaving ? 'Saving…' : 'Save changes'}
           </button>
@@ -2194,7 +1923,7 @@ function ConfirmModal({
               'rounded-xl px-4 py-2 text-sm font-medium transition',
               confirmTone === 'danger'
                 ? 'border border-rose-500/30 bg-rose-500 text-white hover:bg-rose-600'
-                : 'text-[var(--accent-contrast)]'
+                : 'bg-[var(--accent-strong)] text-[var(--accent-contrast)]'
             )}
             style={confirmTone === 'primary' ? { backgroundColor: 'var(--accent-strong)' } : undefined}
           >
@@ -2279,7 +2008,7 @@ function WorkoutTab(props: GymPageProps) {
             <button onClick={handleAbandon} className="rounded-lg border border-[var(--border-soft)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-red-400 transition">
               <Square size={14} />
             </button>
-            <button onClick={handleFinish} className="flex-1 rounded-lg px-4 py-1.5 text-xs font-medium text-[var(--accent-contrast)] sm:flex-none" style={{ backgroundColor: 'var(--accent-strong)' }}>
+            <button onClick={handleFinish} className="flex-1 rounded-lg px-4 py-1.5 text-xs font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] sm:flex-none">
               Finish Workout
             </button>
           </div>
@@ -2674,8 +2403,8 @@ function ActiveExerciseCard({
               {state === 'idle' && (
                 <button
                   onClick={() => handleGo(set.id)}
-                  className="flex w-full items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold text-[var(--accent-contrast)] transition sm:w-auto"
-                  style={{ backgroundColor: 'var(--accent-strong)' }}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition sm:w-auto"
+                 
                 >
                   <Play size={14} />
                   Go
@@ -2736,7 +2465,7 @@ function ActiveExerciseCard({
       {/* Next exercise */}
       {!isLast && (
         <div className="flex border-t border-[var(--border-soft)] px-4 py-3 sm:justify-end sm:px-5">
-          <button onClick={onNext} className="flex w-full items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-[var(--accent-contrast)] sm:w-auto" style={{ backgroundColor: 'var(--accent-strong)' }}>
+          <button onClick={onNext} className="flex w-full items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] sm:w-auto">
             Next Exercise
             <ChevronRight size={14} />
           </button>

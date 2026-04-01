@@ -588,8 +588,8 @@ export function DeadlinesPage({
             <button
               type="button"
               onClick={() => setShowAddModal(true)}
-              className="flex h-10 items-center gap-1.5 rounded-lg px-4 text-xs font-medium text-[var(--accent-contrast)] shadow-sm"
-              style={{ backgroundColor: 'var(--accent-strong)' }}
+              className="flex h-10 items-center gap-1.5 rounded-lg px-4 text-xs font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] shadow-sm"
+             
             >
               <Plus size={14} />
               Add Deadline
@@ -905,7 +905,7 @@ export function DeadlinesPage({
                 <div className="mt-3 flex flex-wrap gap-2 text-xs">
                   <span className={cn(isOverdue ? 'text-red-400' : 'text-[var(--text-secondary)]')}>{formatDate(dl.dueDate)}</span>
                   {dl.dueTime && <span className="text-[var(--text-faint)]">{formatTime(dl.dueTime)}</span>}
-                  {dl.linkedTaskIds.length > 0 && <span className="text-indigo-400">{dl.linkedTaskIds.length} linked</span>}
+                  {dl.linkedTaskIds.length > 0 && <span className="text-[var(--accent)]">{dl.linkedTaskIds.length} linked</span>}
                 </div>
               </button>
             );
@@ -970,7 +970,7 @@ export function DeadlinesPage({
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">
                     <span className={cn(isOverdue ? 'text-red-400' : 'text-[var(--text-secondary)]')}>{formatDate(dl.dueDate)}</span>
                     {dl.dueTime && <span className="text-[var(--text-faint)]">{formatTime(dl.dueTime)}</span>}
-                    {dl.linkedTaskIds.length > 0 && <span className="text-indigo-400">{dl.linkedTaskIds.length} linked</span>}
+                    {dl.linkedTaskIds.length > 0 && <span className="text-[var(--accent)]">{dl.linkedTaskIds.length} linked</span>}
                   </div>
                 </button>
               );
@@ -1139,7 +1139,7 @@ export function DeadlinesPage({
                             <button
                               type="button"
                               onClick={() => dl.projectId && onNavigateToTasks?.(dl.projectId)}
-                              className="flex items-center gap-1 text-xs text-indigo-400 transition hover:underline"
+                              className="flex items-center gap-1 text-xs text-[var(--accent)] transition hover:underline"
                             >
                               <Link2 size={11} />
                               {dl.linkedTaskIds.length}
@@ -1307,7 +1307,7 @@ export function DeadlinesPage({
                               <button
                                 type="button"
                                 onClick={() => dl.projectId && onNavigateToTasks?.(dl.projectId)}
-                                className="flex items-center gap-1 text-xs text-indigo-400 transition hover:underline"
+                                className="flex items-center gap-1 text-xs text-[var(--accent)] transition hover:underline"
                               >
                                 <Link2 size={11} />
                                 {dl.linkedTaskIds.length}
@@ -1590,8 +1590,8 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
                   type="button"
                   onClick={() => void handleEmailParse()}
                   disabled={!emailText.trim() || isParsing}
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-40"
-                  style={{ backgroundColor: 'var(--accent-strong)' }}
+                  className="rounded-lg px-4 py-2 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-40"
+                 
                 >
                   {isParsing ? 'Extracting...' : 'Extract deadlines'}
                 </button>
@@ -1697,8 +1697,8 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
             type="button"
             onClick={() => void handleImport()}
             disabled={!preview || isImporting}
-            className="flex-1 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ backgroundColor: 'var(--accent-strong)' }}
+            className="flex-1 rounded-lg py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-40"
+           
           >
             {isImporting ? 'Importing...' : 'Import Deadlines'}
           </button>
@@ -1804,8 +1804,8 @@ function AddDeadlineModal({ projects, onAdd, onClose }: {
             <button
               type="submit"
               disabled={!title.trim() || !dueDate}
-              className="flex-1 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-40"
-              style={{ backgroundColor: 'var(--accent-strong)' }}
+              className="flex-1 rounded-lg py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-40"
+             
             >
               Add Deadline
             </button>
@@ -2124,8 +2124,8 @@ function DeadlineDetailModal({ deadline, projects, tasks, calendarEvents, onUpda
               type="button"
               onClick={handleSave}
               disabled={!title.trim() || !dueDate || isSaving}
-              className="flex-1 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-40"
-              style={{ backgroundColor: 'var(--accent-strong)' }}
+              className="flex-1 rounded-lg py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-40"
+             
             >
               {isSaving ? 'Saving...' : 'Save Changes'}
             </button>

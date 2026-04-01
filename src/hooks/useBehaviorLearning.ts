@@ -3,6 +3,7 @@ import type { GoogleCalendarEvent, NewGoogleCalendarEvent } from '../lib/googleC
 import { supabase } from '../lib/supabase';
 import type { StudyBlockOutcomeStatus } from '../types';
 import { isStudyBlockLikeEvent } from '../utils/studyBlockDetection';
+import { addDays, formatDateKey } from '../utils/dateHelpers';
 
 type LearningSource = 'manual' | 'ai';
 type LearningAction = 'create' | 'reschedule' | 'delete';
@@ -136,10 +137,6 @@ function appEventsStorageKey(userId: string) {
 
 function migratedStorageKey(userId: string) {
   return `${MIGRATED_PREFIX}:${userId}`;
-}
-
-function formatDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 function getDetailToken(detail: string | null | undefined, prefix: string) {
@@ -922,12 +919,6 @@ function appendBehaviorEvent(
 ) {
   const next = [...previous, nextEvent].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   return next.slice(-250);
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
 }
 
 function createSeedEvent(

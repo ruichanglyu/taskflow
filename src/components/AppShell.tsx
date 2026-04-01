@@ -390,11 +390,14 @@ export function AppShell({ user }: AppShellProps) {
     setAcademicPlanningGenerating(true);
     setAcademicPlanningOpen(true);
 
-    try {
-      generateAcademicPlanningProposal(source, targetIds);
-    } finally {
-      setAcademicPlanningGenerating(false);
-    }
+    // Defer synchronous generation so React can flush the "generating" spinner first
+    setTimeout(() => {
+      try {
+        generateAcademicPlanningProposal(source, targetIds);
+      } finally {
+        setAcademicPlanningGenerating(false);
+      }
+    }, 0);
   }, [
     academicPlanningProposal,
     academicPlanningSource,
@@ -414,11 +417,13 @@ export function AppShell({ user }: AppShellProps) {
   const handleRegenerateAcademicPlan = useCallback(() => {
     if (academicPlanningTargetIds.length === 0) return;
     setAcademicPlanningGenerating(true);
-    try {
-      generateAcademicPlanningProposal(academicPlanningSource, academicPlanningTargetIds);
-    } finally {
-      setAcademicPlanningGenerating(false);
-    }
+    setTimeout(() => {
+      try {
+        generateAcademicPlanningProposal(academicPlanningSource, academicPlanningTargetIds);
+      } finally {
+        setAcademicPlanningGenerating(false);
+      }
+    }, 0);
   }, [academicPlanningSource, academicPlanningTargetIds, generateAcademicPlanningProposal]);
 
   const handleUpdateAcademicPlanBlock = useCallback((blockId: string, updates: Parameters<typeof updateAcademicPlanBlock>[2]) => {

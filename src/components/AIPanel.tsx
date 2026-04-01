@@ -16,6 +16,8 @@ import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
 import type { GoogleCalendarEvent, GoogleCalendarListItem, NewGoogleCalendarEvent } from '../lib/googleCalendar';
 import { isStudyBlockLikeEvent, normalizeCalendarSummary } from '../utils/studyBlockDetection';
+import { getEventDateKey } from '../utils/calendarEventHelpers';
+import { addDays, formatDateKey } from '../utils/dateHelpers';
 import { buildAcademicPlanMetadataDescription, parseAcademicPlanMetadata } from '../lib/academicPlanning';
 
 /* Error boundary — prevents the entire app from crashing if AI panel rendering fails */
@@ -33,8 +35,7 @@ class AIPanelErrorBoundary extends Component<{ children: ReactNode }, { hasError
             <p className="mt-1 text-xs text-[var(--text-faint)]">{this.state.error}</p>
             <button
               onClick={() => this.setState({ hasError: false, error: '' })}
-              className="mt-3 rounded-lg px-3 py-1.5 text-xs font-medium text-white"
-              style={{ backgroundColor: 'var(--accent-strong)' }}
+              className="mt-3 rounded-lg bg-[var(--accent-strong)] px-3 py-1.5 text-xs font-medium text-[var(--accent-contrast)]"
             >
               Try again
             </button>
@@ -1930,8 +1931,8 @@ export function AIPanel({
                         <button
                           type="button"
                           onClick={onOpenDataSettings}
-                          className="rounded-xl px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)]"
-                          style={{ backgroundColor: 'var(--accent-strong)' }}
+                          className="rounded-xl px-4 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)]"
+                         
                         >
                           Open Data settings
                         </button>
@@ -2347,8 +2348,8 @@ function WelcomeScreen({ userId, hasKey, onUsePrompt, onOpenAcademicPlanner }: {
             <button
               type="button"
               onClick={handleSavePersonality}
-              className="rounded-xl px-5 py-2.5 text-sm font-medium text-[var(--accent-contrast)]"
-              style={{ backgroundColor: 'var(--accent-strong)' }}
+              className="rounded-xl px-5 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)]"
+             
             >
               Done
             </button>
@@ -2466,15 +2467,6 @@ function minutesToTime(totalMinutes: number) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
-function getEventDateKey(event: GoogleCalendarEvent) {
-  if (event.start?.date) return event.start.date;
-  if (event.start?.dateTime) {
-    const date = new Date(event.start.dateTime);
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  }
-  return '';
-}
-
 function getEventStartKey(event: GoogleCalendarEvent) {
   if (!event.start?.dateTime) return '';
   const date = new Date(event.start.dateTime);
@@ -2544,16 +2536,6 @@ function parseNaturalDateKey(value: string) {
   }
 
   return '';
-}
-
-function formatDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
 }
 
 function resolveCalendarDateInput(value?: string) {
@@ -4226,7 +4208,7 @@ function ActionBundleCard({
                 'rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-60',
                 confirmDelete
                   ? 'bg-rose-500 text-white'
-                  : 'text-[var(--accent-contrast)]',
+                  : 'bg-[var(--accent-strong)] text-[var(--accent-contrast)]',
               )}
               style={confirmDelete ? undefined : { backgroundColor: 'var(--accent-strong)' }}
             >

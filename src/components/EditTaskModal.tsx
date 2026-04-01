@@ -260,8 +260,8 @@ export function EditTaskModal({ task, projects, onSave, onAddSubtask, onToggleSu
             <button
               type="submit"
               disabled={!title.trim() || isSaving}
-              className="flex-1 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-              style={{ backgroundColor: 'var(--accent-strong)' }}
+              className="flex-1 rounded-lg py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+             
             >
               {isSaving ? 'Saving...' : 'Save Changes'}
             </button>

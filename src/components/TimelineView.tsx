@@ -2,6 +2,7 @@ import { useMemo, useState, useRef, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Task, Project, Deadline } from '../types';
 import { cn } from '../utils/cn';
+import { addDays, addMonths } from '../utils/dateHelpers';
 
 interface TimelineViewProps {
   tasks: Task[];
@@ -23,15 +24,6 @@ const priorityColor: Record<string, string> = {
   low: '#6b7280',
 };
 
-function addDays(date: Date, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
-function addMonths(date: Date, months: number) {
-  return new Date(date.getFullYear(), date.getMonth() + months, 1);
-}
 
 function formatShortDate(date: Date) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -266,7 +258,7 @@ export function TimelineView({ tasks, projects, deadlines = [], onUpdateDueDate 
               const subtaskProgress = task.subtasks.length > 0
                 ? Math.round((task.subtasks.filter(s => s.done).length / task.subtasks.length) * 100)
                 : null;
-              const barColor = project?.color ?? priorityColor[task.priority] ?? '#6366f1';
+              const barColor = project?.color ?? priorityColor[task.priority] ?? 'var(--chart-accent)';
               const isDragging = dragState?.taskId === task.id;
               const previewDateLabel = previewDayIndex !== null
                 ? formatShortDate(addDays(rangeStart, previewDayIndex))

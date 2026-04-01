@@ -7,6 +7,9 @@ import { CreateEventModal } from './CreateEventModal';
 import { CalendarGrid } from './CalendarGrid';
 import { cn } from '../utils/cn';
 import { isStudyBlockLikeCalendarEvent } from '../utils/studyBlockDetection';
+import { getEventDateKey, hasEventEnded, getEventTimeLabel } from '../utils/calendarEventHelpers';
+import { STUDY_OUTCOME_OPTIONS, getOutcomeTone, getOutcomeLabel, OutcomeBadge } from '../utils/studyOutcomes';
+import { addDays, addMonths, formatDateKey } from '../utils/dateHelpers';
 import type { GoogleCalendarController } from '../hooks/useGoogleCalendar';
 import type { StudyBlockOutcome } from '../hooks/useStudyBlockOutcomes';
 import type { StudyBlockOutcomeStatus } from '../types';
@@ -15,19 +18,9 @@ import { getCalendarEventPresentation } from '../utils/calendarEventPresentation
 type CalendarViewMode = 'month' | 'week' | 'list';
 type StudyBlockOutcomeMap = Record<string, StudyBlockOutcome>;
 
-const STUDY_OUTCOME_OPTIONS: { status: StudyBlockOutcomeStatus; label: string }[] = [
-  { status: 'completed', label: 'Done' },
-  { status: 'partial', label: 'Partial' },
-  { status: 'skipped', label: 'Skipped' },
-  { status: 'rescheduled', label: 'Rescheduled' },
-];
 
 function parseCalendarViewMode(value: string | null): CalendarViewMode {
   return value === 'week' || value === 'list' || value === 'month' ? value : 'month';
-}
-
-function formatDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 function startOfWeek(date: Date) {
@@ -37,22 +30,6 @@ function startOfWeek(date: Date) {
   return next;
 }
 
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function addMonths(date: Date, months: number) {
-  const next = new Date(date);
-  const day = next.getDate();
-  next.setDate(1);
-  next.setMonth(next.getMonth() + months);
-  const maxDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
-  next.setDate(Math.min(day, maxDay));
-  next.setHours(0, 0, 0, 0);
-  return next;
-}
 
 function startOfMonthGrid(year: number, month: number) {
   const first = new Date(year, month, 1);
@@ -109,17 +86,6 @@ function getEventStartLabel(date?: { date?: string; dateTime?: string }) {
   }
 
   return 'No start time';
-}
-
-function getEventTimeLabel(date?: { date?: string; dateTime?: string }) {
-  if (date?.date) return 'All day';
-  if (date?.dateTime) {
-    return new Date(date.dateTime).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  }
-  return '';
 }
 
 function getCalendarEventRenderKey(event: GoogleCalendarEvent) {
@@ -230,49 +196,6 @@ function getEventSectionLabel(date?: { date?: string; dateTime?: string }) {
   }
 
   return 'Later';
-}
-
-function getEventDateKey(event: GoogleCalendarEvent): string | null {
-  if (event.start?.date) return event.start.date;
-  if (event.start?.dateTime) return event.start.dateTime.slice(0, 10);
-  return null;
-}
-
-function hasEventEnded(event: GoogleCalendarEvent, now = new Date()) {
-  if (event.end?.dateTime) {
-    return new Date(event.end.dateTime).getTime() <= now.getTime();
-  }
-  if (event.end?.date) {
-    return new Date(`${event.end.date}T00:00:00`).getTime() <= now.getTime();
-  }
-  const dateKey = getEventDateKey(event);
-  if (!dateKey) return false;
-  return new Date(`${dateKey}T23:59:59`).getTime() <= now.getTime();
-}
-
-function getOutcomeTone(status: StudyBlockOutcomeStatus) {
-  switch (status) {
-    case 'completed':
-      return 'bg-emerald-500/12 text-emerald-300 border-emerald-500/20';
-    case 'partial':
-      return 'bg-amber-500/12 text-amber-300 border-amber-500/20';
-    case 'skipped':
-      return 'bg-rose-500/12 text-rose-300 border-rose-500/20';
-    case 'rescheduled':
-      return 'bg-sky-500/12 text-sky-300 border-sky-500/20';
-  }
-}
-
-function getOutcomeLabel(status: StudyBlockOutcomeStatus) {
-  return STUDY_OUTCOME_OPTIONS.find(option => option.status === status)?.label ?? status;
-}
-
-function OutcomeBadge({ status }: { status: StudyBlockOutcomeStatus }) {
-  return (
-    <span className={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]', getOutcomeTone(status))}>
-      {getOutcomeLabel(status)}
-    </span>
-  );
 }
 
 function getOutcomeDescription(status: StudyBlockOutcomeStatus) {
@@ -1726,8 +1649,8 @@ export function CalendarView({
               <button
                 type="button"
                 onClick={() => { setCreateDate(undefined); setShowCreateModal(true); }}
-                className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)]"
-                style={{ backgroundColor: 'var(--accent-strong)' }}
+                className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)]"
+               
               >
                 <Plus size={16} />
                 New Event
@@ -1754,8 +1677,8 @@ export function CalendarView({
               type="button"
               onClick={() => void calendar.connect()}
               disabled={!calendar.isConfigured || calendar.isConnecting}
-              className="rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ backgroundColor: 'var(--accent-strong)' }}
+              className="rounded-lg px-4 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+             
             >
               {calendar.isConnecting ? 'Connecting...' : 'Connect Google Calendar'}
             </button>

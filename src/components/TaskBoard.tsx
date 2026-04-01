@@ -172,7 +172,7 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-5 py-5 shadow-sm sm:px-6">
+      <div className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] sm:text-4xl">Tasks</h1>
           <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--text-faint)]">
@@ -226,8 +226,8 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
             </select>
             <button
               onClick={() => setShowModal(true)}
-              className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-[var(--accent-contrast)] shadow-sm transition-colors"
-              style={{ backgroundColor: 'var(--accent-strong)' }}
+              className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] shadow-sm transition-colors"
+             
             >
               <Plus size={16} /> New Task
             </button>

@@ -89,8 +89,8 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
           </div>
           <button
             onClick={() => setShowForm(!showForm)}
-            className="inline-flex items-center gap-2 self-start rounded-lg px-4 py-2.5 text-sm font-medium text-[var(--accent-contrast)] shadow-sm transition-colors"
-            style={{ backgroundColor: 'var(--accent-strong)' }}
+            className="inline-flex items-center gap-2 self-start rounded-lg px-4 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] shadow-sm transition-colors"
+           
           >
             <Plus size={15} /> New Course
           </button>
@@ -163,8 +163,8 @@ export function ProjectList({ projects, tasks, deadlines, initialProjectId = nul
             <button
               type="submit"
               disabled={!name.trim()}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--accent-contrast)] transition-colors disabled:opacity-40"
-              style={{ backgroundColor: 'var(--accent-strong)' }}
+              className="rounded-lg px-4 py-2 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition-colors disabled:opacity-40"
+             
             >
               Create
             </button>

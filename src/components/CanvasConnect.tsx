@@ -109,8 +109,8 @@ export function CanvasConnect({
                 <button
                   onClick={onSync}
                   disabled={isSyncing}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors disabled:opacity-50"
-                  style={{ backgroundColor: 'var(--accent-strong)' }}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition-colors disabled:opacity-50"
+                 
                 >
                   <RefreshCw size={15} className={cn(isSyncing && 'animate-spin')} />
                   {isSyncing ? 'Syncing...' : 'Sync Now'}
@@ -179,8 +179,8 @@ export function CanvasConnect({
                     <button
                       onClick={handleSignIn}
                       disabled={!canvasUrl.trim()}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition-colors disabled:opacity-40"
-                      style={{ backgroundColor: 'var(--accent-strong)' }}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition-colors disabled:opacity-40"
+                     
                     >
                       <LogIn size={15} />
                       Sign in with Canvas

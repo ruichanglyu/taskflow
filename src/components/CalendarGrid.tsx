@@ -4,6 +4,7 @@ import { GoogleCalendarEvent } from '../lib/googleCalendar';
 import { Deadline } from '../types';
 import { cn } from '../utils/cn';
 import { getCalendarEventPresentation } from '../utils/calendarEventPresentation';
+import { getEventDateKey } from '../utils/calendarEventHelpers';
 
 interface CalendarGridProps {
   year: number;
@@ -16,12 +17,6 @@ interface CalendarGridProps {
   onNextMonth: () => void;
   onToday: () => void;
   onCreateEvent: (date: string) => void;
-}
-
-function getEventDateKey(event: GoogleCalendarEvent): string | null {
-  if (event.start?.date) return event.start.date;
-  if (event.start?.dateTime) return event.start.dateTime.slice(0, 10);
-  return null;
 }
 
 function getDaysInMonth(year: number, month: number) {

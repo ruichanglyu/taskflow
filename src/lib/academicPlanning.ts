@@ -1,6 +1,7 @@
 import type { Deadline, DeadlineType, Project, Task } from '../types';
 import type { GoogleCalendarEvent, NewGoogleCalendarEvent } from './googleCalendar';
 import { getAPIKey } from '../hooks/useAI';
+import { addDays, formatDateKey } from '../utils/dateHelpers';
 
 export interface DeadlineEmailImportRow {
   title: string;
@@ -88,10 +89,6 @@ const DAY_END = 23 * 60 + 45;
 const FIFTEEN_MINUTES = 15;
 const DEFAULT_CALENDAR_LABEL = 'Study Blocks';
 
-function formatDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
 function parseDateKey(dateKey: string) {
   return new Date(`${dateKey}T00:00:00`);
 }
@@ -123,12 +120,6 @@ export function buildLocalDateTimeString(dateKey: string, timeValue: string) {
   const offsetMins = String(absoluteOffset % 60).padStart(2, '0');
 
   return `${dateKey}T${timeValue}:00${sign}${offsetHours}:${offsetMins}`;
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
 }
 
 function daysBetween(from: string, to: string) {
@@ -476,10 +467,10 @@ function blockDurationsForDeadline(
   const linkedTaskBonus = Math.min(linkedTasks.length * (linkedTaskBonusByType[deadline.type] ?? 15), deadline.type === 'project' ? 90 : 45);
   let totalMinutes = baseMinutes + linkedTaskBonus;
 
-  if (completionRate !== null && completionRate < 55) {
-    totalMinutes = Math.round(totalMinutes * 0.8);
-  } else if (completionRate !== null && completionRate < 70) {
-    totalMinutes = Math.round(totalMinutes * 0.9);
+  if (completionRate !== null && completionRate !== undefined && completionRate < 55) {
+    totalMinutes = Math.round(totalMinutes * 1.25);
+  } else if (completionRate !== null && completionRate !== undefined && completionRate < 70) {
+    totalMinutes = Math.round(totalMinutes * 1.1);
   }
 
   totalMinutes = Math.max(deadline.type === 'exam' || deadline.type === 'project' ? 75 : 45, totalMinutes);
@@ -517,7 +508,8 @@ function buildPlanningDays(deadline: Deadline) {
   }
 
   if (lastDate < today) {
-    return [formatDateKey(dueDate)];
+    // Deadline is already past — no realistic planning days remain
+    return [];
   }
 
   for (let cursor = new Date(today); cursor <= lastDate; cursor = addDays(cursor, 1)) {
@@ -625,7 +617,15 @@ export function buildAcademicPlanProposal(params: {
           ...params.calendarEvents,
           ...blocks.map(makeVirtualStudyEvent),
         ];
-        const preferredStartMinutes = 18 * 60;
+        // Use behavior learning to pick the preferred start: test a few windows
+        // and pick whichever the scorer rates highest. Falls back to afternoon (14:00).
+        const preferredStartMinutes = params.scoreStudySlot
+          ? [9 * 60, 12 * 60, 15 * 60, 18 * 60, 20 * 60].reduce((best, candidate) => {
+              const bestScore = params.scoreStudySlot!(dateKey, best, durationMinutes);
+              const candidateScore = params.scoreStudySlot!(dateKey, candidate, durationMinutes);
+              return candidateScore > bestScore ? candidate : best;
+            })
+          : 14 * 60;
         const slot = findFreeSlotForDuration(
           busyEvents,
           dateKey,

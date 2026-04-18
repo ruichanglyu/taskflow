@@ -782,7 +782,12 @@ export function useGoogleCalendar(userId: string) {
       setEvents(prev => prev.filter(existing => !eventMatchesIdentity(existing, eventId, targetCalendarId)));
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete event.');
+      const message = err instanceof Error ? err.message : 'Failed to delete event.';
+      if (/\b410\b|has been deleted|Resource has been deleted/i.test(message)) {
+        setEvents(prev => prev.filter(existing => !eventMatchesIdentity(existing, eventId, targetCalendarId)));
+        return true;
+      }
+      setError(message);
       return false;
     }
   }, [calendars, ensureAccessToken, events, selectedCalendarId]);

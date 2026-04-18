@@ -33,6 +33,7 @@ interface CreateEventModalProps {
   initialAllDay?: boolean;
   deadlineOptions?: Array<{ id: string; label: string }>;
   initialLinkedDeadlineId?: string | null;
+  initialLinkedDeadlineLabel?: string | null;
   initialMetadataOrigin?: AcademicPlanOrigin | null;
   calendars?: GoogleCalendarListItem[];
   initialCalendarId?: string;
@@ -61,6 +62,7 @@ export function CreateEventModal({
   initialAllDay = false,
   deadlineOptions = [],
   initialLinkedDeadlineId = null,
+  initialLinkedDeadlineLabel = null,
   initialMetadataOrigin = null,
   calendars = [],
   initialCalendarId,
@@ -81,6 +83,14 @@ export function CreateEventModal({
   const [calendarId, setCalendarId] = useState(initialCalendarId ?? '');
   const [linkedDeadlineId, setLinkedDeadlineId] = useState(initialLinkedDeadlineId ?? '');
   const [isSaving, setIsSaving] = useState(false);
+
+  const originLabel = initialMetadataOrigin === 'planner'
+    ? 'AI suggested'
+    : initialMetadataOrigin === 'ai-assisted'
+      ? 'AI assisted'
+      : initialMetadataOrigin === 'manual'
+        ? 'Linked event'
+        : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,14 +133,31 @@ export function CreateEventModal({
       onClick={onClose}
     >
       <div
-        className={compact ? 'absolute w-full max-w-[380px] rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm' : 'w-full max-w-md rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm'}
+        className={compact
+          ? 'absolute w-full max-w-[380px] rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-[0_16px_48px_rgba(0,0,0,0.12),0_4px_16px_rgba(0,0,0,0.06)]'
+          : 'w-full max-w-md rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-[0_24px_64px_rgba(0,0,0,0.14),0_4px_16px_rgba(0,0,0,0.06)]'
+        }
         style={compact ? { top: `${compactTop}px`, left: `${compactLeft}px` } : undefined}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
-          <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-            {mode === 'edit' ? 'Edit Event' : compact ? 'Quick event' : 'New Event'}
-          </h2>
+          <div>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+              {mode === 'edit' ? 'Edit Event' : compact ? 'Quick event' : 'New Event'}
+            </h2>
+            {(originLabel || initialLinkedDeadlineLabel) && (
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-faint)]">
+                {originLabel && (
+                  <span className="rounded-full bg-black/5 px-2 py-0.5 font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">
+                    {originLabel}
+                  </span>
+                )}
+                {initialLinkedDeadlineLabel && (
+                  <span>{initialLinkedDeadlineLabel}</span>
+                )}
+              </div>
+            )}
+          </div>
           <button onClick={onClose} className="text-[var(--text-faint)] transition-colors hover:text-[var(--text-primary)]">
             <X size={18} />
           </button>
@@ -144,7 +171,7 @@ export function CreateEventModal({
               onChange={e => setSummary(e.target.value)}
               placeholder="Event name"
               autoFocus
-              className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+              className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/25"
             />
           </div>
 
@@ -191,7 +218,7 @@ export function CreateEventModal({
                 type="date"
                 value={startDate}
                 onChange={e => { setStartDate(e.target.value); if (!endDate) setEndDate(e.target.value); }}
-                className="w-full rounded-md border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+                className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/25"
               />
             </div>
             {!allDay && (
@@ -201,7 +228,7 @@ export function CreateEventModal({
                   type="time"
                   value={startTime}
                   onChange={e => setStartTime(e.target.value)}
-                  className="w-full rounded-md border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+                  className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/25"
                 />
               </div>
             )}
@@ -211,7 +238,7 @@ export function CreateEventModal({
                 type="date"
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
-                className="w-full rounded-md border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+                className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/25"
               />
             </div>
             {!allDay && (
@@ -221,7 +248,7 @@ export function CreateEventModal({
                   type="time"
                   value={endTime}
                   onChange={e => setEndTime(e.target.value)}
-                  className="w-full rounded-md border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-1.5 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none"
+                  className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text-secondary)] focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]/25"
                 />
               </div>
             )}
@@ -261,22 +288,24 @@ export function CreateEventModal({
                   </option>
                 ))}
               </select>
+              <p className="mt-1.5 text-[11px] text-[var(--text-faint)]">
+                Link study blocks or prep sessions to the assignment, exam, or lab they belong to.
+              </p>
             </div>
           )}
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-3">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-lg border border-[var(--border-soft)] py-2.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-muted)]"
+              className="flex-1 rounded-xl border border-[var(--border-soft)] py-2.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-muted)] hover:border-[var(--border-strong)]"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!summary.trim() || !startDate || isSaving}
-              className="flex-1 rounded-lg py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-             
+              className="flex-1 rounded-xl py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] shadow-sm transition-all hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
             >
               {isSaving ? (mode === 'edit' ? 'Saving...' : 'Creating...') : (mode === 'edit' ? 'Save Changes' : 'Create Event')}
             </button>

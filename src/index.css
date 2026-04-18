@@ -64,35 +64,45 @@
 
 @keyframes ai-thinking-shimmer {
   0% {
-    transform: translateX(-62%);
+    background-position: 200% 0;
   }
   100% {
-    transform: translateX(175%);
+    background-position: -200% 0;
   }
+}
+
+@keyframes ai-thinking-dots {
+  0%, 20% { opacity: 0.25; }
+  50% { opacity: 1; }
+  80%, 100% { opacity: 0.25; }
 }
 
 .ai-thinking-icon {
   animation: ai-thinking-pulse 1.8s ease-in-out infinite;
 }
 
-.ai-thinking-status {
-  animation: ai-thinking-fade 180ms ease-out;
+.ai-thinking-word {
+  animation: ai-thinking-fade 220ms ease-out;
+  background: linear-gradient(
+    90deg,
+    var(--text-secondary) 0%,
+    var(--text-secondary) 35%,
+    var(--text-primary) 50%,
+    var(--text-secondary) 65%,
+    var(--text-secondary) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: ai-thinking-fade 220ms ease-out, ai-thinking-shimmer 2.4s linear infinite;
 }
 
-.ai-thinking-progress {
-  position: relative;
-  background: linear-gradient(90deg, transparent, var(--accent-soft), transparent);
-}
-
-.ai-thinking-progress::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  width: 42%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, rgba(255,255,255,0), var(--accent), rgba(255,255,255,0));
-  opacity: 0.82;
-  animation: ai-thinking-shimmer 1.5s ease-in-out infinite;
+.ai-thinking-dots {
+  display: inline-block;
+  margin-left: 1px;
+  animation: ai-thinking-dots 1.4s ease-in-out infinite;
+  color: var(--text-secondary);
 }
 
 /* ===== NEUTRAL ===== */

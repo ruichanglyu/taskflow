@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Camera, Check, AlertCircle, Download, Eye, EyeOff, Mail, Lock, User as UserIcon, Calendar, Sparkles, Trash2, Moon, Sunrise, Sunset, Fingerprint, ZoomIn, ZoomOut, RotateCw, ChevronDown } from 'lucide-react';
+import { X, Camera, Check, AlertCircle, Download, Eye, EyeOff, Mail, User as UserIcon, Calendar, Sparkles, Trash2, Fingerprint, ZoomIn, ZoomOut, RotateCw, ChevronDown } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import Cropper from 'react-easy-crop';
 import type { Area } from 'react-easy-crop';

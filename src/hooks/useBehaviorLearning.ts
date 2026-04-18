@@ -78,13 +78,6 @@ interface TimedBehaviorSnapshot {
   durationMinutes: number;
 }
 
-interface BehaviorLearningSettingsRow {
-  user_id: string;
-  ai_testing_mode: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
 interface BehaviorLearningScheduleEventRow {
   id: string;
   user_id: string;
@@ -239,15 +232,6 @@ function bucketMinutes(value: number) {
   return Math.max(0, Math.min(bucket, 23 * 60 + 45));
 }
 
-function formatMinutesLabel(totalMinutes: number) {
-  const safe = Math.max(0, Math.min(totalMinutes, 23 * 60 + 59));
-  const hours = Math.floor(safe / 60);
-  const minutes = safe % 60;
-  const meridiem = hours >= 12 ? 'PM' : 'AM';
-  const displayHour = hours % 12 === 0 ? 12 : hours % 12;
-  return `${displayHour}:${String(minutes).padStart(2, '0')} ${meridiem}`;
-}
-
 function getTimeWindowLabel(startMinutes: number) {
   if (startMinutes < 12 * 60) return 'morning';
   if (startMinutes < 17 * 60) return 'afternoon';
@@ -305,7 +289,7 @@ function normalizeStoredBehaviorEvent(event: unknown): BehaviorLearningEvent | n
     previousWeekday: typeof value.previousWeekday === 'number' && Number.isFinite(value.previousWeekday) ? value.previousWeekday : null,
     previousStartMinutes: typeof value.previousStartMinutes === 'number' && Number.isFinite(value.previousStartMinutes) ? value.previousStartMinutes : null,
     previousDurationMinutes: typeof value.previousDurationMinutes === 'number' && Number.isFinite(value.previousDurationMinutes) ? value.previousDurationMinutes : null,
-    countsForLearning: value.countsForLearning ?? true,
+    countsForLearning: typeof value.countsForLearning === 'boolean' ? value.countsForLearning : true,
     createdAt: normalizeCreatedAt(value.createdAt),
   };
 }
@@ -335,7 +319,7 @@ function normalizeStoredAppBehaviorEvent(event: unknown): AppBehaviorEvent | nul
     action: value.action,
     title: value.title,
     detail: typeof value.detail === 'string' ? value.detail : null,
-    countsForLearning: value.countsForLearning ?? true,
+    countsForLearning: typeof value.countsForLearning === 'boolean' ? value.countsForLearning : true,
     createdAt: normalizeCreatedAt(value.createdAt),
   };
 }
@@ -1048,6 +1032,7 @@ export function useBehaviorLearning(userId: string) {
     const hydrateVersion = ++hydrationVersionRef.current;
 
     async function hydrateFromSupabase() {
+      if (!supabase) return;
       const localEvents = loadEventsFromStorage(userId);
       const localAppEvents = loadAppEventsFromStorage(userId);
       const localTestingMode = loadAiTestingMode(userId);
@@ -1770,6 +1755,7 @@ export function useBehaviorLearning(userId: string) {
     startMinutes: number;
     durationMinutes: number;
     status: StudyBlockOutcomeStatus;
+    notes?: string;
     options?: BehaviorLearningActionOptions;
   }) => {
     const actionByStatus: Record<StudyBlockOutcomeStatus, string> = {
@@ -1789,6 +1775,7 @@ export function useBehaviorLearning(userId: string) {
         `date:${params.dateKey}`,
         `start:${params.startMinutes}`,
         `duration:${params.durationMinutes}`,
+        params.notes?.trim() ? `notes:${params.notes.trim().slice(0, 120)}` : null,
       ].filter(Boolean).join(' · '),
     );
   }, [recordAppAction]);

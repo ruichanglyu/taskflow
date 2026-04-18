@@ -22,6 +22,13 @@ export function getCalendarEventPresentation(event: GoogleCalendarEvent) {
   const accentColor = event.calendarColor || '#818cf8';
   const isSuggested = metadata?.origin === 'planner';
   const isLinked = Boolean(metadata);
+  const originLabel = metadata?.origin === 'planner'
+    ? 'AI-suggested study block'
+    : metadata?.origin === 'ai-assisted'
+      ? 'AI-assisted event'
+      : metadata?.origin === 'manual'
+        ? 'Linked manual event'
+        : 'Manual or AI-assisted event';
   const description = metadata
     ? metadata.notes || metadata.explanation || null
     : event.description?.trim() || null;
@@ -31,10 +38,11 @@ export function getCalendarEventPresentation(event: GoogleCalendarEvent) {
     accentColor,
     isLinked,
     isSuggested,
+    originLabel,
     badgeLabel: isSuggested ? 'AI suggested' : null,
     description,
-    surfaceColor: isSuggested ? withAlpha(accentColor, '36') : withAlpha(accentColor, '20'),
-    mutedSurfaceColor: isSuggested ? withAlpha(accentColor, '24') : 'transparent',
-    borderColor: isSuggested ? withAlpha(accentColor, '88') : accentColor,
+    surfaceColor: isSuggested ? withAlpha(accentColor, '40') : withAlpha(accentColor, '28'),
+    mutedSurfaceColor: isSuggested ? withAlpha(accentColor, '2a') : 'transparent',
+    borderColor: isSuggested ? withAlpha(accentColor, '80') : accentColor,
   };
 }

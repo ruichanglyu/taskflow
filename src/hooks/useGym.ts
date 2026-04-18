@@ -106,11 +106,16 @@ export function useGym(userId: string) {
     return true;
   }, [userId]);
 
-  const deletePlan = useCallback(async (id: string) => {
-    if (!supabase) return;
-    await supabase.from('workout_plans').delete().eq('id', id);
+  const deletePlan = useCallback(async (id: string): Promise<boolean> => {
+    if (!supabase) return false;
+    const { error } = await supabase.from('workout_plans').delete().eq('id', id);
+    if (error) {
+      setError(error.message);
+      return false;
+    }
     setPlans(prev => prev.filter(p => p.id !== id));
     setDayTemplates(prev => prev.filter(d => d.planId !== id));
+    return true;
   }, []);
 
   // --- Day Templates ---
@@ -137,11 +142,16 @@ export function useGym(userId: string) {
     return true;
   }, []);
 
-  const deleteDayTemplate = useCallback(async (id: string) => {
-    if (!supabase) return;
-    await supabase.from('workout_day_templates').delete().eq('id', id);
+  const deleteDayTemplate = useCallback(async (id: string): Promise<boolean> => {
+    if (!supabase) return false;
+    const { error } = await supabase.from('workout_day_templates').delete().eq('id', id);
+    if (error) {
+      setError(error.message);
+      return false;
+    }
     setDayTemplates(prev => prev.filter(d => d.id !== id));
     setDayExercises(prev => prev.filter(de => de.workoutDayTemplateId !== id));
+    return true;
   }, []);
 
   // --- Exercises ---
@@ -168,10 +178,15 @@ export function useGym(userId: string) {
     return true;
   }, []);
 
-  const deleteExercise = useCallback(async (id: string) => {
-    if (!supabase) return;
-    await supabase.from('exercises').delete().eq('id', id);
+  const deleteExercise = useCallback(async (id: string): Promise<boolean> => {
+    if (!supabase) return false;
+    const { error } = await supabase.from('exercises').delete().eq('id', id);
+    if (error) {
+      setError(error.message);
+      return false;
+    }
     setExercises(prev => prev.filter(ex => ex.id !== id));
+    return true;
   }, []);
 
   // --- Day Exercises ---
@@ -200,10 +215,15 @@ export function useGym(userId: string) {
     return true;
   }, []);
 
-  const deleteDayExercise = useCallback(async (id: string) => {
-    if (!supabase) return;
-    await supabase.from('workout_day_exercises').delete().eq('id', id);
+  const deleteDayExercise = useCallback(async (id: string): Promise<boolean> => {
+    if (!supabase) return false;
+    const { error } = await supabase.from('workout_day_exercises').delete().eq('id', id);
+    if (error) {
+      setError(error.message);
+      return false;
+    }
     setDayExercises(prev => prev.filter(de => de.id !== id));
+    return true;
   }, []);
 
   // --- Sessions ---
@@ -255,14 +275,19 @@ export function useGym(userId: string) {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, status, completedAt: now } : s));
   }, []);
 
-  const deleteSession = useCallback(async (id: string) => {
-    if (!supabase) return;
+  const deleteSession = useCallback(async (id: string): Promise<boolean> => {
+    if (!supabase) return false;
     // Cascade deletes exercise_logs and set_logs via FK
-    await supabase.from('workout_sessions').delete().eq('id', id);
+    const { error } = await supabase.from('workout_sessions').delete().eq('id', id);
+    if (error) {
+      setError(error.message);
+      return false;
+    }
     const logIds = exerciseLogs.filter(el => el.workoutSessionId === id).map(el => el.id);
     setSessions(prev => prev.filter(s => s.id !== id));
     setExerciseLogs(prev => prev.filter(el => el.workoutSessionId !== id));
     setSetLogs(prev => prev.filter(sl => !logIds.includes(sl.workoutExerciseLogId)));
+    return true;
   }, [exerciseLogs]);
 
   // --- Set Logs ---

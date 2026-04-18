@@ -11,7 +11,7 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useAI, getAPIKey, getAPIKeyCached, parseImportBlocks, type ChatMessage, type ImportBlock, type ParsedImportRow, type ImageAttachment, type ChatThread } from '../hooks/useAI';
 import type { BehaviorLearningActionOptions } from '../hooks/useBehaviorLearning';
 import type { Habit } from '../hooks/useHabits';
-import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus, TaskStatus } from '../types';
+import type { Task, Deadline, Project, WorkoutPlan, WorkoutDayTemplate, Exercise, WorkoutDayExercise, Priority, DeadlineType, DeadlineStatus, DeadlineSource, TaskStatus } from '../types';
 import type { Recurrence } from '../types';
 import { cn } from '../utils/cn';
 import type { GoogleCalendarEvent, GoogleCalendarListItem, NewGoogleCalendarEvent } from '../lib/googleCalendar';
@@ -494,7 +494,7 @@ interface AIPanelProps {
   // Callbacks for imports
   onAddTask: (title: string, description: string, priority: Priority, projectId: string | null, dueDate: string | null, recurrence: Recurrence, status?: TaskStatus, options?: BehaviorLearningActionOptions) => Promise<string | null>;
   onUpdateTask: (id: string, updates: { title?: string; description?: string; priority?: Priority; projectId?: string | null; dueDate?: string | null; recurrence?: Recurrence; status?: TaskStatus }, options?: BehaviorLearningActionOptions) => Promise<boolean>;
-  onAddDeadline: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus, options?: BehaviorLearningActionOptions) => Promise<boolean>;
+  onAddDeadline: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus, source?: { sourceType: DeadlineSource; sourceId: string; sourceUrl?: string }, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onUpdateDeadline: (id: string, updates: {
     title?: string;
     projectId?: string | null;
@@ -510,7 +510,7 @@ interface AIPanelProps {
   onLinkTask: (deadlineId: string, taskId: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onCreateCalendarEvent: (event: NewGoogleCalendarEvent, calendarId?: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onUpdateCalendarEvent: (eventId: string, event: Partial<NewGoogleCalendarEvent>, calendarId?: string, options?: BehaviorLearningActionOptions, existingEvent?: GoogleCalendarEvent) => Promise<boolean>;
-  onDeleteCalendarEvent: (eventId: string, calendarId?: string, options?: BehaviorLearningActionOptions, existingEvent?: GoogleCalendarEvent) => Promise<boolean>;
+  onDeleteCalendarEvent: (eventId: string, calendarId?: string, options?: BehaviorLearningActionOptions, existingEvent?: GoogleCalendarEvent, deleteOptions?: { silent?: boolean }) => Promise<boolean>;
   onOpenAcademicPlanner?: (deadlineIds?: string[]) => void;
   habits: Habit[];
   onAddHabit: (title: string, frequency?: 'daily' | 'weekly', options?: BehaviorLearningActionOptions) => Promise<void>;
@@ -521,7 +521,7 @@ interface AIPanelProps {
 export function AIPanel({
   open, mode, onModeChange, onClose, onOpenDataSettings, userId,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
-  calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange, scoreStudySlot, behaviorSummary, draftPrompt, onDraftPromptConsumed, onAiPromptSubmitted, onAiActionsApplied, onAiSuggestionAccepted, onAiSuggestionEdited, onAiSuggestionRejected, onStudyBlockLinkedTarget, onStudySlotCandidatesLogged,
+  calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange: _onAiLearningEnabledChange, scoreStudySlot, behaviorSummary, draftPrompt, onDraftPromptConsumed, onAiPromptSubmitted, onAiActionsApplied, onAiSuggestionAccepted, onAiSuggestionEdited, onAiSuggestionRejected, onStudyBlockLinkedTarget, onStudySlotCandidatesLogged,
   onAddTask, onUpdateTask, onAddDeadline, onUpdateDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
   onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
   onOpenAcademicPlanner,
@@ -554,11 +554,17 @@ export function AIPanel({
       // Tab-focus and re-open re-syncs happen silently in the background
       // so the chat doesn't flash a spinner.
       if (showLoading) setKeyLoading(true);
-      void getAPIKey(userId).then(key => {
-        if (cancelled) return;
-        setHasKey(!!key);
-        setKeyLoading(false);
-      });
+      void getAPIKey(userId)
+        .then(key => {
+          if (cancelled) return;
+          setHasKey(!!key);
+          setKeyLoading(false);
+        })
+        .catch(err => {
+          console.error('Failed to load API key:', err);
+          if (cancelled) return;
+          setKeyLoading(false);
+        });
     };
 
     // First load: only show spinner if we have no cached key
@@ -1318,7 +1324,7 @@ export function AIPanel({
 
       for (const row of block.rows) {
         const matches = resolvePreferredCalendarCandidates(workingCalendarEvents, calendarCalendars, row);
-        let payload = buildCalendarEventPayload(row, 'update');
+        let payload: NewGoogleCalendarEvent | null = buildCalendarEventPayload(row, 'update');
 
         if (matches.length !== 1 || !payload) {
           skipped++;
@@ -1475,7 +1481,7 @@ export function AIPanel({
           if (deletedKeys.has(deleteKey)) {
             continue;
           }
-          const ok = await onDeleteCalendarEvent(match.id, match.calendarId, aiLearningOptions, match);
+          const ok = await onDeleteCalendarEvent(match.id, match.calendarId, aiLearningOptions, match, { silent: true });
           if (ok) {
             deleted++;
             onAiSuggestionAccepted?.(block.type, 1);
@@ -1650,6 +1656,7 @@ export function AIPanel({
               row.dueTime ?? null,
               row.notes ?? '',
               status,
+              undefined,
               aiLearningOptions,
             );
         if (ok) {
@@ -2461,12 +2468,6 @@ function buildLocalDateTimeString(dateKey: string, timeKey: string) {
   return `${dateKey}T${timeKey}:00${sign}${offsetHours}:${offsetMins}`;
 }
 
-function minutesToTime(totalMinutes: number) {
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-}
-
 function getEventStartKey(event: GoogleCalendarEvent) {
   if (!event.start?.dateTime) return '';
   const date = new Date(event.start.dateTime);
@@ -2810,6 +2811,7 @@ function findStudyBlockReplacementCandidate(
 ) {
   const payloadDateKey = 'date' in payload.start ? payload.start.date : payload.start.dateTime?.slice(0, 10);
   if (!payloadDateKey) return null;
+  const payloadTimedDetails = getTimedPayloadDetails(payload);
 
   const targetContext =
     normalizeStudyBlockContext(payload.summary) ||
@@ -2831,7 +2833,24 @@ function findStudyBlockReplacementCandidate(
     return targetKeys.some(key => eventKeys.includes(key));
   });
 
-  return matches.length === 1 ? matches[0] : null;
+  if (matches.length <= 1) return matches[0] ?? null;
+
+  if (payloadTimedDetails) {
+    const exactTimeMatches = matches.filter(event => {
+      const eventTimedDetails = getTimedEventDetails(event);
+      if (!eventTimedDetails) return false;
+      return (
+        eventTimedDetails.startMinutes === payloadTimedDetails.startMinutes &&
+        eventTimedDetails.endMinutes === payloadTimedDetails.endMinutes
+      );
+    });
+
+    if (exactTimeMatches.length === 1) {
+      return exactTimeMatches[0];
+    }
+  }
+
+  return null;
 }
 
 function findFreeSlotForDuration(
@@ -2842,7 +2861,8 @@ function findFreeSlotForDuration(
   minStartMinutes: number,
   scoreStudySlot?: (dateKey: string, startMinutes: number, durationMinutes: number) => number,
 ) : SlotSearchResult | null {
-  const DAY_START = 8 * 60;
+  const DEFAULT_DAY_START = 6 * 60;
+  const DAY_START = Math.min(DEFAULT_DAY_START, minStartMinutes, preferredStartMinutes);
   const DAY_END = 23 * 60 + 59;
 
   const mergedBusy = events
@@ -2979,21 +2999,9 @@ function maybeResolveCalendarCreateConflict(
       };
     }
 
-    const adjustedPayload: NewGoogleCalendarEvent = {
-      ...payload,
-      start: {
-        dateTime: buildLocalDateTimeString(timedDetails.dateKey, minutesToTime(nextSlot.startMinutes)),
-        ...(timedDetails.timeZone ? { timeZone: timedDetails.timeZone } : {}),
-      },
-      end: {
-        dateTime: buildLocalDateTimeString(timedDetails.dateKey, minutesToTime(nextSlot.endMinutes)),
-        ...(timedDetails.timeZone ? { timeZone: timedDetails.timeZone } : {}),
-      },
-    };
-
     return {
-      payload: adjustedPayload,
-      adjusted: true,
+      payload: null,
+      adjusted: false,
       dateKey: timedDetails.dateKey,
       requestedStartMinutes: timedDetails.startMinutes,
       durationMinutes: timedDetails.durationMinutes,
@@ -3001,12 +3009,6 @@ function maybeResolveCalendarCreateConflict(
       candidates: nextSlot.candidates,
     };
   }
-
-  const hasConflict = events.some(event => {
-    const busy = getTimedEventDetails(event);
-    if (!busy || busy.dateKey !== timedDetails.dateKey) return false;
-    return timedDetails.startMinutes < busy.endMinutes && timedDetails.endMinutes > busy.startMinutes;
-  });
 
   return {
     payload,
@@ -3020,10 +3022,10 @@ function maybeResolveCalendarCreateConflict(
 }
 
 function maybeResolveCalendarUpdateConflict(
-  row: ParsedImportRow,
+  _row: ParsedImportRow,
   payload: NewGoogleCalendarEvent,
-  events: GoogleCalendarEvent[],
-  existingEvent: GoogleCalendarEvent,
+  _events: GoogleCalendarEvent[],
+  _existingEvent: GoogleCalendarEvent,
   _calendarSummary?: string,
   _scoreStudySlot?: (dateKey: string, startMinutes: number, durationMinutes: number) => number,
 ) {
@@ -3181,6 +3183,19 @@ function inferExplicitEntityTarget(prompt: string): 'task' | 'deadline' | 'both'
 
   const mentionsTask = /\btask\b|\btasks\b|\btodo\b|\btodos\b|\bin tasks\b/.test(normalized);
   const mentionsDeadline = /\bdeadline\b|\bdeadlines\b|\bin deadlines\b|\bdeadline tracker\b/.test(normalized);
+  const negativeWord = "(?:not|don't|dont|do not|without|keep)";
+
+  const prefersTask =
+    /\bonly\s+(?:the\s+)?tasks?\b/.test(normalized) ||
+    new RegExp(`\\b(delete|remove|update|mark)\\b.*\\btasks?\\b.*\\b${negativeWord}\\b.*\\bdeadlines?\\b`).test(normalized) ||
+    new RegExp(`\\b${negativeWord}\\b.*\\bdeadlines?\\b`).test(normalized);
+  const prefersDeadline =
+    /\bonly\s+(?:the\s+)?deadlines?\b/.test(normalized) ||
+    new RegExp(`\\b(delete|remove|update|mark)\\b.*\\bdeadlines?\\b.*\\b${negativeWord}\\b.*\\btasks?\\b`).test(normalized) ||
+    new RegExp(`\\b${negativeWord}\\b.*\\btasks?\\b`).test(normalized);
+
+  if (prefersTask && !prefersDeadline) return 'task';
+  if (prefersDeadline && !prefersTask) return 'deadline';
 
   if (mentionsTask && mentionsDeadline) return 'both';
   if (mentionsTask) return 'task';
@@ -3545,83 +3560,60 @@ function getPriorUserPrompt(messages: ChatMessage[], index: number) {
   return '';
 }
 
-function getThinkingStatuses(prompt: string) {
-  const normalized = prompt.toLowerCase();
+const THINKING_WORDS = [
+  'Pondering',
+  'Musing',
+  'Noodling',
+  'Ruminating',
+  'Cogitating',
+  'Simmering',
+  'Percolating',
+  'Contemplating',
+  'Deliberating',
+  'Brewing',
+  'Conjuring',
+  'Marinating',
+  'Puzzling',
+  'Scheming',
+  'Unfurling',
+  'Wrangling',
+  'Distilling',
+  'Calibrating',
+  'Mulling',
+  'Churning',
+];
 
-  if (/(schedule|calendar|event|availability|free time|open time|time block|study block|reschedul|move this)/.test(normalized)) {
-    return [
-      'Checking your schedule',
-      'Finding an open window',
-      'Shaping the best fit',
-    ];
-  }
-
-  if (/(deadline|exam|quiz|assignment|lab|project|study|plan my|prep)/.test(normalized)) {
-    return [
-      'Looking at your deadlines',
-      'Finding a realistic study window',
-      'Building a clean plan',
-    ];
-  }
-
-  if (/(create|update|delete|remove|mark|rename|edit|link|unlink)/.test(normalized)) {
-    return [
-      'Checking the right item',
-      'Preparing the change',
-      'Making sure it stays consistent',
-    ];
-  }
-
-  if (/(import|email|paste|syllabus|image|screenshot|upload)/.test(normalized)) {
-    return [
-      'Reading what you sent',
-      'Pulling out the useful bits',
-      'Organizing it for you',
-    ];
-  }
-
-  return [
-    'Thinking through it',
-    'Pulling the right context',
-    'Finishing up your answer',
-  ];
+function pickThinkingWord(exclude?: string) {
+  const pool = exclude ? THINKING_WORDS.filter(word => word !== exclude) : THINKING_WORDS;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
-function AssistantThinkingBubble({ promptContext }: { promptContext: string }) {
-  const statuses = useMemo(() => getThinkingStatuses(promptContext), [promptContext]);
+function AssistantThinkingBubble(_: { promptContext: string }) {
   const [visible, setVisible] = useState(false);
-  const [statusIndex, setStatusIndex] = useState(0);
+  const [word, setWord] = useState(() => pickThinkingWord());
 
   useEffect(() => {
-    setVisible(false);
-    setStatusIndex(0);
     const timer = window.setTimeout(() => setVisible(true), 180);
     return () => window.clearTimeout(timer);
-  }, [promptContext]);
+  }, []);
 
   useEffect(() => {
-    if (!visible || statuses.length <= 1) return undefined;
+    if (!visible) return undefined;
     const interval = window.setInterval(() => {
-      setStatusIndex(prev => (prev + 1) % statuses.length);
-    }, 1050);
+      setWord(prev => pickThinkingWord(prev));
+    }, 2200);
     return () => window.clearInterval(interval);
-  }, [visible, statuses]);
+  }, [visible]);
 
   if (!visible) return null;
 
   return (
-    <div className="rounded-2xl rounded-bl-sm border border-[var(--border-soft)] bg-[var(--surface-muted)]/88 px-3.5 py-3 shadow-[0_10px_30px_-22px_var(--shadow-color)]">
-      <div className="flex items-center gap-2.5">
-        <div className="ai-thinking-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
-          <Sparkles size={15} />
-        </div>
-        <p key={statuses[statusIndex]} className="ai-thinking-status text-sm font-medium text-[var(--text-primary)]">
-          {statuses[statusIndex]}
-        </p>
-      </div>
-      <div className="mt-3 h-1 overflow-hidden rounded-full bg-[var(--border-soft)]/75">
-        <div className="ai-thinking-progress h-full w-full rounded-full" />
-      </div>
+    <div className="flex items-center gap-2 py-1.5 text-sm text-[var(--text-secondary)]">
+      <Sparkles size={14} className="ai-thinking-icon text-[var(--accent)]" />
+      <span key={word} className="ai-thinking-word font-medium">
+        {word}
+        <span className="ai-thinking-dots">…</span>
+      </span>
     </div>
   );
 }

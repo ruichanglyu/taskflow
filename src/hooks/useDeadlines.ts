@@ -256,8 +256,8 @@ export function useDeadlines(userId: string) {
     }
   }, [userId]);
 
-  const deleteDeadline = useCallback(async (id: string) => {
-    if (!supabase) return;
+  const deleteDeadline = useCallback(async (id: string): Promise<boolean> => {
+    if (!supabase) return false;
     setError(null);
     try {
       const { error: deleteError } = await supabase
@@ -273,8 +273,10 @@ export function useDeadlines(userId: string) {
         persistSnapshot(next);
         return next;
       });
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete deadline.');
+      return false;
     }
   }, [persistSnapshot, userId]);
 

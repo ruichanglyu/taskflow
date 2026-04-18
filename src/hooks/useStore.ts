@@ -662,8 +662,8 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, tasks, userId]);
 
-  const deleteProject = useCallback(async (id: string) => {
-    if (!supabase) return;
+  const deleteProject = useCallback(async (id: string): Promise<boolean> => {
+    if (!supabase) return false;
 
     setError(null);
 
@@ -693,8 +693,10 @@ export function useStore(userId: string) {
         });
         return nextProjects;
       });
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete project.');
+      return false;
     }
   }, [persistLocalSnapshot, userId]);
 
@@ -747,8 +749,8 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, projects, userId]);
 
-  const deleteSubtask = useCallback(async (subtaskId: string) => {
-    if (!supabase) return;
+  const deleteSubtask = useCallback(async (subtaskId: string): Promise<boolean> => {
+    if (!supabase) return false;
     setError(null);
     try {
       const { error: deleteError } = await supabase
@@ -765,8 +767,10 @@ export function useStore(userId: string) {
         persistLocalSnapshot(projects, nextTasks);
         return nextTasks;
       });
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete subtask.');
+      return false;
     }
   }, [persistLocalSnapshot, projects, userId]);
 
@@ -794,8 +798,8 @@ export function useStore(userId: string) {
     }
   }, [persistLocalSnapshot, projects, userId]);
 
-  const deleteComment = useCallback(async (commentId: string) => {
-    if (!supabase) return;
+  const deleteComment = useCallback(async (commentId: string): Promise<boolean> => {
+    if (!supabase) return false;
     setError(null);
     try {
       const { error: deleteError } = await supabase
@@ -812,8 +816,10 @@ export function useStore(userId: string) {
         persistLocalSnapshot(projects, nextTasks);
         return nextTasks;
       });
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete comment.');
+      return false;
     }
   }, [persistLocalSnapshot, projects, userId]);
 

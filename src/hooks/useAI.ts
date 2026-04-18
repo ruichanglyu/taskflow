@@ -322,8 +322,6 @@ function buildSystemPrompt(data: {
   // Group calendar events by day and compute free slots so the AI can schedule without conflicts
   let upcomingCalendarSummary = '(none loaded)';
   if (data.calendarEvents.length > 0) {
-    const timeFmt = (d: Date) => d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' });
-
     // Collect timed events by day
     const dayMap = new Map<string, { summary: string; startMin: number; endMin: number; calendarSummary?: string }[]>();
     for (const event of data.calendarEvents) {
@@ -564,6 +562,7 @@ SCHEDULING RULES (CRITICAL — you MUST follow these when creating calendar even
 - If no FREE slot on a day is long enough, skip that day and tell the user.
 - If the user gives a time floor like "after 4 PM", every start time you emit must be at or after that exact time. Never move earlier than the requested floor, even by 15 minutes.
 - When explaining, mention which free slot you used per day (e.g. "Saturday at 2 PM in your free window between EAS 1600 and MATH 3012").
+- STUDY PLAN REPLACEMENT: If the user asks to change, revise, extend, or redo a study plan for a deadline you previously suggested study blocks for, emit a fresh \`import:calendar-create\` covering the full updated plan for the affected days. The app will automatically delete prior AI-created study blocks for the same deadline on the same days before creating the new ones, so do NOT emit matching \`calendar-delete\` rows for those old blocks yourself — that causes skipped events. Only use \`calendar-delete\` when the user wants specific blocks removed without replacement.
 - Import blocks are suggested changes only until the user clicks Apply. Do not say you already created, updated, deleted, removed, or linked something unless the user explicitly confirmed those changes were applied.
 - Do not assume earlier suggested changes exist. Only treat the data listed in USER'S DATA as real unless the user explicitly says they already applied a suggestion.
 - If the user refers to “the ones you just created/updated/deleted,” use the RECENT APPLIED AI CALENDAR ACTIONS section above as the source of truth for what was actually applied.
@@ -1422,8 +1421,12 @@ export function useAI(userId: string) {
   }, [hasHydratedRemoteChats, isStreaming, threads, userId]);
 
   const updateThread = useCallback((threadId: string, updater: (thread: ChatThread) => ChatThread) => {
-    setThreads(prev => prev.map(thread => thread.id === threadId ? updater(thread) : thread));
-  }, [userId]);
+    setThreads(prev => {
+      const next = prev.map(thread => thread.id === threadId ? updater(thread) : thread);
+      threadsRef.current = next;
+      return next;
+    });
+  }, []);
 
   const stopStreaming = useCallback(() => {
     abortRef.current?.abort();
@@ -1433,13 +1436,19 @@ export function useAI(userId: string) {
   const ensureActiveThread = useCallback((threadId: string) => {
     stopStreaming();
     setError(null);
+    activeChatIdRef.current = threadId;
     setActiveChatId(threadId);
   }, [stopStreaming]);
 
   const createChat = useCallback((title = 'New chat') => {
     stopStreaming();
     const thread = makeNewThread(title);
-    setThreads(prev => [thread, ...prev]);
+    setThreads(prev => {
+      const next = [thread, ...prev];
+      threadsRef.current = next;
+      return next;
+    });
+    activeChatIdRef.current = thread.id;
     setActiveChatId(thread.id);
     setError(null);
     return thread.id;
@@ -1458,14 +1467,18 @@ export function useAI(userId: string) {
     stopStreaming();
     setThreads(prev => {
       const remaining = prev.filter(thread => thread.id !== threadId);
+      threadsRef.current = remaining;
       if (remaining.length === 0) {
         const fresh = makeNewThread();
+        threadsRef.current = [fresh];
+        activeChatIdRef.current = fresh.id;
         setActiveChatId(fresh.id);
         return [fresh];
       }
 
       if (activeChatIdRef.current === threadId) {
         const nextActive = [...remaining].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+        activeChatIdRef.current = nextActive.id;
         setActiveChatId(nextActive.id);
       }
 
@@ -1523,38 +1536,52 @@ export function useAI(userId: string) {
       ? makeChatTitle([...(thread.messages), userMsg], makeChatTitle([userMsg]))
       : thread.title;
 
-    setThreads(prev => prev.map(item => {
-      if (item.id !== threadId) return item;
-      const updatedMessages = [...item.messages, userMsg, assistantMsg];
-      return {
-        ...item,
-        title: nextTitle,
-      updatedAt: Date.now(),
-      messages: updatedMessages,
-    };
-  }));
+    setThreads(prev => {
+      const next = prev.map(item => {
+        if (item.id !== threadId) return item;
+        const updatedMessages = [...item.messages, userMsg, assistantMsg];
+        return {
+          ...item,
+          title: nextTitle,
+          updatedAt: Date.now(),
+          messages: updatedMessages,
+        };
+      });
+      threadsRef.current = next;
+      return next;
+    });
+    activeChatIdRef.current = threadId;
+    setActiveChatId(threadId);
     setError(null);
 
     const updateContent = (text: string) => {
-      setThreads(prev => prev.map(item => {
-        if (item.id !== threadId) return item;
-        return {
-          ...item,
-          updatedAt: Date.now(),
-          messages: item.messages.map(m => m.id === assistantMsg.id ? { ...m, content: text } : m),
-        };
-      }));
+      setThreads(prev => {
+        const next = prev.map(item => {
+          if (item.id !== threadId) return item;
+          return {
+            ...item,
+            updatedAt: Date.now(),
+            messages: item.messages.map(m => m.id === assistantMsg.id ? { ...m, content: text } : m),
+          };
+        });
+        threadsRef.current = next;
+        return next;
+      });
     };
 
     const key = await getAPIKey(userId);
     if (!key) {
-      setThreads(prev => prev.map(item => {
-        if (item.id !== threadId) return item;
-        return {
-          ...item,
-          messages: item.messages.filter(m => m.id !== assistantMsg.id),
-        };
-      }));
+      setThreads(prev => {
+        const next = prev.map(item => {
+          if (item.id !== threadId) return item;
+          return {
+            ...item,
+            messages: item.messages.filter(m => m.id !== assistantMsg.id),
+          };
+        });
+        threadsRef.current = next;
+        return next;
+      });
       setError('Please add your Gemini API key first.');
       return;
     }
@@ -1581,27 +1608,29 @@ export function useAI(userId: string) {
       const errMsg = err instanceof Error ? err.message : 'Something went wrong';
       setError(errMsg);
       // Keep the assistant message with whatever was streamed; only remove if still empty/thinking
-      setThreads(prev => prev.map(item => {
-        if (item.id !== threadId) return item;
-        const assistantContent = item.messages.find(m => m.id === assistantMsg.id)?.content ?? '';
-        const hasRealContent = assistantContent && assistantContent !== '*Thinking...*';
-        if (hasRealContent) {
-          // Keep partial response, append error notice
+      setThreads(prev => {
+        const next = prev.map(item => {
+          if (item.id !== threadId) return item;
+          const assistantContent = item.messages.find(m => m.id === assistantMsg.id)?.content ?? '';
+          const hasRealContent = assistantContent && assistantContent !== '*Thinking...*';
+          if (hasRealContent) {
+            return {
+              ...item,
+              messages: item.messages.map(m =>
+                m.id === assistantMsg.id
+                  ? { ...m, content: assistantContent + '\n\n*(Response interrupted — try again)*' }
+                  : m
+              ),
+            };
+          }
           return {
             ...item,
-            messages: item.messages.map(m =>
-              m.id === assistantMsg.id
-                ? { ...m, content: assistantContent + '\n\n*(Response interrupted — try again)*' }
-                : m
-            ),
+            messages: item.messages.filter(m => m.id !== assistantMsg.id),
           };
-        }
-        // No content was streamed — remove the empty message
-        return {
-          ...item,
-          messages: item.messages.filter(m => m.id !== assistantMsg.id),
-        };
-      }));
+        });
+        threadsRef.current = next;
+        return next;
+      });
     } finally {
       setIsStreaming(false);
       abortRef.current = null;

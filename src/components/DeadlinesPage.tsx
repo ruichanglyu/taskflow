@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Upload, ChevronDown, ChevronUp, Filter, StickyNote, Link2, Trash2, X, Pencil, CheckCircle2, AlertCircle, Search, Sparkles, Mail, CalendarDays } from 'lucide-react';
+import { Plus, Upload, ChevronDown, ChevronUp, Filter, StickyNote, Link2, Trash2, X, Pencil, CheckCircle2, AlertCircle, Search, Sparkles, Mail, Image as ImageIcon, FileText } from 'lucide-react';
 import { Deadline, DeadlineStatus, DeadlineType, Project, Task } from '../types';
 import { cn } from '../utils/cn';
 import type { GoogleCalendarEvent } from '../lib/googleCalendar';
-import { parseAcademicPlanMetadata, parseEmailIntoDeadlineImport } from '../lib/academicPlanning';
+import { fileToAcademicImageAttachment, parseAcademicImageIntoDeadlineImport, parseAcademicPlanMetadata, parseEmailIntoDeadlineImport } from '../lib/academicPlanning';
 
 interface DeadlinesPageProps {
   userId: string;
@@ -52,6 +52,20 @@ interface ImportPreview {
   skippedRows: string[];
 }
 
+interface ImportResultSummary {
+  importedCount: number;
+  createdCourses: number;
+  createdPrepTasks: number;
+  skippedDuplicates: number;
+  skippedInvalidRows: number;
+  importedDeadlineIds: string[];
+}
+
+interface ImagePreviewItem {
+  name: string;
+  preview: string;
+}
+
 const STATUS_OPTIONS: { value: DeadlineStatus; label: string; color: string }[] = [
   { value: 'not-started', label: 'Not Started', color: 'text-[var(--text-faint)] bg-[var(--surface-muted)]' },
   { value: 'in-progress', label: 'In Progress', color: 'text-blue-400 bg-blue-400/10' },
@@ -70,6 +84,39 @@ const TYPE_OPTIONS: { value: DeadlineType; label: string }[] = [
 
 function statusMeta(status: DeadlineStatus) {
   return STATUS_OPTIONS.find(s => s.value === status) ?? STATUS_OPTIONS[0];
+}
+
+function formatDateForInput(date: string) {
+  return date;
+}
+
+function formatTimeForInput(time: string | null) {
+  return time ?? '';
+}
+
+function isImportDateValue(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function isImportTimeValue(value: string | null) {
+  return !value || /^\d{2}:\d{2}$/.test(value);
+}
+
+function getImportRowReviewIssues(row: ParsedImportRow) {
+  const issues: string[] = [];
+  if (!row.title.trim()) issues.push('Missing title');
+  if (!isImportDateValue(row.dueDate)) issues.push('Missing or invalid date');
+  if (!row.course.trim()) issues.push('Missing course');
+  if (!row.dueTime) {
+    issues.push('Missing time');
+  } else if (!isImportTimeValue(row.dueTime)) {
+    issues.push('Invalid time');
+  }
+  return issues;
+}
+
+function hasImportRowBlockingIssue(row: ParsedImportRow) {
+  return !row.title.trim() || !isImportDateValue(row.dueDate) || !isImportTimeValue(row.dueTime);
 }
 
 function getDeadlineSourceMeta(sourceType: Deadline['sourceType']) {
@@ -343,6 +390,8 @@ export function DeadlinesPage({
   const [showFilters, setShowFilters] = useState(false);
   const [importStatus, setImportStatus] = useState<ImportStatus>('idle');
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [lastImportedDeadlineIds, setLastImportedDeadlineIds] = useState<string[]>([]);
+  const [pendingImportedSignatures, setPendingImportedSignatures] = useState<string[]>([]);
   const [quickFilter, setQuickFilter] = useState<DeadlineQuickFilter>('all');
   const [viewMode, setViewMode] = useState<DeadlineViewMode>('table');
   const [showCompletedHistory, setShowCompletedHistory] = useState(false);
@@ -450,9 +499,25 @@ export function DeadlinesPage({
     [historyDeadlines, projects]
   );
 
+  useEffect(() => {
+    if (pendingImportedSignatures.length === 0) return;
+    const ids = deadlines
+      .filter(deadline => {
+        const courseName = projects.find(project => project.id === deadline.projectId)?.name ?? '';
+        return pendingImportedSignatures.includes(
+          buildDeadlineSignature(courseName, deadline.title, deadline.dueDate, deadline.dueTime),
+        );
+      })
+      .map(deadline => deadline.id);
+    if (ids.length > 0) {
+      setLastImportedDeadlineIds(ids);
+      setPendingImportedSignatures([]);
+    }
+  }, [deadlines, pendingImportedSignatures, projects]);
+
   const activeFilters = [search, filterCourse, filterType, filterStatus, quickFilter !== 'all' ? quickFilter : ''].filter(Boolean).length;
   const detailDeadline = detailId ? deadlines.find(d => d.id === detailId) : null;
-  const handleImport = async (preview: ImportPreview) => {
+  const handleImport = async (preview: ImportPreview): Promise<ImportResultSummary> => {
     const projectIdsByCourse = new Map<string, string | null>();
     const existingProjectsByName = new Map(
       projects.map(project => [project.name.trim().toLowerCase(), project.id] as const)
@@ -467,8 +532,13 @@ export function DeadlinesPage({
     let importedCount = 0;
     let createdCourses = 0;
     let skippedDuplicates = 0;
+    let createdPrepTasks = 0;
+    const importedSignatures: string[] = [];
 
     for (const row of preview.rows) {
+      if (hasImportRowBlockingIssue(row)) {
+        continue;
+      }
       const normalizedCourse = row.course.trim().toLowerCase();
       let projectId: string | null = null;
 
@@ -513,19 +583,33 @@ export function DeadlinesPage({
       if (ok) {
         importedCount++;
         existingSignatures.add(signature);
+        importedSignatures.push(signature);
         if (row.prepTaskTitle?.trim()) {
-          await onCreateLinkedTask(row.prepTaskTitle.trim(), projectId, row.dueDate);
+          const prepTaskId = await onCreateLinkedTask(row.prepTaskTitle.trim(), projectId, row.dueDate);
+          if (prepTaskId) {
+            createdPrepTasks++;
+          }
         }
       }
     }
 
-    const parts = [`Imported ${importedCount} deadlines`];
+    const parts = [`Imported ${importedCount} deadline${importedCount === 1 ? '' : 's'}`];
+    if (createdPrepTasks > 0) parts.push(`created ${createdPrepTasks} prep task${createdPrepTasks === 1 ? '' : 's'}`);
     if (createdCourses > 0) parts.push(`created ${createdCourses} courses`);
     if (skippedDuplicates > 0) parts.push(`skipped ${skippedDuplicates} duplicates`);
     if (preview.skippedRows.length > 0) parts.push(`ignored ${preview.skippedRows.length} invalid rows`);
 
     setImportStatus(importedCount > 0 ? 'success' : 'error');
     setImportMessage(parts.join(' • '));
+    setPendingImportedSignatures(importedSignatures);
+    return {
+      importedCount,
+      createdCourses,
+      createdPrepTasks,
+      skippedDuplicates,
+      skippedInvalidRows: preview.skippedRows.length,
+      importedDeadlineIds: [],
+    };
   };
 
   const handleDeleteAll = async () => {
@@ -608,9 +692,22 @@ export function DeadlinesPage({
           )}
         >
           {importStatus === 'success' ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> : <AlertCircle size={16} className="mt-0.5 shrink-0" />}
-          <div className="flex-1">{importMessage}</div>
+          <div className="flex-1">
+            <div>{importMessage}</div>
+            {importStatus === 'success' && lastImportedDeadlineIds.length > 0 && onOpenPlanner && (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenPlanner(lastImportedDeadlineIds)}
+                  className="rounded-full border border-emerald-200/30 px-3 py-1 text-xs font-medium text-emerald-50 transition hover:bg-emerald-400/10"
+                >
+                  Plan these now
+                </button>
+              </div>
+            )}
+          </div>
           <button
-            onClick={() => { setImportMessage(null); setImportStatus('idle'); }}
+            onClick={() => { setImportMessage(null); setImportStatus('idle'); setLastImportedDeadlineIds([]); setPendingImportedSignatures([]); }}
             className="text-xs opacity-80 transition hover:opacity-100"
           >
             Dismiss
@@ -1425,15 +1522,25 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
   userId: string;
   existingDeadlines: Deadline[];
   existingProjects: Project[];
-  onImport: (preview: ImportPreview) => Promise<void>;
+  onImport: (preview: ImportPreview) => Promise<ImportResultSummary>;
   onClose: () => void;
 }) {
-  const [mode, setMode] = useState<'csv' | 'email'>('csv');
+  const [mode, setMode] = useState<'csv' | 'text' | 'image'>('csv');
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [emailText, setEmailText] = useState('');
+  const [imagePreviews, setImagePreviews] = useState<ImagePreviewItem[]>([]);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
+  const [editingRowDraft, setEditingRowDraft] = useState<ParsedImportRow | null>(null);
+
+  useEffect(() => {
+    return () => {
+      imagePreviews.forEach(item => URL.revokeObjectURL(item.preview));
+    };
+  }, [imagePreviews]);
 
   const existingSignatures = useMemo(() => {
     return new Set(
@@ -1451,10 +1558,75 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
     ).length;
   }, [existingSignatures, preview]);
 
+  const rowReviewSummaries = useMemo(() => {
+    if (!preview) return [];
+    return preview.rows.map(row => getImportRowReviewIssues(row));
+  }, [preview]);
+
+  const rowsNeedingReviewCount = useMemo(
+    () => rowReviewSummaries.filter(issues => issues.length > 0).length,
+    [rowReviewSummaries],
+  );
+
+  const blockingIssueCount = useMemo(
+    () => preview ? preview.rows.filter(row => hasImportRowBlockingIssue(row)).length : 0,
+    [preview],
+  );
+
+  const resetImportPreview = () => {
+    setPreview(null);
+    setError(null);
+    setEditingRowIndex(null);
+    setEditingRowDraft(null);
+    imagePreviews.forEach(item => URL.revokeObjectURL(item.preview));
+    setImagePreviews([]);
+  };
+
+  const updatePreviewRow = (index: number, updates: Partial<ParsedImportRow>) => {
+    setPreview(current => {
+      if (!current) return current;
+      const rows = current.rows.map((row, rowIndex) => rowIndex === index ? { ...row, ...updates } : row);
+      return { ...current, rows };
+    });
+  };
+
+  const removePreviewRow = (index: number) => {
+    setPreview(current => {
+      if (!current) return current;
+      const rows = current.rows.filter((_, rowIndex) => rowIndex !== index);
+      return { ...current, rows };
+    });
+    setEditingRowIndex(current => {
+      if (current === null) return null;
+      if (current === index) return null;
+      return current > index ? current - 1 : current;
+    });
+    setEditingRowDraft(current => (editingRowIndex === index ? null : current));
+  };
+
+  const startEditingRow = (index: number, row: ParsedImportRow) => {
+    setEditingRowIndex(index);
+    setEditingRowDraft({ ...row });
+  };
+
+  const cancelEditingRow = () => {
+    setEditingRowIndex(null);
+    setEditingRowDraft(null);
+  };
+
+  const saveEditingRow = () => {
+    if (editingRowIndex === null || !editingRowDraft) return;
+    updatePreviewRow(editingRowIndex, editingRowDraft);
+    setEditingRowIndex(null);
+    setEditingRowDraft(null);
+  };
+
   const handleFile = async (file: File | null) => {
     if (!file) return;
     setIsParsing(true);
     setError(null);
+    imagePreviews.forEach(item => URL.revokeObjectURL(item.preview));
+    setImagePreviews([]);
 
     try {
       const text = await file.text();
@@ -1467,14 +1639,16 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
     }
   };
 
-  const handleEmailParse = async () => {
+  const handleTextParse = async () => {
     setIsParsing(true);
     setError(null);
+    imagePreviews.forEach(item => URL.revokeObjectURL(item.preview));
+    setImagePreviews([]);
 
     try {
       const parsed = await parseEmailIntoDeadlineImport(userId, emailText);
       setPreview({
-        fileName: 'Pasted email',
+        fileName: 'Pasted text',
         rows: parsed.rows.map(row => ({
           title: row.title,
           course: row.course,
@@ -1491,14 +1665,93 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
       });
     } catch (err) {
       setPreview(null);
-      setError(err instanceof Error ? err.message : 'Could not parse the email content.');
+      setError(err instanceof Error ? err.message : 'Could not parse the academic text.');
     } finally {
       setIsParsing(false);
     }
   };
 
+  const handleImageFiles = async (files: File[]) => {
+    if (files.length > 5) {
+      setError('Use up to 5 screenshots per import for now. I kept the first 5.');
+    }
+    const imageFiles = files.filter(file => file.type.startsWith('image/')).slice(0, 5);
+    if (imageFiles.length === 0) return;
+    setIsParsing(true);
+    setError(null);
+    setIsDragActive(false);
+
+    try {
+      imagePreviews.forEach(item => URL.revokeObjectURL(item.preview));
+      const images = await Promise.all(imageFiles.map(fileToAcademicImageAttachment));
+      const parsedResults = await Promise.all(
+        images.map((image, index) => parseAcademicImageIntoDeadlineImport(userId, image, `${imageFiles[index].name} (${index + 1}/${imageFiles.length})`))
+      );
+      const rows = parsedResults.flatMap(result => result.rows);
+      const skippedRows = parsedResults.flatMap(result => result.skippedRows);
+      setImagePreviews(images.map((image, index) => ({
+        name: imageFiles[index].name,
+        preview: image.preview,
+      })));
+      setPreview({
+        fileName: imageFiles.length === 1 ? imageFiles[0].name : `${imageFiles.length} screenshots`,
+        rows: rows.map(row => ({
+          title: row.title,
+          course: row.course,
+          dueDate: row.dueDate,
+          dueTime: row.dueTime,
+          status: 'not-started',
+          type: row.type,
+          notes: row.notes,
+          prepTaskTitle: row.prepTaskTitle ?? null,
+          sourceType: row.sourceType,
+          sourceId: row.sourceId,
+        })),
+        skippedRows,
+      });
+    } catch (err) {
+      setPreview(null);
+      setError(err instanceof Error ? err.message : 'Could not extract deadlines from that image.');
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  const handleImageDragOver = (event: React.DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    if (isParsing) return;
+    setIsDragActive(true);
+  };
+
+  const handleImageDragLeave = (event: React.DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && event.currentTarget.contains(nextTarget)) return;
+    setIsDragActive(false);
+  };
+
+  const handleImageDrop = (event: React.DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    if (isParsing) return;
+    const file = event.dataTransfer.files?.[0] ?? null;
+    if (!file) {
+      setIsDragActive(false);
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setIsDragActive(false);
+      setError('Drop an image file here, like a PNG, JPG, or HEIC screenshot.');
+      return;
+    }
+    void handleImageFiles(Array.from(event.dataTransfer.files).slice(0, 5));
+  };
+
   const handleImport = async () => {
     if (!preview) return;
+    if (blockingIssueCount > 0) {
+      setError(`Fix ${blockingIssueCount} row${blockingIssueCount === 1 ? '' : 's'} with missing title/date or invalid time before importing.`);
+      return;
+    }
     setIsImporting(true);
     setError(null);
 
@@ -1514,22 +1767,22 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
-      <div className="w-full max-w-3xl rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm" onClick={e => e.stopPropagation()}>
+      <div className="relative flex max-h-[min(92vh,980px)] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">Import deadlines</h2>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">Use the same intake flow for semester CSVs or pasted email content, then review the normalized deadlines before saving them.</p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">Bring in deadlines from CSVs, pasted syllabus or email text, or screenshots. Everything lands in the same review flow before saving.</p>
           </div>
           <button onClick={onClose} className="text-[var(--text-faint)] transition hover:text-[var(--text-primary)]">
             <X size={18} />
           </button>
         </div>
 
-        <div className="space-y-4 p-5">
+        <div className="space-y-4 overflow-y-auto p-5">
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => { setMode('csv'); setPreview(null); setError(null); }}
+              onClick={() => { setMode('csv'); resetImportPreview(); }}
               className={cn(
                 'rounded-full border px-3 py-1.5 text-xs font-medium transition',
                 mode === 'csv'
@@ -1541,15 +1794,27 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
             </button>
             <button
               type="button"
-              onClick={() => { setMode('email'); setPreview(null); setError(null); }}
+              onClick={() => { setMode('text'); resetImportPreview(); }}
               className={cn(
                 'rounded-full border px-3 py-1.5 text-xs font-medium transition',
-                mode === 'email'
+                mode === 'text'
                   ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
                   : 'border-[var(--border-soft)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]'
               )}
             >
-              Paste email
+              <span className="inline-flex items-center gap-1.5"><FileText size={12} /> Paste text</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('image'); resetImportPreview(); }}
+              className={cn(
+                'rounded-full border px-3 py-1.5 text-xs font-medium transition',
+                mode === 'image'
+                  ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                  : 'border-[var(--border-soft)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]'
+              )}
+            >
+              <span className="inline-flex items-center gap-1.5"><ImageIcon size={12} /> Upload screenshot</span>
             </button>
           </div>
 
@@ -1565,16 +1830,16 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
               <div className="text-sm font-medium text-[var(--text-primary)]">Choose a CSV file</div>
               <div className="mt-1 text-xs text-[var(--text-faint)]">Expected columns: Status, Course, Date, Time, Title, Type, Notes</div>
             </label>
-          ) : (
+          ) : mode === 'text' ? (
             <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 text-[var(--accent)]">
                   <Mail size={16} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-[var(--text-primary)]">Paste an email or announcement</div>
+                  <div className="text-sm font-medium text-[var(--text-primary)]">Paste an email, syllabus, or announcement</div>
                   <p className="mt-1 text-xs leading-5 text-[var(--text-faint)]">
-                    Paste copied Gmail or Outlook email content here. We’ll extract the dated academic work and turn it into deadlines in the same import pipeline.
+                    Paste copied Gmail, Outlook, Canvas, or syllabus text here. We’ll extract the dated academic work and turn it into deadlines in the same import pipeline.
                   </p>
                 </div>
               </div>
@@ -1582,26 +1847,88 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
                 value={emailText}
                 onChange={event => setEmailText(event.target.value)}
                 rows={10}
-                placeholder="Paste the email body here..."
+                placeholder="Paste the email, syllabus section, or assignment list here..."
                 className="mt-4 w-full resize-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-3 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
               />
               <div className="mt-3 flex justify-end">
                 <button
                   type="button"
-                  onClick={() => void handleEmailParse()}
+                  onClick={() => void handleTextParse()}
                   disabled={!emailText.trim() || isParsing}
                   className="rounded-lg px-4 py-2 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-40"
-                 
                 >
                   {isParsing ? 'Extracting...' : 'Extract deadlines'}
                 </button>
               </div>
             </div>
+          ) : (
+            <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 text-[var(--accent)]">
+                  <ImageIcon size={16} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-[var(--text-primary)]">Upload a syllabus or assignment screenshot</div>
+                  <p className="mt-1 text-xs leading-5 text-[var(--text-faint)]">
+                    Drop in a screenshot from Canvas, a syllabus PDF, or an announcement page. We’ll read the image and extract dated academic work into the same deadline preview.
+                  </p>
+                </div>
+              </div>
+              <label
+                className={cn(
+                  'mt-4 block rounded-xl border border-dashed bg-[var(--surface-muted)] p-6 text-center transition',
+                  isDragActive
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                    : 'border-[var(--border-strong)] hover:border-[var(--accent)]',
+                  isParsing && 'cursor-progress opacity-80'
+                )}
+                onDragOver={handleImageDragOver}
+                onDragLeave={handleImageDragLeave}
+                onDrop={handleImageDrop}
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={e => void handleImageFiles(Array.from(e.target.files ?? []).slice(0, 5))}
+                />
+                <Upload size={20} className="mx-auto mb-2 text-[var(--text-faint)]" />
+                <div className="text-sm font-medium text-[var(--text-primary)]">
+                  {isDragActive ? 'Drop up to 5 screenshots here' : 'Choose up to 5 images'}
+                </div>
+                <div className="mt-1 text-xs text-[var(--text-faint)]">
+                  PNG, JPG, HEIC screenshots all work best when the dates are clearly visible. You can also drag and drop them here.
+                </div>
+                <div className="mt-1 text-[11px] text-[var(--text-faint)]">
+                  We’ll read up to 5 screenshots in one batch. Uploading a new batch replaces the current screenshots and extracted rows.
+                </div>
+              </label>
+              {imagePreviews.length > 0 && (
+                <div className="mt-4 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
+                  <div className="mb-2 text-xs font-medium text-[var(--text-secondary)]">
+                    {imagePreviews.length} screenshot{imagePreviews.length === 1 ? '' : 's'} ready
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+                    {imagePreviews.map(item => (
+                      <div key={item.preview} className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)]">
+                        <img
+                          src={item.preview}
+                          alt={item.name}
+                          className="h-20 w-full object-cover"
+                        />
+                        <div className="truncate px-2 py-1 text-[11px] text-[var(--text-faint)]">{item.name}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {isParsing && (
             <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-muted)]">
-              Reading your file...
+              Reading your import...
             </div>
           )}
 
@@ -1623,20 +1950,43 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
                   <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{preview.rows.length}</div>
                 </div>
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-                  <div className="text-xs text-[var(--text-faint)]">Duplicates</div>
+                  <div className="text-xs text-[var(--text-faint)]">Need review</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{rowsNeedingReviewCount}</div>
+                </div>
+                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+                  <div className="text-xs text-[var(--text-faint)]">Will be skipped</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{duplicateCount + preview.skippedRows.length}</div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+                  <div className="text-xs text-[var(--text-faint)]">Ready to import</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">
+                    {Math.max(preview.rows.length - rowsNeedingReviewCount, 0)} clean row{preview.rows.length - rowsNeedingReviewCount === 1 ? '' : 's'}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
+                  <div className="text-xs text-[var(--text-faint)]">Duplicates already in app</div>
                   <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{duplicateCount}</div>
                 </div>
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-                  <div className="text-xs text-[var(--text-faint)]">Invalid rows</div>
+                  <div className="text-xs text-[var(--text-faint)]">Skipped by parser</div>
                   <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{preview.skippedRows.length}</div>
                 </div>
               </div>
 
               <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)]">
                 <div className="border-b border-[var(--border-soft)] px-4 py-3 text-sm font-medium text-[var(--text-primary)]">
-                  Preview
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Review before import</span>
+                    <span className="text-xs font-normal text-[var(--text-faint)]">Use the edit icon on any row to fix missing course, date, time, title, type, status, or prep task.</span>
+                  </div>
                 </div>
-                <div className="max-h-72 overflow-auto">
+                <div className="border-b border-[var(--border-soft)] px-4 py-2 text-xs text-[var(--text-faint)]">
+                  Prep task = an optional task TaskFlow can create alongside the deadline, like “Complete Homework 8” or “Prepare for Exam 2”.
+                </div>
+                <div className="max-h-[40vh] overflow-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-[var(--border-soft)] bg-[var(--surface-muted)] text-left text-xs text-[var(--text-muted)]">
@@ -1647,34 +1997,77 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
                         <th className="px-3 py-2">Type</th>
                         <th className="px-3 py-2">Status</th>
                         <th className="px-3 py-2">Prep task</th>
+                        <th className="px-3 py-2 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {preview.rows.slice(0, 8).map((row, index) => (
-                        <tr key={`${row.title}-${index}`} className="border-b border-[var(--border-soft)] last:border-b-0">
-                          <td className="px-3 py-2 text-[var(--text-secondary)]">{row.course || '—'}</td>
-                          <td className="px-3 py-2 text-[var(--text-secondary)]">{formatDate(row.dueDate)}</td>
-                          <td className="px-3 py-2 text-[var(--text-faint)]">{row.dueTime ? formatTime(row.dueTime) : '—'}</td>
-                          <td className="px-3 py-2 text-[var(--text-primary)]">{row.title}</td>
-                          <td className="px-3 py-2 text-[var(--text-faint)] uppercase">{row.type}</td>
-                          <td className="px-3 py-2 text-[var(--text-faint)]">{statusMeta(row.status).label}</td>
-                          <td className="px-3 py-2 text-[var(--text-faint)]">{row.prepTaskTitle || '—'}</td>
-                        </tr>
-                      ))}
+                      {preview.rows.map((row, index) => {
+                        const issues = rowReviewSummaries[index] ?? [];
+                        const hasIssues = issues.length > 0;
+                        const isDuplicate = existingSignatures.has(buildDeadlineSignature(row.course, row.title, row.dueDate, row.dueTime));
+                        return (
+                          <tr
+                            key={`${row.title}-${index}`}
+                            className={cn(
+                              'border-b border-[var(--border-soft)] last:border-b-0',
+                              hasIssues && 'bg-amber-50/60',
+                              isDuplicate && 'bg-slate-500/5'
+                            )}
+                          >
+                            <td className="px-3 py-2 align-top text-[var(--text-secondary)]">{row.course || '—'}</td>
+                            <td className="px-3 py-2 align-top text-[var(--text-secondary)]">{formatDate(row.dueDate)}</td>
+                            <td className="px-3 py-2 align-top text-[var(--text-faint)]">{row.dueTime ? formatTime(row.dueTime) : '—'}</td>
+                            <td className="px-3 py-2 align-top text-[var(--text-primary)]">
+                              <div className="font-medium">{row.title || '—'}</div>
+                              {hasIssues && (
+                                <div className="mt-1 text-[11px] text-amber-900/80">{issues.join(' • ')}</div>
+                              )}
+                              {isDuplicate && !hasIssues && (
+                                <div className="mt-1 text-[11px] text-[var(--text-faint)]">Matches an existing deadline</div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 align-top text-[var(--text-faint)] uppercase">{row.type}</td>
+                            <td className="px-3 py-2 align-top text-[var(--text-faint)]">{statusMeta(row.status).label}</td>
+                            <td className="px-3 py-2 align-top text-[var(--text-faint)]">{row.prepTaskTitle || '—'}</td>
+                            <td className="px-3 py-2 align-top">
+                              <div className="flex justify-end gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => startEditingRow(index, row)}
+                                  aria-label="Edit row"
+                                  title="Edit"
+                                  className={cn(
+                                    'inline-flex h-8 w-8 items-center justify-center rounded-md border transition hover:bg-[var(--surface-muted)]',
+                                    hasIssues
+                                      ? 'border-amber-300/60 text-amber-900'
+                                      : 'border-[var(--border-soft)] text-[var(--text-secondary)]'
+                                  )}
+                                >
+                                  <Pencil size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removePreviewRow(index)}
+                                  aria-label="Delete row"
+                                  title="Delete"
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-300/40 text-rose-300 transition hover:bg-rose-400/10"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
-                {preview.rows.length > 8 && (
-                  <div className="border-t border-[var(--border-soft)] px-4 py-2 text-xs text-[var(--text-faint)]">
-                    Showing 8 of {preview.rows.length} rows.
-                  </div>
-                )}
               </div>
 
               {preview.skippedRows.length > 0 && (
-                <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+                <div className="rounded-xl border border-amber-300/40 bg-amber-100 px-4 py-3 text-sm text-amber-950">
                   <div className="font-medium">Some rows will be skipped</div>
-                  <ul className="mt-2 space-y-1 text-xs text-amber-100/90">
+                  <ul className="mt-2 space-y-1 text-xs text-amber-900/90">
                     {preview.skippedRows.slice(0, 5).map(message => (
                       <li key={message}>{message}</li>
                     ))}
@@ -1703,6 +2096,109 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
             {isImporting ? 'Importing...' : 'Import Deadlines'}
           </button>
         </div>
+
+        {editingRowIndex !== null && editingRowDraft && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/35 p-4">
+            <div className="w-full max-w-2xl rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm">
+              <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
+                <div>
+                  <div className="text-base font-semibold text-[var(--text-primary)]">Edit imported row</div>
+                  <div className="mt-1 text-sm text-[var(--text-muted)]">Adjust the extracted details, then save the row back into the preview.</div>
+                </div>
+                <button onClick={cancelEditingRow} className="text-[var(--text-faint)] transition hover:text-[var(--text-primary)]">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="grid gap-4 p-5 sm:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-[var(--text-faint)]">Course</span>
+                  <input
+                    value={editingRowDraft.course}
+                    onChange={event => setEditingRowDraft(current => current ? { ...current, course: event.target.value } : current)}
+                    placeholder="Course"
+                    className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-[var(--text-faint)]">Title</span>
+                  <input
+                    value={editingRowDraft.title}
+                    onChange={event => setEditingRowDraft(current => current ? { ...current, title: event.target.value } : current)}
+                    placeholder="Deadline title"
+                    className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-[var(--text-faint)]">Date</span>
+                  <input
+                    type="date"
+                    value={formatDateForInput(editingRowDraft.dueDate)}
+                    onChange={event => setEditingRowDraft(current => current ? { ...current, dueDate: event.target.value } : current)}
+                    className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-[var(--text-faint)]">Time</span>
+                  <input
+                    type="time"
+                    value={formatTimeForInput(editingRowDraft.dueTime)}
+                    onChange={event => setEditingRowDraft(current => current ? { ...current, dueTime: event.target.value || null } : current)}
+                    className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-[var(--text-faint)]">Type</span>
+                  <select
+                    value={editingRowDraft.type}
+                    onChange={event => setEditingRowDraft(current => current ? { ...current, type: event.target.value as DeadlineType } : current)}
+                    className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                  >
+                    {TYPE_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-[var(--text-faint)]">Status</span>
+                  <select
+                    value={editingRowDraft.status}
+                    onChange={event => setEditingRowDraft(current => current ? { ...current, status: event.target.value as DeadlineStatus } : current)}
+                    className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                  >
+                    {STATUS_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1 sm:col-span-2">
+                  <span className="text-xs font-medium text-[var(--text-faint)]">Prep task</span>
+                  <input
+                    value={editingRowDraft.prepTaskTitle ?? ''}
+                    onChange={event => setEditingRowDraft(current => current ? { ...current, prepTaskTitle: event.target.value.trim() ? event.target.value : null } : current)}
+                    placeholder="Optional prep task"
+                    className="w-full rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none"
+                  />
+                </label>
+              </div>
+              <div className="flex gap-3 border-t border-[var(--border-soft)] px-5 py-4">
+                <button
+                  type="button"
+                  onClick={cancelEditingRow}
+                  className="flex-1 rounded-lg border border-[var(--border-soft)] py-2.5 text-sm font-medium text-[var(--text-secondary)] transition hover:bg-[var(--surface-muted)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveEditingRow}
+                  className="flex-1 rounded-lg bg-[var(--accent-strong)] py-2.5 text-sm font-medium text-[var(--accent-contrast)] transition hover:opacity-90"
+                >
+                  Save changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -47,17 +47,47 @@ interface AppShellProps {
 
 type ToastTone = 'success' | 'error' | 'info';
 
+interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface Toast {
   id: number;
   tone: ToastTone;
   title: string;
   message?: string;
+  action?: ToastAction;
 }
 
 interface AcademicPlanningDraftState {
   source: 'dashboard' | 'deadline' | 'ai';
   targetIds: string[];
   proposal: AcademicPlanProposal;
+}
+
+type PendingDeleteKind =
+  | 'deadline'
+  | 'all_deadlines'
+  | 'task'
+  | 'project'
+  | 'subtask'
+  | 'comment'
+  | 'habit'
+  | 'calendar_event'
+  | 'gym_plan'
+  | 'gym_day'
+  | 'gym_exercise'
+  | 'gym_day_exercise'
+  | 'gym_session';
+
+interface PendingDeleteEntry {
+  key: string;
+  kind: PendingDeleteKind;
+  label: string;
+  toastId: number;
+  finalize: () => Promise<boolean>;
+  onUndo?: () => void;
 }
 
 function isBehaviorLearningActionOptions(value: unknown): value is BehaviorLearningActionOptions {
@@ -165,6 +195,9 @@ export function AppShell({ user }: AppShellProps) {
   const [academicPlanningApplyingIds, setAcademicPlanningApplyingIds] = useState<Set<string>>(new Set());
   const habitsButtonRef = useRef<HTMLButtonElement>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [pendingDeletes, setPendingDeletes] = useState<Record<string, PendingDeleteEntry>>({});
+  const pendingDeleteTimersRef = useRef<Map<string, number>>(new Map());
+  const pendingDeletesRef = useRef<Record<string, PendingDeleteEntry>>({});
   // Migrate legacy AI data (global keys/chats) to this user on first load
   useState(() => { migrateLegacyAIData(user.id); });
   const store = useStore(user.id);
@@ -191,34 +224,208 @@ export function AppShell({ user }: AppShellProps) {
     setAiOpen(true);
   }, [learning]);
 
+  useEffect(() => {
+    pendingDeletesRef.current = pendingDeletes;
+  }, [pendingDeletes]);
+
+  useEffect(() => () => {
+    pendingDeleteTimersRef.current.forEach(timerId => window.clearTimeout(timerId));
+    pendingDeleteTimersRef.current.clear();
+  }, []);
+
+  const pendingDeleteEntries = useMemo(() => Object.values(pendingDeletes), [pendingDeletes]);
+  const pendingDeleteAllDeadlines = pendingDeleteEntries.some(entry => entry.kind === 'all_deadlines');
+  const pendingDeadlineIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'deadline').map(entry => entry.key.replace('deadline:', ''))), [pendingDeleteEntries]);
+  const pendingTaskIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'task').map(entry => entry.key.replace('task:', ''))), [pendingDeleteEntries]);
+  const pendingProjectIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'project').map(entry => entry.key.replace('project:', ''))), [pendingDeleteEntries]);
+  const pendingSubtaskIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'subtask').map(entry => entry.key.replace('subtask:', ''))), [pendingDeleteEntries]);
+  const pendingCommentIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'comment').map(entry => entry.key.replace('comment:', ''))), [pendingDeleteEntries]);
+  const pendingHabitIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'habit').map(entry => entry.key.replace('habit:', ''))), [pendingDeleteEntries]);
+  const pendingCalendarEventKeys = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'calendar_event').map(entry => entry.key.replace('calendar_event:', ''))), [pendingDeleteEntries]);
+  const pendingGymPlanIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'gym_plan').map(entry => entry.key.replace('gym_plan:', ''))), [pendingDeleteEntries]);
+  const pendingGymDayIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'gym_day').map(entry => entry.key.replace('gym_day:', ''))), [pendingDeleteEntries]);
+  const pendingGymExerciseIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'gym_exercise').map(entry => entry.key.replace('gym_exercise:', ''))), [pendingDeleteEntries]);
+  const pendingGymDayExerciseIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'gym_day_exercise').map(entry => entry.key.replace('gym_day_exercise:', ''))), [pendingDeleteEntries]);
+  const pendingGymSessionIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'gym_session').map(entry => entry.key.replace('gym_session:', ''))), [pendingDeleteEntries]);
+
+  const filteredProjects = useMemo(
+    () => store.projects.filter(project => !pendingProjectIds.has(project.id)),
+    [pendingProjectIds, store.projects],
+  );
+
+  const filteredTasks = useMemo(
+    () => store.tasks
+      .filter(task => !pendingTaskIds.has(task.id))
+      .map(task => ({
+        ...task,
+        subtasks: task.subtasks.filter(subtask => !pendingSubtaskIds.has(subtask.id)),
+        comments: task.comments.filter(comment => !pendingCommentIds.has(comment.id)),
+      })),
+    [pendingCommentIds, pendingSubtaskIds, pendingTaskIds, store.tasks],
+  );
+
+  const filteredDeadlines = useMemo(
+    () => (pendingDeleteAllDeadlines ? [] : deadlineStore.deadlines.filter(deadline => !pendingDeadlineIds.has(deadline.id))),
+    [deadlineStore.deadlines, pendingDeadlineIds, pendingDeleteAllDeadlines],
+  );
+
+  const filteredHabits = useMemo(
+    () => habits.habits.filter(habit => !pendingHabitIds.has(habit.id)),
+    [habits.habits, pendingHabitIds],
+  );
+
+  const filteredCalendarEvents = useMemo(
+    () => calendar.events.filter(event => !pendingCalendarEventKeys.has(`${event.calendarId || ''}::${event.id}`)),
+    [calendar.events, pendingCalendarEventKeys],
+  );
+
+  const filteredGymPlans = useMemo(
+    () => gym.plans.filter(plan => !pendingGymPlanIds.has(plan.id)),
+    [gym.plans, pendingGymPlanIds],
+  );
+  const filteredGymDayTemplates = useMemo(
+    () => gym.dayTemplates.filter(day => !pendingGymDayIds.has(day.id) && !pendingGymPlanIds.has(day.planId)),
+    [gym.dayTemplates, pendingGymDayIds, pendingGymPlanIds],
+  );
+  const filteredGymExercises = useMemo(
+    () => gym.exercises.filter(exercise => !pendingGymExerciseIds.has(exercise.id)),
+    [gym.exercises, pendingGymExerciseIds],
+  );
+  const filteredGymDayExercises = useMemo(
+    () => gym.dayExercises.filter(dayExercise =>
+      !pendingGymDayExerciseIds.has(dayExercise.id)
+      && !pendingGymDayIds.has(dayExercise.workoutDayTemplateId)
+      && !pendingGymExerciseIds.has(dayExercise.exerciseId)
+    ),
+    [gym.dayExercises, pendingGymDayExerciseIds, pendingGymDayIds, pendingGymExerciseIds],
+  );
+  const filteredGymSessions = useMemo(
+    () => gym.sessions.filter(session => !pendingGymSessionIds.has(session.id)),
+    [gym.sessions, pendingGymSessionIds],
+  );
+  const filteredGymExerciseLogs = useMemo(
+    () => gym.exerciseLogs.filter(log => !pendingGymSessionIds.has(log.workoutSessionId)),
+    [gym.exerciseLogs, pendingGymSessionIds],
+  );
+  const filteredGymExerciseLogIds = useMemo(
+    () => new Set(filteredGymExerciseLogs.map(log => log.id)),
+    [filteredGymExerciseLogs],
+  );
+  const filteredGymSetLogs = useMemo(
+    () => gym.setLogs.filter(setLog => filteredGymExerciseLogIds.has(setLog.workoutExerciseLogId)),
+    [filteredGymExerciseLogIds, gym.setLogs],
+  );
+  const filteredGymActivePlan = useMemo(
+    () => filteredGymPlans.find(plan => plan.isActive) ?? null,
+    [filteredGymPlans],
+  );
+  const filteredGymActiveSession = useMemo(
+    () => filteredGymSessions.find(session => session.status === 'in-progress') ?? null,
+    [filteredGymSessions],
+  );
+
   const upcomingPlannableDeadlines = useMemo(() => (
-    [...deadlineStore.deadlines]
+    [...filteredDeadlines]
       .filter(deadline => {
         if (deadline.status === 'done' || deadline.status === 'missed') return false;
         return deadline.dueDate >= new Date().toISOString().slice(0, 10);
       })
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-  ), [deadlineStore.deadlines]);
+  ), [filteredDeadlines]);
 
   const academicPlanningMetrics = useMemo(() => (
     summarizeAcademicPlanningMetrics({
       appBehaviorEvents: learning.appBehaviorEvents,
-      calendarEvents: calendar.events,
+      calendarEvents: filteredCalendarEvents,
       getStudyBlockOutcomeStatus: event => studyBlockOutcomes.getOutcomeForEvent(event)?.status,
     })
-  ), [calendar.events, learning.appBehaviorEvents, studyBlockOutcomes]);
+  ), [filteredCalendarEvents, learning.appBehaviorEvents, studyBlockOutcomes]);
 
-  const pushToast = useCallback((tone: ToastTone, title: string, message?: string) => {
+  const pushToast = useCallback((
+    tone: ToastTone,
+    title: string,
+    message?: string,
+    options?: { durationMs?: number; action?: ToastAction },
+  ) => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
-    setToasts(prev => [...prev, { id, tone, title, message }]);
+    setToasts(prev => [...prev, { id, tone, title, message, action: options?.action }]);
     window.setTimeout(() => {
       setToasts(prev => prev.filter(toast => toast.id !== id));
-    }, 4200);
+    }, options?.durationMs ?? 4200);
+    return id;
   }, []);
 
   const dismissToast = useCallback((id: number) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   }, []);
+
+  const clearPendingDelete = useCallback((key: string) => {
+    const timerId = pendingDeleteTimersRef.current.get(key);
+    if (timerId) {
+      window.clearTimeout(timerId);
+      pendingDeleteTimersRef.current.delete(key);
+    }
+    setPendingDeletes(prev => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
+  const undoPendingDelete = useCallback((key: string) => {
+    const entry = pendingDeletesRef.current[key];
+    if (!entry) return;
+    entry.onUndo?.();
+    dismissToast(entry.toastId);
+    clearPendingDelete(key);
+  }, [clearPendingDelete, dismissToast]);
+
+  const scheduleUndoableDelete = useCallback((params: {
+    key: string;
+    kind: PendingDeleteKind;
+    label: string;
+    title: string;
+    message?: string;
+    finalize: () => Promise<boolean>;
+    onUndo?: () => void;
+  }) => {
+    if (pendingDeletesRef.current[params.key]) {
+      return;
+    }
+
+    const toastId = pushToast('info', params.title, params.message, {
+      durationMs: 6000,
+      action: {
+        label: 'Undo',
+        onClick: () => undoPendingDelete(params.key),
+      },
+    });
+
+    const entry: PendingDeleteEntry = {
+      key: params.key,
+      kind: params.kind,
+      label: params.label,
+      toastId,
+      finalize: params.finalize,
+      onUndo: params.onUndo,
+    };
+
+    setPendingDeletes(prev => ({ ...prev, [params.key]: entry }));
+
+    const timerId = window.setTimeout(async () => {
+      const current = pendingDeletesRef.current[params.key];
+      if (!current) return;
+      const ok = await current.finalize();
+      dismissToast(current.toastId);
+      clearPendingDelete(params.key);
+      if (!ok) {
+        pushToast('error', `Could not delete ${current.label.toLowerCase()}`, 'Please try again.');
+      }
+    }, 6000);
+
+    pendingDeleteTimersRef.current.set(params.key, timerId);
+  }, [clearPendingDelete, dismissToast, pushToast, undoPendingDelete]);
 
   const handleCreateCalendarEvent = useCallback(async (
     event: Parameters<typeof calendar.createEvent>[0],
@@ -257,15 +464,33 @@ export function AppShell({ user }: AppShellProps) {
     calendarIdOverride?: Parameters<typeof calendar.deleteEvent>[1],
     options?: BehaviorLearningActionOptions,
     existingEventOverride?: Parameters<typeof learning.logCalendarDeleted>[0],
+    deleteOptions?: { silent?: boolean },
   ) => {
     const existingEvent = existingEventOverride
       ?? calendar.events.find(item => item.id === eventId && (!calendarIdOverride || item.calendarId === calendarIdOverride));
-    const ok = await calendar.deleteEvent(eventId, calendarIdOverride);
-    if (ok && existingEvent) {
-      learning.logCalendarDeleted(existingEvent, options);
+    if (!existingEvent) return false;
+    if (deleteOptions?.silent) {
+      const ok = await calendar.deleteEvent(eventId, calendarIdOverride);
+      if (ok) learning.logCalendarDeleted(existingEvent, options);
+      return ok;
     }
-    return ok;
-  }, [calendar, learning]);
+    const calendarEventKey = `${existingEvent.calendarId || calendarIdOverride || ''}::${eventId}`;
+    scheduleUndoableDelete({
+      key: `calendar_event:${calendarEventKey}`,
+      kind: 'calendar_event',
+      label: 'event',
+      title: 'Event deleted',
+      message: existingEvent.summary ?? 'Calendar event',
+      finalize: async () => {
+        const ok = await calendar.deleteEvent(eventId, calendarIdOverride);
+        if (ok) {
+          learning.logCalendarDeleted(existingEvent, options);
+        }
+        return ok;
+      },
+    });
+    return true;
+  }, [calendar, learning, scheduleUndoableDelete]);
 
   // After Canvas sync, reload deadlines + projects
   const handleCanvasSync = async () => {
@@ -336,9 +561,9 @@ export function AppShell({ user }: AppShellProps) {
     const selectedDeadlines = upcomingPlannableDeadlines.filter(deadline => targetIds.includes(deadline.id));
     const proposal = buildAcademicPlanProposal({
       deadlines: selectedDeadlines,
-      tasks: store.tasks,
-      projects: store.projects,
-      calendarEvents: calendar.events,
+      tasks: filteredTasks,
+      projects: filteredProjects,
+      calendarEvents: filteredCalendarEvents,
       selectedCalendarId: calendar.selectedCalendarId,
       source,
       scoreStudySlot: learning.scoreStudySlot,
@@ -352,7 +577,7 @@ export function AppShell({ user }: AppShellProps) {
       options: { source: 'ai', learn: true },
     });
     return proposal;
-  }, [academicPlanningMetrics.completionRate, calendar.events, calendar.selectedCalendarId, learning, store.projects, store.tasks, upcomingPlannableDeadlines]);
+  }, [academicPlanningMetrics.completionRate, calendar.selectedCalendarId, filteredCalendarEvents, filteredProjects, filteredTasks, learning, upcomingPlannableDeadlines]);
 
   const openAcademicPlanner = useCallback((source: 'dashboard' | 'deadline' | 'ai', deadlineIds?: string[]) => {
     if (!calendar.isConnected) {
@@ -410,9 +635,9 @@ export function AppShell({ user }: AppShellProps) {
 
   const selectedAcademicPlanningDeadlines = useMemo(() => (
     academicPlanningTargetIds
-      .map(id => deadlineStore.deadlines.find(deadline => deadline.id === id))
+      .map(id => filteredDeadlines.find(deadline => deadline.id === id))
       .filter((deadline): deadline is NonNullable<typeof deadline> => Boolean(deadline))
-  ), [academicPlanningTargetIds, deadlineStore.deadlines]);
+  ), [academicPlanningTargetIds, filteredDeadlines]);
 
   const handleRegenerateAcademicPlan = useCallback(() => {
     if (academicPlanningTargetIds.length === 0) return;
@@ -602,7 +827,7 @@ export function AppShell({ user }: AppShellProps) {
 
   const handleAddDeadline = useCallback(async (...args: [...Parameters<typeof deadlineStore.addDeadline>, BehaviorLearningActionOptions?]) => {
     const lastArg = args.at(-1);
-    const options = isBehaviorLearningActionOptions(lastArg) ? lastArg : { source: 'manual', learn: true };
+    const options: BehaviorLearningActionOptions = isBehaviorLearningActionOptions(lastArg) ? lastArg : { source: 'manual', learn: true };
     const baseArgs = (isBehaviorLearningActionOptions(lastArg) ? args.slice(0, -1) : args) as Parameters<typeof deadlineStore.addDeadline>;
     const ok = await deadlineStore.addDeadline(...baseArgs);
     if (ok) {
@@ -646,40 +871,66 @@ export function AppShell({ user }: AppShellProps) {
     return ok;
   }, [deadlineStore, learning, pushToast]);
 
-  const handleDeleteDeadline = useCallback(async (id: string, _options?: BehaviorLearningActionOptions) => {
+  const handleDeleteDeadline = useCallback(async (id: string, options: BehaviorLearningActionOptions = { source: 'manual', learn: true }) => {
     const currentDeadline = deadlineStore.deadlines.find(item => item.id === id);
-    await deadlineStore.deleteDeadline(id);
-    if (!deadlineStore.error) {
-      pushToast('success', 'Deadline deleted');
-      if (currentDeadline) {
-        learning.logDeadlineDeleted({
-          title: currentDeadline.title,
-          projectId: currentDeadline.projectId,
-          dueDate: currentDeadline.dueDate,
-          dueTime: currentDeadline.dueTime,
-          type: currentDeadline.type,
-          status: currentDeadline.status,
-          options: { source: 'manual', learn: true },
-        });
-      }
-    } else {
-      pushToast('error', 'Could not delete deadline', deadlineStore.error);
-    }
-  }, [deadlineStore, learning, pushToast]);
+    if (!currentDeadline) return;
+    scheduleUndoableDelete({
+      key: `deadline:${id}`,
+      kind: 'deadline',
+      label: 'deadline',
+      title: 'Deadline deleted',
+      message: currentDeadline.title,
+      finalize: async () => {
+        const ok = await deadlineStore.deleteDeadline(id);
+        if (ok) {
+          learning.logDeadlineDeleted({
+            title: currentDeadline.title,
+            projectId: currentDeadline.projectId,
+            dueDate: currentDeadline.dueDate,
+            dueTime: currentDeadline.dueTime,
+            type: currentDeadline.type,
+            status: currentDeadline.status,
+            options,
+          });
+        }
+        return ok;
+      },
+    });
+  }, [deadlineStore, learning, scheduleUndoableDelete]);
 
   const handleDeleteAllDeadlines = useCallback(async () => {
-    const ok = await deadlineStore.deleteAllDeadlines();
-    if (ok) {
-      pushToast('success', 'All deadlines deleted');
-    } else {
-      pushToast('error', 'Could not delete deadlines', deadlineStore.error ?? 'Please try again.');
-    }
-    return ok;
-  }, [deadlineStore, pushToast]);
+    const currentDeadlines = filteredDeadlines;
+    if (currentDeadlines.length === 0) return false;
+    scheduleUndoableDelete({
+      key: 'all_deadlines',
+      kind: 'all_deadlines',
+      label: 'deadlines',
+      title: 'All deadlines deleted',
+      message: `${currentDeadlines.length} deadlines removed`,
+      finalize: async () => {
+        const ok = await deadlineStore.deleteAllDeadlines();
+        if (ok) {
+          currentDeadlines.forEach(deadline => {
+            learning.logDeadlineDeleted({
+              title: deadline.title,
+              projectId: deadline.projectId,
+              dueDate: deadline.dueDate,
+              dueTime: deadline.dueTime,
+              type: deadline.type,
+              status: deadline.status,
+              options: { source: 'manual', learn: true },
+            });
+          });
+        }
+        return ok;
+      },
+    });
+    return true;
+  }, [deadlineStore, filteredDeadlines, learning, scheduleUndoableDelete]);
 
   const handleLinkTask = useCallback(async (...args: [...Parameters<typeof deadlineStore.linkTask>, BehaviorLearningActionOptions?]) => {
     const lastArg = args.at(-1);
-    const options = isBehaviorLearningActionOptions(lastArg) ? lastArg : { source: 'manual', learn: true };
+    const options: BehaviorLearningActionOptions = isBehaviorLearningActionOptions(lastArg) ? lastArg : { source: 'manual', learn: true };
     const baseArgs = (isBehaviorLearningActionOptions(lastArg) ? args.slice(0, -1) : args) as Parameters<typeof deadlineStore.linkTask>;
     const [deadlineId, taskId] = baseArgs;
     const ok = await deadlineStore.linkTask(...baseArgs);
@@ -788,27 +1039,34 @@ export function AppShell({ user }: AppShellProps) {
 
   const handleDeleteTask = useCallback(async (id: string, options: BehaviorLearningActionOptions = { source: 'manual', learn: true }) => {
     const currentTask = store.tasks.find(task => task.id === id);
-    const ok = await store.deleteTask(id);
-    if (ok) {
-      pushToast('success', 'Task deleted');
-      if (currentTask) {
-        learning.logTaskDeleted({
-          title: currentTask.title,
-          projectId: currentTask.projectId,
-          dueDate: currentTask.dueDate,
-          status: currentTask.status,
-          options,
-        });
-      }
-    } else {
-      pushToast('error', 'Could not delete task', store.error ?? 'Please try again.');
-    }
-    return ok;
-  }, [learning, store, pushToast]);
+    if (!currentTask) return false;
+    scheduleUndoableDelete({
+      key: `task:${id}`,
+      kind: 'task',
+      label: 'task',
+      title: 'Task deleted',
+      message: currentTask.title,
+      finalize: async () => {
+        const ok = await store.deleteTask(id);
+        if (ok) {
+          await deadlineStore.loadDeadlines();
+          learning.logTaskDeleted({
+            title: currentTask.title,
+            projectId: currentTask.projectId,
+            dueDate: currentTask.dueDate,
+            status: currentTask.status,
+            options,
+          });
+        }
+        return ok;
+      },
+    });
+    return true;
+  }, [deadlineStore, learning, scheduleUndoableDelete, store]);
 
   const handleAddProject = useCallback(async (...args: [...Parameters<typeof store.addProject>, BehaviorLearningActionOptions?]) => {
     const lastArg = args.at(-1);
-    const options = isBehaviorLearningActionOptions(lastArg) ? lastArg : { source: 'manual', learn: true };
+    const options: BehaviorLearningActionOptions = isBehaviorLearningActionOptions(lastArg) ? lastArg : { source: 'manual', learn: true };
     const baseArgs = (isBehaviorLearningActionOptions(lastArg) ? args.slice(0, -1) : args) as Parameters<typeof store.addProject>;
     const projectId = await store.addProject(...baseArgs);
     if (projectId) {
@@ -859,17 +1117,28 @@ export function AppShell({ user }: AppShellProps) {
   const handleDeleteSubtask = useCallback(async (subtaskId: string) => {
     const task = store.tasks.find(item => item.subtasks.some(subtask => subtask.id === subtaskId));
     const subtask = task?.subtasks.find(item => item.id === subtaskId);
-    await store.deleteSubtask(subtaskId);
-    if (!store.error && task && subtask) {
-      learning.logTaskSubtaskDeleted({
-        taskTitle: task.title,
-        subtaskTitle: subtask.title,
-        projectId: task.projectId,
-        dueDate: task.dueDate,
-        options: { source: 'manual', learn: true },
-      });
-    }
-  }, [learning, store]);
+    if (!task || !subtask) return;
+    scheduleUndoableDelete({
+      key: `subtask:${subtaskId}`,
+      kind: 'subtask',
+      label: 'subtask',
+      title: 'Subtask deleted',
+      message: subtask.title,
+      finalize: async () => {
+        const ok = await store.deleteSubtask(subtaskId);
+        if (ok) {
+          learning.logTaskSubtaskDeleted({
+            taskTitle: task.title,
+            subtaskTitle: subtask.title,
+            projectId: task.projectId,
+            dueDate: task.dueDate,
+            options: { source: 'manual', learn: true },
+          });
+        }
+        return ok;
+      },
+    });
+  }, [learning, scheduleUndoableDelete, store]);
 
   const handleAddComment = useCallback(async (taskId: string, text: string): Promise<boolean> => {
     const task = store.tasks.find(item => item.id === taskId);
@@ -889,17 +1158,28 @@ export function AppShell({ user }: AppShellProps) {
   const handleDeleteComment = useCallback(async (commentId: string) => {
     const task = store.tasks.find(item => item.comments.some(comment => comment.id === commentId));
     const comment = task?.comments.find(item => item.id === commentId);
-    await store.deleteComment(commentId);
-    if (!store.error && task && comment) {
-      learning.logTaskCommentDeleted({
-        taskTitle: task.title,
-        projectId: task.projectId,
-        dueDate: task.dueDate,
-        commentPreview: comment.text.trim().slice(0, 80),
-        options: { source: 'manual', learn: true },
-      });
-    }
-  }, [learning, store]);
+    if (!task || !comment) return;
+    scheduleUndoableDelete({
+      key: `comment:${commentId}`,
+      kind: 'comment',
+      label: 'comment',
+      title: 'Comment deleted',
+      message: comment.text.trim().slice(0, 80),
+      finalize: async () => {
+        const ok = await store.deleteComment(commentId);
+        if (ok) {
+          learning.logTaskCommentDeleted({
+            taskTitle: task.title,
+            projectId: task.projectId,
+            dueDate: task.dueDate,
+            commentPreview: comment.text.trim().slice(0, 80),
+            options: { source: 'manual', learn: true },
+          });
+        }
+        return ok;
+      },
+    });
+  }, [learning, scheduleUndoableDelete, store]);
 
   const handleUpdateTaskDueDate = useCallback(async (id: string, dueDate: string | null): Promise<boolean> => {
     const task = store.tasks.find(item => item.id === id);
@@ -920,14 +1200,17 @@ export function AppShell({ user }: AppShellProps) {
   const handleSetStudyBlockOutcome = useCallback(async (
     event: Parameters<typeof studyBlockOutcomes.setOutcome>[0],
     status: StudyBlockOutcomeStatus,
+    notes = '',
   ) => {
-    const previousStatus = studyBlockOutcomes.getOutcomeForEvent(event)?.status;
-    const ok = await studyBlockOutcomes.setOutcome(event, status);
+    const previousOutcome = studyBlockOutcomes.getOutcomeForEvent(event);
+    const previousStatus = previousOutcome?.status;
+    const previousNotes = previousOutcome?.notes ?? '';
+    const ok = await studyBlockOutcomes.setOutcome(event, status, notes);
     const start = event.start?.dateTime ? new Date(event.start.dateTime) : null;
     const end = event.end?.dateTime ? new Date(event.end.dateTime) : null;
     const startMinutes = start ? start.getHours() * 60 + start.getMinutes() : null;
     const durationMinutes = start && end ? Math.max(Math.round((end.getTime() - start.getTime()) / 60000), 0) : null;
-    if (ok && previousStatus !== status) {
+    if (ok && (previousStatus !== status || previousNotes !== notes)) {
       learning.logStudyBlockOutcome({
         title: event.summary ?? 'Untitled event',
         calendarSummary: event.calendarSummary ?? null,
@@ -935,6 +1218,7 @@ export function AppShell({ user }: AppShellProps) {
         startMinutes: startMinutes ?? 0,
         durationMinutes: durationMinutes ?? 0,
         status,
+        notes,
         options: { source: 'manual', learn: true },
       });
     }
@@ -943,20 +1227,26 @@ export function AppShell({ user }: AppShellProps) {
 
   const handleDeleteProject = useCallback(async (id: string, options?: BehaviorLearningActionOptions) => {
     const currentProject = store.projects.find(item => item.id === id);
-    await store.deleteProject(id);
-    if (!store.error) {
-      pushToast('success', 'Course deleted');
-      if (currentProject) {
-        learning.logProjectDeleted({
-          name: currentProject.name,
-          description: currentProject.description,
-          options,
-        });
-      }
-    } else {
-      pushToast('error', 'Could not delete course', store.error);
-    }
-  }, [learning, store, pushToast]);
+    if (!currentProject) return;
+    scheduleUndoableDelete({
+      key: `project:${id}`,
+      kind: 'project',
+      label: 'course',
+      title: 'Course deleted',
+      message: currentProject.name,
+      finalize: async () => {
+        const ok = await store.deleteProject(id);
+        if (ok) {
+          learning.logProjectDeleted({
+            name: currentProject.name,
+            description: currentProject.description,
+            options,
+          });
+        }
+        return ok;
+      },
+    });
+  }, [learning, scheduleUndoableDelete, store]);
 
   const handleUpdateProject = useCallback(async (id: string, updates: { name?: string; description?: string; color?: string }) => {
     const currentProject = store.projects.find(item => item.id === id);
@@ -1010,17 +1300,97 @@ export function AppShell({ user }: AppShellProps) {
     options: BehaviorLearningActionOptions = { source: 'manual', learn: true },
   ) => {
     const currentHabit = habits.habits.find(item => item.id === id);
-    const ok = await habits.deleteHabit(id);
-    if (currentHabit && ok) {
-      learning.logHabitDeleted({
-        title: currentHabit.title,
-        options,
-      });
-    }
-  }, [habits, learning]);
+    if (!currentHabit) return;
+    scheduleUndoableDelete({
+      key: `habit:${id}`,
+      kind: 'habit',
+      label: 'habit',
+      title: 'Habit deleted',
+      message: currentHabit.title,
+      finalize: async () => {
+        const ok = await habits.deleteHabit(id);
+        if (ok) {
+          learning.logHabitDeleted({
+            title: currentHabit.title,
+            options,
+          });
+        }
+        return ok;
+      },
+    });
+  }, [habits, learning, scheduleUndoableDelete]);
+
+  const handleDeleteGymPlan = useCallback((id: string) => {
+    const plan = gym.plans.find(item => item.id === id);
+    if (!plan) return;
+    scheduleUndoableDelete({
+      key: `gym_plan:${id}`,
+      kind: 'gym_plan',
+      label: 'plan',
+      title: 'Plan deleted',
+      message: plan.name,
+      finalize: () => gym.deletePlan(id),
+    });
+  }, [gym, scheduleUndoableDelete]);
+
+  const handleDeleteGymDayTemplate = useCallback((id: string) => {
+    const day = gym.dayTemplates.find(item => item.id === id);
+    if (!day) return;
+    scheduleUndoableDelete({
+      key: `gym_day:${id}`,
+      kind: 'gym_day',
+      label: 'workout day',
+      title: 'Workout day deleted',
+      message: day.name,
+      finalize: () => gym.deleteDayTemplate(id),
+    });
+  }, [gym, scheduleUndoableDelete]);
+
+  const handleDeleteGymExercise = useCallback((id: string) => {
+    const exercise = gym.exercises.find(item => item.id === id);
+    if (!exercise) return;
+    scheduleUndoableDelete({
+      key: `gym_exercise:${id}`,
+      kind: 'gym_exercise',
+      label: 'exercise',
+      title: 'Exercise deleted',
+      message: exercise.name,
+      finalize: () => gym.deleteExercise(id),
+    });
+  }, [gym, scheduleUndoableDelete]);
+
+  const handleDeleteGymDayExercise = useCallback((id: string) => {
+    const dayExercise = gym.dayExercises.find(item => item.id === id);
+    const exerciseName = dayExercise
+      ? gym.exercises.find(item => item.id === dayExercise.exerciseId)?.name ?? 'Exercise'
+      : null;
+    if (!dayExercise) return;
+    scheduleUndoableDelete({
+      key: `gym_day_exercise:${id}`,
+      kind: 'gym_day_exercise',
+      label: 'planned exercise',
+      title: 'Exercise removed from day',
+      message: exerciseName ?? 'Exercise',
+      finalize: () => gym.deleteDayExercise(id),
+    });
+  }, [gym, scheduleUndoableDelete]);
+
+  const handleDeleteGymSession = useCallback((id: string) => {
+    const session = gym.sessions.find(item => item.id === id);
+    if (!session) return;
+    scheduleUndoableDelete({
+      key: `gym_session:${id}`,
+      kind: 'gym_session',
+      label: 'session',
+      title: 'Workout session deleted',
+      message: 'Session removed from history',
+      finalize: () => gym.deleteSession(id),
+    });
+  }, [gym, scheduleUndoableDelete]);
 
   const calendarController = useMemo(() => ({
     ...calendar,
+    events: filteredCalendarEvents,
     createEvent: (event: Parameters<typeof calendar.createEvent>[0], calendarIdOverride?: Parameters<typeof calendar.createEvent>[1]) =>
       handleCreateCalendarEvent(event, calendarIdOverride, { source: 'manual', learn: true }),
     updateEvent: (
@@ -1032,7 +1402,7 @@ export function AppShell({ user }: AppShellProps) {
       handleUpdateCalendarEvent(eventId, event, calendarIdOverride, { source: 'manual', learn: true }, existingEventOverride),
     deleteEvent: (eventId: string, calendarIdOverride?: Parameters<typeof calendar.deleteEvent>[1]) =>
       handleDeleteCalendarEvent(eventId, calendarIdOverride, { source: 'manual', learn: true }),
-  }), [calendar, handleCreateCalendarEvent, handleDeleteCalendarEvent, handleUpdateCalendarEvent]);
+  }), [calendar, filteredCalendarEvents, handleCreateCalendarEvent, handleDeleteCalendarEvent, handleUpdateCalendarEvent]);
 
   const showBackgroundSyncBanner = store.isLoading && (store.tasks.length > 0 || store.projects.length > 0);
 
@@ -1129,10 +1499,10 @@ export function AppShell({ user }: AppShellProps) {
               path="/dashboard"
               element={
                 <Dashboard
-                  tasks={store.tasks}
-                  projects={store.projects}
-                  deadlines={deadlineStore.deadlines}
-                  calendarEvents={calendar.events}
+                  tasks={filteredTasks}
+                  projects={filteredProjects}
+                  deadlines={filteredDeadlines}
+                  calendarEvents={filteredCalendarEvents}
                   studyBlockOutcomes={studyBlockOutcomes.outcomesByEventId}
                   getStudyBlockOutcome={studyBlockOutcomes.getOutcomeForEvent}
                   studyBlockOutcomesLoading={studyBlockOutcomes.isLoading}
@@ -1154,9 +1524,9 @@ export function AppShell({ user }: AppShellProps) {
               path="/deadlines"
               element={
                 <DeadlinesPage
-                  deadlines={deadlineStore.deadlines}
-                  projects={store.projects}
-                  tasks={store.tasks}
+                  deadlines={filteredDeadlines}
+                  projects={filteredProjects}
+                  tasks={filteredTasks}
                   initialCourseFilter={deadlineCourseFilterId}
                   initialDetailId={deadlineFocusId}
                   onAdd={handleAddDeadline}
@@ -1172,7 +1542,7 @@ export function AppShell({ user }: AppShellProps) {
                   onOpenPlanner={(deadlineIds) => openAcademicPlanner('deadline', deadlineIds)}
                   userId={user.id}
                   onCreateLinkedTask={async (title, projectId, dueDate) => handleAddTask(title, '', 'medium', projectId, dueDate, 'none')}
-                  calendarEvents={calendar.events}
+                  calendarEvents={filteredCalendarEvents}
                 />
               }
             />
@@ -1180,9 +1550,9 @@ export function AppShell({ user }: AppShellProps) {
               path="/tasks"
               element={
                 <TaskBoard
-                  tasks={store.tasks}
-                  projects={store.projects}
-                  deadlines={deadlineStore.deadlines}
+                  tasks={filteredTasks}
+                  projects={filteredProjects}
+                  deadlines={filteredDeadlines}
                   initialProjectFilter={taskProjectFilterId}
                   onAddTask={handleAddTask}
                   onUpdateStatus={handleUpdateTaskStatus}
@@ -1201,9 +1571,9 @@ export function AppShell({ user }: AppShellProps) {
               path="/courses"
               element={
                 <ProjectList
-                  projects={store.projects}
-                  tasks={store.tasks}
-                  deadlines={deadlineStore.deadlines}
+                  projects={filteredProjects}
+                  tasks={filteredTasks}
+                  deadlines={filteredDeadlines}
                   initialProjectId={projectFocusId}
                   onAddProject={handleAddProject}
                   onUpdateProject={handleUpdateProject}
@@ -1218,7 +1588,7 @@ export function AppShell({ user }: AppShellProps) {
               element={
                 <CalendarView
                   calendar={calendarController}
-                  deadlines={deadlineStore.deadlines}
+                  deadlines={filteredDeadlines}
                   studyBlockOutcomes={studyBlockOutcomes.outcomesByEventId}
                   getStudyBlockOutcome={studyBlockOutcomes.getOutcomeForEvent}
                   studyBlockOutcomesLoading={studyBlockOutcomes.isLoading}
@@ -1230,9 +1600,9 @@ export function AppShell({ user }: AppShellProps) {
               path="/timeline"
               element={
                 <TimelineView
-                  tasks={store.tasks}
-                  projects={store.projects}
-                  deadlines={deadlineStore.deadlines}
+                  tasks={filteredTasks}
+                  projects={filteredProjects}
+                  deadlines={filteredDeadlines}
                   onUpdateDueDate={handleUpdateTaskDueDate}
                 />
               }
@@ -1242,30 +1612,30 @@ export function AppShell({ user }: AppShellProps) {
               element={
                 <GymPage
                   userId={user.id}
-                  plans={gym.plans}
-                  dayTemplates={gym.dayTemplates}
-                  exercises={gym.exercises}
-                  dayExercises={gym.dayExercises}
-                  sessions={gym.sessions}
-                  exerciseLogs={gym.exerciseLogs}
-                  setLogs={gym.setLogs}
-                  activePlan={gym.activePlan}
-                  activeSession={gym.activeSession}
+                  plans={filteredGymPlans}
+                  dayTemplates={filteredGymDayTemplates}
+                  exercises={filteredGymExercises}
+                  dayExercises={filteredGymDayExercises}
+                  sessions={filteredGymSessions}
+                  exerciseLogs={filteredGymExerciseLogs}
+                  setLogs={filteredGymSetLogs}
+                  activePlan={filteredGymActivePlan}
+                  activeSession={filteredGymActiveSession}
                   onAddPlan={gym.addPlan}
                   onUpdatePlan={gym.updatePlan}
-                  onDeletePlan={gym.deletePlan}
+                  onDeletePlan={handleDeleteGymPlan}
                   onAddDayTemplate={gym.addDayTemplate}
                   onUpdateDayTemplate={gym.updateDayTemplate}
-                  onDeleteDayTemplate={gym.deleteDayTemplate}
+                  onDeleteDayTemplate={handleDeleteGymDayTemplate}
                   onAddExercise={gym.addExercise}
                   onUpdateExercise={gym.updateExercise}
-                  onDeleteExercise={gym.deleteExercise}
+                  onDeleteExercise={handleDeleteGymExercise}
                   onAddDayExercise={gym.addDayExercise}
                   onUpdateDayExercise={gym.updateDayExercise}
-                  onDeleteDayExercise={gym.deleteDayExercise}
+                  onDeleteDayExercise={handleDeleteGymDayExercise}
                   onStartSession={gym.startSession}
                   onCompleteSession={gym.completeSession}
-                  onDeleteSession={gym.deleteSession}
+                  onDeleteSession={handleDeleteGymSession}
                   onUpdateSetLog={gym.updateSetLog}
                   getLastPerformance={gym.getLastPerformance}
                   onUploadExercisePhoto={gym.uploadExercisePhoto}
@@ -1292,14 +1662,14 @@ export function AppShell({ user }: AppShellProps) {
               setProfileOpen(true);
             }}
             userId={user.id}
-            tasks={store.tasks}
-            deadlines={deadlineStore.deadlines}
-            projects={store.projects}
-            plans={gym.plans}
-            dayTemplates={gym.dayTemplates}
-            exercises={gym.exercises}
-            dayExercises={gym.dayExercises}
-            calendarEvents={calendar.events}
+            tasks={filteredTasks}
+            deadlines={filteredDeadlines}
+            projects={filteredProjects}
+            plans={filteredGymPlans}
+            dayTemplates={filteredGymDayTemplates}
+            exercises={filteredGymExercises}
+            dayExercises={filteredGymDayExercises}
+            calendarEvents={filteredCalendarEvents}
             calendarCalendars={calendar.calendars}
             selectedCalendarId={calendar.selectedCalendarId}
             getCalendarEventsForRange={calendar.getEventsForRange}
@@ -1355,7 +1725,7 @@ export function AppShell({ user }: AppShellProps) {
               ...params,
               options: { source: 'manual', learn: true },
             })}
-            habits={habits.habits}
+            habits={filteredHabits}
             onAddHabit={handleAddHabit}
             onToggleHabit={handleToggleHabit}
             onDeleteHabit={handleDeleteHabit}
@@ -1366,9 +1736,9 @@ export function AppShell({ user }: AppShellProps) {
 
       {searchOpen && (
         <GlobalSearch
-          tasks={store.tasks}
-          projects={store.projects}
-          deadlines={deadlineStore.deadlines}
+          tasks={filteredTasks}
+          projects={filteredProjects}
+          deadlines={filteredDeadlines}
           onClose={() => setSearchOpen(false)}
           onNavigate={(view) => { handleViewChange(view); setSearchOpen(false); }}
         />
@@ -1392,9 +1762,9 @@ export function AppShell({ user }: AppShellProps) {
         open={profileOpen}
         onClose={() => setProfileOpen(false)}
         initialTab={profileInitialTab}
-        tasks={store.tasks}
-        deadlines={deadlineStore.deadlines}
-        projects={store.projects}
+        tasks={filteredTasks}
+        deadlines={filteredDeadlines}
+        projects={filteredProjects}
         behaviorSummary={learning.behaviorInsights.summary}
         proactivePrompts={learning.behaviorInsights.proactivePrompts}
         aiLearningEnabled={learning.aiLearningEnabled}
@@ -1422,7 +1792,7 @@ export function AppShell({ user }: AppShellProps) {
 
       {habitsOpen && (
         <HabitsPanel
-          habits={habits.habits}
+          habits={filteredHabits}
           isLoading={habits.isLoading}
           onToggle={handleToggleHabit}
           onAdd={handleAddHabit}
@@ -1464,37 +1834,81 @@ export function AppShell({ user }: AppShellProps) {
          duplicate instance is needed here. */}
 
       <div className="pointer-events-none fixed right-4 top-20 z-[80] flex w-full max-w-sm flex-col gap-2 sm:right-6">
-        {toasts.map(toast => (
-          <div
-            key={toast.id}
-            className={cn(
-              'pointer-events-auto overflow-hidden rounded-lg border shadow-sm',
-              toast.tone === 'error'
-                ? 'border-red-500/20 bg-red-500/10'
-                : toast.tone === 'success'
-                  ? 'border-emerald-500/20 bg-emerald-500/10'
-                  : 'border-[var(--accent)]/20 bg-[var(--accent-soft)]'
-            )}
-            style={{ backgroundColor: 'var(--surface-elevated)' }}
-          >
-            <div className="flex items-start gap-3 px-4 py-3 text-sm">
-              <div className="mt-0.5 shrink-0">
-                {toast.tone === 'error' ? <AlertCircle size={16} className="text-red-400" /> : <CheckCircle2 size={16} className={toast.tone === 'success' ? 'text-emerald-400' : 'text-[var(--accent)]'} />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="font-medium text-[var(--text-primary)]">{toast.title}</div>
-                {toast.message && <div className="mt-0.5 text-xs text-[var(--text-muted)]">{toast.message}</div>}
-              </div>
-              <button
-                type="button"
-                onClick={() => dismissToast(toast.id)}
-                className="rounded-full p-1 text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+        {(() => {
+          const groups: Array<{ key: string; toasts: Toast[] }> = [];
+          for (const toast of toasts) {
+            const last = groups[groups.length - 1];
+            const groupKey = `${toast.tone}::${toast.title}`;
+            if (last && last.key === groupKey) {
+              last.toasts.push(toast);
+            } else {
+              groups.push({ key: groupKey, toasts: [toast] });
+            }
+          }
+          return groups.map(group => {
+            const count = group.toasts.length;
+            const first = group.toasts[0];
+            const actionableToasts = group.toasts.filter(t => t.action);
+            const summaryMessage = count > 1
+              ? (() => {
+                  const names = group.toasts
+                    .map(t => t.message)
+                    .filter((m): m is string => Boolean(m));
+                  if (names.length === 0) return `${count} items`;
+                  if (names.length <= 2) return names.join(', ');
+                  return `${names.slice(0, 2).join(', ')} + ${names.length - 2} more`;
+                })()
+              : first.message;
+            const titleText = count > 1 ? `${first.title} (${count})` : first.title;
+            return (
+              <div
+                key={group.toasts.map(t => t.id).join('-')}
+                className={cn(
+                  'pointer-events-auto overflow-hidden rounded-lg border shadow-sm',
+                  first.tone === 'error'
+                    ? 'border-red-500/20 bg-red-500/10'
+                    : first.tone === 'success'
+                      ? 'border-emerald-500/20 bg-emerald-500/10'
+                      : 'border-[var(--accent)]/20 bg-[var(--accent-soft)]'
+                )}
+                style={{ backgroundColor: 'var(--surface-elevated)' }}
               >
-                <X size={14} />
-              </button>
-            </div>
-          </div>
-        ))}
+                <div className="flex items-start gap-3 px-4 py-3 text-sm">
+                  <div className="mt-0.5 shrink-0">
+                    {first.tone === 'error'
+                      ? <AlertCircle size={16} className="text-red-400" />
+                      : <CheckCircle2 size={16} className={first.tone === 'success' ? 'text-emerald-400' : 'text-[var(--accent)]'} />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-[var(--text-primary)]">{titleText}</div>
+                    {summaryMessage && <div className="mt-0.5 truncate text-xs text-[var(--text-muted)]">{summaryMessage}</div>}
+                    {actionableToasts.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          for (const t of actionableToasts) t.action?.onClick();
+                        }}
+                        className="mt-2 inline-flex items-center rounded-md border border-[var(--border-soft)] bg-[var(--surface-muted)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] transition hover:bg-[var(--surface)]"
+                      >
+                        {actionableToasts[0].action?.label ?? 'Undo'}
+                        {actionableToasts.length > 1 ? ` all` : ''}
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      for (const t of group.toasts) dismissToast(t.id);
+                    }}
+                    className="rounded-full p-1 text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+          });
+        })()}
       </div>
     </div>
   );

@@ -6,7 +6,16 @@ import { Task, Project, Deadline, StudyBlockOutcomeStatus } from '../types';
 import { cn } from '../utils/cn';
 import { isStudyBlockLikeCalendarEvent } from '../utils/studyBlockDetection';
 import { getEventDateKey, hasEventEnded, getEventTimeLabel } from '../utils/calendarEventHelpers';
-import { STUDY_OUTCOME_OPTIONS, getOutcomeTone, getOutcomeLabel, OutcomeBadge } from '../utils/studyOutcomes';
+import {
+  STUDY_OUTCOME_OPTIONS,
+  STUDY_REFLECTION_OPTIONS,
+  buildStudyOutcomeNotes,
+  OutcomeBadge,
+  parseStudyOutcomeReflection,
+  ReflectionBadge,
+} from '../utils/studyOutcomes';
+import { getCalendarEventPresentation } from '../utils/calendarEventPresentation';
+import { formatDateKey } from '../utils/dateHelpers';
 
 interface DashboardProps {
   tasks: Task[];
@@ -16,7 +25,7 @@ interface DashboardProps {
   studyBlockOutcomes: Record<string, StudyBlockOutcome>;
   getStudyBlockOutcome: (event: GoogleCalendarEvent) => StudyBlockOutcome | undefined;
   studyBlockOutcomesLoading: boolean;
-  onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => Promise<boolean>;
+  onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus, notes?: string) => Promise<boolean>;
   onStudyReviewPromptShown?: (count: number) => void;
   behaviorSummary?: string;
   proactivePrompts?: string[];
@@ -85,14 +94,14 @@ export function Dashboard({
   projects,
   deadlines = [],
   calendarEvents,
-  studyBlockOutcomes,
+  studyBlockOutcomes: _studyBlockOutcomes,
   getStudyBlockOutcome,
   studyBlockOutcomesLoading,
   onSetStudyBlockOutcome,
   onStudyReviewPromptShown,
-  behaviorSummary,
-  proactivePrompts = [],
-  onUseBehaviorPrompt,
+  behaviorSummary: _behaviorSummary,
+  proactivePrompts: _proactivePrompts = [],
+  onUseBehaviorPrompt: _onUseBehaviorPrompt,
   planningMetrics,
   onPlanNextDeadlines,
   nextPlanningTarget,
@@ -177,22 +186,22 @@ export function Dashboard({
   }, [calendarEvents, getStudyBlockOutcome]);
 
   const pendingTodayStudyReviewCount = useMemo(() => {
-    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayKey = formatDateKey(new Date());
     return pendingStudyReview.filter(event => getEventDateKey(event) === todayKey).length;
   }, [pendingStudyReview]);
 
   useEffect(() => {
     if (!onStudyReviewPromptShown || pendingStudyReview.length === 0) return;
-    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayKey = formatDateKey(new Date());
     const promptKey = `${todayKey}:${pendingStudyReview.length}:${pendingStudyReview.map(event => event.id).join(',')}`;
     if (lastPromptKeyRef.current === promptKey) return;
     lastPromptKeyRef.current = promptKey;
     onStudyReviewPromptShown(pendingStudyReview.length);
   }, [onStudyReviewPromptShown, pendingStudyReview]);
 
-  const handleOutcomeClick = async (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => {
+  const handleOutcomeClick = async (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus, notes = '') => {
     setSavingOutcomeId(event.id);
-    await onSetStudyBlockOutcome(event, status);
+    await onSetStudyBlockOutcome(event, status, notes);
     setSavingOutcomeId(current => (current === event.id ? null : current));
   };
 
@@ -268,6 +277,9 @@ export function Dashboard({
 
           <div className="mt-4 space-y-3">
             {pendingStudyReview.map(event => {
+              const presentation = getCalendarEventPresentation(event);
+              const currentOutcome = getStudyBlockOutcome(event);
+              const currentReflection = parseStudyOutcomeReflection(currentOutcome?.notes);
               const dateKey = getEventDateKey(event);
               const dateLabel = dateKey
                 ? new Date(`${dateKey}T00:00:00`).toLocaleDateString('en-US', {
@@ -284,13 +296,19 @@ export function Dashboard({
                         <h4 className="truncate text-sm font-medium text-[var(--text-primary)]">
                           {event.summary || 'Untitled event'}
                         </h4>
-                        {getStudyBlockOutcome(event) && <OutcomeBadge status={getStudyBlockOutcome(event)!.status} />}
+                        {currentOutcome && <OutcomeBadge status={currentOutcome.status} />}
+                        {currentReflection && <ReflectionBadge reflection={currentReflection} />}
                       </div>
                       <p className="mt-1 text-xs text-[var(--text-muted)]">
                         {dateLabel} · {getEventTimeLabel(event.start)}
                         {event.end?.dateTime ? ` - ${getEventTimeLabel(event.end)}` : ''}
                         {event.calendarSummary ? ` · ${event.calendarSummary}` : ''}
                       </p>
+                      {presentation.metadata?.deadlineTitle && (
+                        <p className="mt-1 text-[11px] font-medium text-[var(--accent)]">
+                          Linked to {presentation.metadata.deadlineTitle}
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -298,7 +316,7 @@ export function Dashboard({
                         <button
                           key={option.status}
                           type="button"
-                          onClick={() => void handleOutcomeClick(event, option.status)}
+                          onClick={() => void handleOutcomeClick(event, option.status, buildStudyOutcomeNotes({ reflection: currentReflection }))}
                           disabled={savingOutcomeId === event.id}
                           className="rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-60"
                         >
@@ -307,6 +325,26 @@ export function Dashboard({
                       ))}
                     </div>
                   </div>
+                  {currentOutcome && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {STUDY_REFLECTION_OPTIONS.map(option => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => void handleOutcomeClick(event, currentOutcome.status, buildStudyOutcomeNotes({ reflection: option.value }))}
+                          disabled={savingOutcomeId === event.id}
+                          className={cn(
+                            'rounded-full border px-3 py-1.5 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
+                            currentReflection === option.value
+                              ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                              : 'border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]',
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}

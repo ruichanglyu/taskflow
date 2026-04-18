@@ -1,6 +1,6 @@
 import type { Deadline, DeadlineType, Project, Task } from '../types';
 import type { GoogleCalendarEvent, NewGoogleCalendarEvent } from './googleCalendar';
-import { getAPIKey } from '../hooks/useAI';
+import { getAPIKey, getAPIKeyCached, type ImageAttachment } from '../hooks/useAI';
 import { addDays, formatDateKey } from '../utils/dateHelpers';
 
 export interface DeadlineEmailImportRow {
@@ -263,6 +263,9 @@ Rules:
 - Keep notes concise but useful.
 - Generate one prepTaskTitle for each deadline when reasonable, such as "Prepare for Exam 2".
 - Ignore greetings, signatures, and general announcements without a real due date.
+- For email/course announcements, prefer actual due dates over publish dates.
+- If a line looks like a homework, lab, quiz, exam, project, or discussion deliverable with a due date, include it.
+- If time is missing, return dueTime as null instead of guessing.
 
 EMAIL:
 ${emailText}`;
@@ -318,10 +321,108 @@ ${emailText}`;
   }
 }
 
+async function parseAcademicImportImageWithGemini(
+  userId: string,
+  image: ImageAttachment,
+  contextLabel: string,
+): Promise<DeadlineEmailImportResult | null> {
+  const apiKey = getAPIKeyCached(userId) ?? await getAPIKey(userId);
+  if (!apiKey) return null;
+
+  const prompt = `You are extracting academic deadlines from a screenshot or image for a student planning app.
+
+Return ONLY valid JSON in this shape:
+{
+  "rows": [
+    {
+      "title": "string",
+      "course": "string",
+      "dueDate": "YYYY-MM-DD",
+      "dueTime": "HH:MM" | null,
+      "type": "assignment" | "exam" | "quiz" | "lab" | "project" | "other",
+      "notes": "string",
+      "prepTaskTitle": "string" | null
+    }
+  ],
+  "skippedRows": ["string"]
+}
+
+Rules:
+- Extract only concrete academic work items with a real date.
+- Use 24-hour HH:MM for dueTime when a time is visible.
+- Keep course empty if unknown.
+- Keep notes concise but useful.
+- Generate one prepTaskTitle when reasonable, such as "Prepare for Exam 2".
+- Ignore decorative text, navigation, grades, or announcements without a due date.
+- If the image contains a syllabus or assignment list, extract every dated academic item you can read.
+- Handle Canvas-style assignment lists, syllabus tables, module pages, and announcement screenshots.
+- Prefer assignment due dates over availability windows or posted dates.
+- If the course name appears in a heading, section label, or assignment subtitle, use it.
+- If time is missing or unreadable, return dueTime as null instead of inventing one.
+- If multiple assignments appear in one screenshot, return each as its own row.
+
+SOURCE:
+${contextLabel}`;
+
+  const response = await fetch(`${GEMINI_API_URL}/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inline_data: { mime_type: image.mimeType, data: image.base64 } },
+        ],
+      }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 4096,
+        responseMimeType: 'application/json',
+      },
+    }),
+  });
+
+  if (!response.ok) return null;
+
+  const payload = await response.json().catch(() => null) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> } | null;
+  const text = payload?.candidates?.[0]?.content?.parts?.map(part => part.text ?? '').join('').trim();
+  if (!text) return null;
+
+  try {
+    const parsed = JSON.parse(text) as { rows?: Array<Record<string, unknown>>; skippedRows?: unknown[] };
+    const rows = (parsed.rows ?? []).map((row, index): DeadlineEmailImportRow | null => {
+      const title = String(row.title ?? '').trim();
+      const dueDate = normalizeDueDate(String(row.dueDate ?? ''));
+      if (!title || !dueDate) return null;
+      return {
+        title,
+        course: String(row.course ?? '').trim(),
+        dueDate,
+        dueTime: normalizeDueTime(row.dueTime ? String(row.dueTime) : null),
+        type: normalizeDeadlineType(String(row.type ?? 'assignment')),
+        notes: String(row.notes ?? '').trim(),
+        prepTaskTitle: row.prepTaskTitle ? String(row.prepTaskTitle).trim() : null,
+        sourceType: 'email_import',
+        sourceId: buildSourceId('academic-image', `${index}:${title}:${dueDate}`),
+      };
+    }).filter(Boolean) as DeadlineEmailImportRow[];
+
+    return {
+      rows,
+      skippedRows: Array.isArray(parsed.skippedRows)
+        ? parsed.skippedRows.filter((value): value is string => typeof value === 'string')
+        : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function parseEmailIntoDeadlineImport(userId: string, emailText: string): Promise<DeadlineEmailImportResult> {
   const trimmed = emailText.trim();
   if (!trimmed) {
-    throw new Error('Paste the email text first.');
+    throw new Error('Paste the academic text first.');
   }
 
   const geminiResult = await parseEmailImportWithGemini(userId, trimmed);
@@ -331,9 +432,35 @@ export async function parseEmailIntoDeadlineImport(userId: string, emailText: st
 
   const fallback = buildEmailFallbackRows(trimmed);
   if (fallback.rows.length === 0) {
-    throw new Error('I could not find any deadlines in that email. Try pasting more of the email body.');
+    throw new Error('I could not find any deadlines in that text. Try pasting more of the syllabus, email, or announcement.');
   }
   return fallback;
+}
+
+export async function fileToAcademicImageAttachment(file: File): Promise<ImageAttachment> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Could not read that image.'));
+    reader.readAsDataURL(file);
+  });
+
+  const [header, base64] = dataUrl.split(',');
+  const mimeType = header.match(/data:(.*?);/)?.[1] ?? file.type ?? 'image/png';
+  return { base64, mimeType, preview: dataUrl };
+}
+
+export async function parseAcademicImageIntoDeadlineImport(
+  userId: string,
+  image: ImageAttachment,
+  sourceLabel = 'Academic screenshot',
+): Promise<DeadlineEmailImportResult> {
+  const geminiResult = await parseAcademicImportImageWithGemini(userId, image, sourceLabel);
+  if (geminiResult && geminiResult.rows.length > 0) {
+    return geminiResult;
+  }
+
+  throw new Error('I could not find any clear academic deadlines in that image. Try a clearer screenshot or paste the text instead.');
 }
 
 function getTimedEventDetails(event: GoogleCalendarEvent) {
@@ -447,20 +574,22 @@ function blockDurationsForDeadline(
   linkedTasks: Task[],
   completionRate: number | null | undefined,
 ) {
+  const todayKey = formatDateKey(new Date());
+  const daysUntilDue = Math.max(daysBetween(todayKey, deadline.dueDate), 0);
   const baseMinutesByType: Record<DeadlineType, number> = {
-    assignment: 75,
-    exam: 195,
-    quiz: 75,
-    lab: 70,
-    project: 180,
+    assignment: 60,
+    exam: 180,
+    quiz: 60,
+    lab: 60,
+    project: 165,
     other: 90,
   };
   const linkedTaskBonusByType: Record<DeadlineType, number> = {
-    assignment: 15,
-    exam: 25,
-    quiz: 15,
+    assignment: 10,
+    exam: 20,
+    quiz: 10,
     lab: 10,
-    project: 25,
+    project: 20,
     other: 15,
   };
   const baseMinutes = baseMinutesByType[deadline.type] ?? 90;
@@ -473,17 +602,30 @@ function blockDurationsForDeadline(
     totalMinutes = Math.round(totalMinutes * 1.1);
   }
 
+  if ((deadline.type === 'assignment' || deadline.type === 'quiz' || deadline.type === 'lab') && daysUntilDue <= 1) {
+    totalMinutes = Math.min(totalMinutes, 60);
+  } else if ((deadline.type === 'assignment' || deadline.type === 'quiz' || deadline.type === 'lab') && daysUntilDue <= 3) {
+    totalMinutes = Math.min(totalMinutes, 90);
+  }
+
+  if ((deadline.type === 'exam' || deadline.type === 'project') && daysUntilDue >= 5) {
+    totalMinutes += 15;
+  }
+
   totalMinutes = Math.max(deadline.type === 'exam' || deadline.type === 'project' ? 75 : 45, totalMinutes);
 
   let sessionCount = 1;
   if (deadline.type === 'exam' || deadline.type === 'project') {
     sessionCount = totalMinutes >= 210 ? 3 : totalMinutes >= 120 ? 2 : 1;
   } else {
-    sessionCount = totalMinutes >= 120 ? 2 : 1;
+    sessionCount = totalMinutes >= 135 && daysUntilDue >= 2 ? 2 : 1;
   }
 
-  let rawSessionMinutes = Math.max(45, Math.round((totalMinutes / sessionCount) / 15) * 15);
-  const maxSessionMinutes = completionRate !== null && completionRate < 60 ? 75 : 105;
+  const minimumSessionMinutes = deadline.type === 'assignment' || deadline.type === 'quiz' || deadline.type === 'lab' ? 30 : 45;
+  let rawSessionMinutes = Math.max(minimumSessionMinutes, Math.round((totalMinutes / sessionCount) / 15) * 15);
+  const maxSessionMinutes = completionRate != null && completionRate < 60
+    ? (deadline.type === 'exam' || deadline.type === 'project' ? 75 : 60)
+    : (deadline.type === 'assignment' || deadline.type === 'quiz' || deadline.type === 'lab' ? 90 : 105);
   rawSessionMinutes = Math.min(rawSessionMinutes, maxSessionMinutes);
 
   if ((deadline.type === 'assignment' || deadline.type === 'lab' || deadline.type === 'quiz') && sessionCount > 1 && rawSessionMinutes <= 45) {
@@ -604,13 +746,14 @@ export function buildAcademicPlanProposal(params: {
     }
 
     remainingDurations.forEach((durationMinutes, sessionIndex) => {
-      let bestChoice: {
+      type BestChoice = {
         dateKey: string;
         startMinutes: number;
         endMinutes: number;
         score: number;
         candidates: Array<{ startMinutes: number; endMinutes: number; score: number; distance: number }>;
-      } | null = null;
+      };
+      let bestChoice: BestChoice | null = null;
 
       planningDays.forEach(dateKey => {
         const busyEvents = [
@@ -654,7 +797,8 @@ export function buildAcademicPlanProposal(params: {
         }
       });
 
-      if (!bestChoice) return;
+      const chosen = bestChoice as BestChoice | null;
+      if (!chosen) return;
 
       const blockTitleBase = context.project?.name
         ? `${context.project.name} ${context.deadline.title}`
@@ -662,10 +806,10 @@ export function buildAcademicPlanProposal(params: {
 
       const explanation = buildBlockExplanation({
         deadline: context.deadline,
-        dateKey: bestChoice.dateKey,
-        startMinutes: bestChoice.startMinutes,
-        candidates: bestChoice.candidates,
-        daysBeforeDue: Math.max(daysBetween(bestChoice.dateKey, context.deadline.dueDate), 0),
+        dateKey: chosen.dateKey,
+        startMinutes: chosen.startMinutes,
+        candidates: chosen.candidates,
+        daysBeforeDue: Math.max(daysBetween(chosen.dateKey, context.deadline.dueDate), 0),
         sessionIndex: existingScheduledCount + sessionIndex,
         totalSessions: durations.length,
       });
@@ -680,20 +824,20 @@ export function buildAcademicPlanProposal(params: {
         courseName: context.project?.name ?? null,
         linkedTaskIds: context.deadline.linkedTaskIds,
         title: blockTitleBase,
-        dateKey: bestChoice.dateKey,
-        startMinutes: bestChoice.startMinutes,
-        endMinutes: bestChoice.endMinutes,
+        dateKey: chosen.dateKey,
+        startMinutes: chosen.startMinutes,
+        endMinutes: chosen.endMinutes,
         calendarId: params.selectedCalendarId ?? null,
         notes: context.linkedTasks.length > 0
           ? `Linked tasks: ${context.linkedTasks.map(task => task.title).join(', ')}`
           : '',
         explanation,
-        candidates: bestChoice.candidates.map(candidate => ({
+        candidates: chosen.candidates.map(candidate => ({
           startMinutes: candidate.startMinutes,
           endMinutes: candidate.endMinutes,
           score: candidate.score,
           distance: candidate.distance,
-          selected: candidate.startMinutes === bestChoice?.startMinutes && candidate.endMinutes === bestChoice?.endMinutes,
+          selected: candidate.startMinutes === chosen.startMinutes && candidate.endMinutes === chosen.endMinutes,
         })),
         edited: false,
       });
@@ -806,7 +950,7 @@ export function parseAcademicPlanMetadata(description?: string | null) {
     courseName: getValue('course'),
     explanation: getValue('why'),
     notes: getValue('notes'),
-    origin: (() => {
+    origin: ((): AcademicPlanOrigin => {
       const value = getValue('origin');
       if (value === 'ai-suggested') return 'ai-assisted';
       if (value === 'ai-assisted') return 'ai-assisted';

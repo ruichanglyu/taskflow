@@ -112,6 +112,7 @@ export default function App() {
     let cancelled = false;
 
     const loadVerifiedSession = async () => {
+      if (!supabase) return;
       const { data } = await supabase.auth.getSession();
       const cachedSession = data.session;
 

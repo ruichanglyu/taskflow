@@ -10,11 +10,9 @@ import type {
   WorkoutDayExercise, WorkoutSession, WorkoutExerciseLog, WorkoutSetLog,
 } from '../types';
 import { cn } from '../utils/cn';
-import { type ImageAttachment } from '../hooks/useAI';
 import {
   type ParsedWorkoutPlan,
   emptyParsedWorkoutPlan,
-  parseExerciseLine,
   parseWorkoutPlanText,
   fileToImageAttachment,
   extractWorkoutPlanFromImage,

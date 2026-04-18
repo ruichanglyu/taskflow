@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, List, LayoutGrid, Pencil, Plus, RefreshCcw, Trash2, Unplug, X } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, ExternalLink, List, LayoutGrid, Pencil, Plus, RefreshCcw, Trash2, Unplug } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { GoogleCalendarEvent } from '../lib/googleCalendar';
 import { buildAcademicPlanMetadataDescription, parseAcademicPlanMetadata } from '../lib/academicPlanning';
@@ -8,11 +8,18 @@ import { CalendarGrid } from './CalendarGrid';
 import { cn } from '../utils/cn';
 import { isStudyBlockLikeCalendarEvent } from '../utils/studyBlockDetection';
 import { getEventDateKey, hasEventEnded, getEventTimeLabel } from '../utils/calendarEventHelpers';
-import { STUDY_OUTCOME_OPTIONS, getOutcomeTone, getOutcomeLabel, OutcomeBadge } from '../utils/studyOutcomes';
+import {
+  STUDY_OUTCOME_OPTIONS,
+  STUDY_REFLECTION_OPTIONS,
+  buildStudyOutcomeNotes,
+  getOutcomeTone,
+  OutcomeBadge,
+  parseStudyOutcomeReflection,
+} from '../utils/studyOutcomes';
 import { addDays, addMonths, formatDateKey } from '../utils/dateHelpers';
 import type { GoogleCalendarController } from '../hooks/useGoogleCalendar';
 import type { StudyBlockOutcome } from '../hooks/useStudyBlockOutcomes';
-import type { StudyBlockOutcomeStatus } from '../types';
+import type { StudyBlockOutcomeStatus, StudyBlockReflection } from '../types';
 import { getCalendarEventPresentation } from '../utils/calendarEventPresentation';
 
 type CalendarViewMode = 'month' | 'week' | 'list';
@@ -20,7 +27,7 @@ type StudyBlockOutcomeMap = Record<string, StudyBlockOutcome>;
 
 
 function parseCalendarViewMode(value: string | null): CalendarViewMode {
-  return value === 'week' || value === 'list' || value === 'month' ? value : 'month';
+  return value === 'week' || value === 'list' || value === 'month' ? value : 'week';
 }
 
 function startOfWeek(date: Date) {
@@ -198,17 +205,38 @@ function getEventSectionLabel(date?: { date?: string; dateTime?: string }) {
   return 'Later';
 }
 
-function getOutcomeDescription(status: StudyBlockOutcomeStatus) {
-  switch (status) {
-    case 'completed':
-      return 'This session happened as planned, so future scheduling can lean on similar timing.';
-    case 'partial':
-      return 'You got some of it done. The planner can keep the topic but may shorten the next block.';
-    case 'skipped':
-      return 'This slot did not happen. Future plans should avoid overloading similar windows.';
-    case 'rescheduled':
-      return 'You moved this work instead of doing it here. The planner can learn from that timing shift.';
-  }
+function StudyReflectionPicker({
+  currentReflection,
+  disabled,
+  onPick,
+}: {
+  currentReflection: StudyBlockReflection | null;
+  disabled?: boolean;
+  onPick: (reflection: StudyBlockReflection) => void;
+}) {
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {STUDY_REFLECTION_OPTIONS.map(option => {
+        const selected = currentReflection === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onPick(option.value)}
+            disabled={disabled}
+            className={cn(
+              'rounded-full border px-3 py-1.5 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
+              selected
+                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                : 'border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]',
+            )}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function CalendarChecklist({
@@ -423,7 +451,7 @@ interface CalendarViewProps {
   studyBlockOutcomes: StudyBlockOutcomeMap;
   getStudyBlockOutcome: (event: GoogleCalendarEvent) => StudyBlockOutcome | undefined;
   studyBlockOutcomesLoading: boolean;
-  onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => Promise<boolean>;
+  onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus, notes?: string) => Promise<boolean>;
 }
 
 function DayPanel({
@@ -435,7 +463,7 @@ function DayPanel({
   onOpenDetails,
   deletingId,
   onCreateEvent,
-  studyBlockOutcomes,
+  studyBlockOutcomes: _studyBlockOutcomes,
   getStudyBlockOutcome,
   studyBlockOutcomesLoading,
   onSetStudyBlockOutcome,
@@ -445,13 +473,13 @@ function DayPanel({
   deadlines?: import('../types').Deadline[];
   onDelete: (id: string) => void;
   onEdit: (event: GoogleCalendarEvent) => void;
-  onOpenDetails: (event: GoogleCalendarEvent) => void;
+  onOpenDetails: (event: GoogleCalendarEvent, anchorRect?: { top: number; left: number; width: number; height: number }) => void;
   deletingId: string | null;
   onCreateEvent: () => void;
   studyBlockOutcomes: StudyBlockOutcomeMap;
   getStudyBlockOutcome: (event: GoogleCalendarEvent) => StudyBlockOutcome | undefined;
   studyBlockOutcomesLoading: boolean;
-  onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => Promise<boolean>;
+  onSetStudyBlockOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus, notes?: string) => Promise<boolean>;
 }) {
   const [savingOutcomeId, setSavingOutcomeId] = useState<string | null>(null);
 
@@ -485,9 +513,9 @@ function DayPanel({
     year: 'numeric',
   });
 
-  const handleOutcomeClick = async (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => {
+  const handleOutcomeClick = async (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus, reflection?: StudyBlockReflection | null) => {
     setSavingOutcomeId(event.id);
-    await onSetStudyBlockOutcome(event, status);
+    await onSetStudyBlockOutcome(event, status, buildStudyOutcomeNotes({ reflection }));
     setSavingOutcomeId(current => (current === event.id ? null : current));
   };
 
@@ -509,14 +537,107 @@ function DayPanel({
           No events this day
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
+          {dayDeadlines.map(dl => (
+            <div
+              key={dl.id}
+              className="flex items-center gap-2.5 rounded-lg bg-orange-400/6 px-2.5 py-2"
+            >
+              <div className="flex h-2 w-2 shrink-0 rotate-45 bg-orange-400" />
+              <div className="min-w-0 flex-1">
+                <h4 className="truncate text-[13px] font-medium text-[var(--text-primary)]">
+                  {dl.title}
+                </h4>
+                <p className="text-[11px] text-orange-400/80">
+                  {dl.type.charAt(0).toUpperCase() + dl.type.slice(1)} deadline
+                  {dl.dueTime ? ` · ${dl.dueTime}` : ''}
+                </p>
+              </div>
+            </div>
+          ))}
+          {events.map(event => (
+            (() => {
+              const presentation = getCalendarEventPresentation(event);
+              return (
+                <button
+                  key={getCalendarEventRenderKey(event)}
+                  type="button"
+                  onClick={clickEvent => onOpenDetails(event, clickEvent.currentTarget.getBoundingClientRect())}
+                  className={cn(
+                    'group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition hover:brightness-[0.97]',
+                    presentation.isSuggested ? 'border' : 'bg-[var(--surface-muted)]'
+                  )}
+                  style={presentation.isSuggested ? {
+                    backgroundColor: presentation.surfaceColor,
+                    borderColor: presentation.borderColor,
+                  } : undefined}
+                >
+                  <div
+                    className="flex h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: presentation.accentColor }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="truncate text-[13px] font-medium text-[var(--text-primary)]">
+                        {event.summary || 'Untitled event'}
+                      </h4>
+                      {presentation.badgeLabel && (
+                        <span className="shrink-0 rounded bg-black/5 px-1 py-px text-[8px] font-bold uppercase tracking-[0.1em] text-[var(--text-faint)]">
+                          AI
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[var(--text-muted)]">
+                      {getEventTimeLabel(event.start)}
+                      {event.location ? ` · ${event.location}` : ''}
+                    </p>
+                  </div>
+              <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <button
+                  type="button"
+                  onClick={clickEvent => {
+                    clickEvent.stopPropagation();
+                    onEdit(event);
+                  }}
+                  className="rounded-full p-1 text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={clickEvent => {
+                    clickEvent.stopPropagation();
+                    onDelete(event.id);
+                  }}
+                  disabled={deletingId === event.id}
+                  className="rounded-full p-1 text-[var(--text-faint)] transition hover:text-red-400 disabled:opacity-50"
+                >
+                  <Trash2 size={12} />
+                </button>
+                {event.htmlLink && (
+                  <a
+                    href={event.htmlLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={clickEvent => clickEvent.stopPropagation()}
+                    className="rounded-full p-1 text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
+                  >
+                    <ExternalLink size={12} />
+                  </a>
+                )}
+              </div>
+                </button>
+              );
+            })()
+          ))}
+
           {(reviewableStudyBlocks.length > 0 || futureStudyBlocks.length > 0) && (
-            <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3.5">
+            <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h4 className="text-sm font-semibold text-[var(--text-primary)]">Study review</h4>
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">
-                    Mark what actually happened so future study suggestions can become more realistic.
+                  <h4 className="text-xs font-semibold text-[var(--text-primary)]">Study review</h4>
+                  <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
+                    Mark what happened so future suggestions improve.
                   </p>
                 </div>
                 {studyBlockOutcomesLoading && (
@@ -528,6 +649,7 @@ function DayPanel({
                 <div className="mt-3 space-y-2">
                   {reviewableStudyBlocks.map(event => {
                     const currentOutcome = getStudyBlockOutcome(event);
+                    const currentReflection = parseStudyOutcomeReflection(currentOutcome?.notes);
                     return (
                       <div
                         key={`review-${event.id}`}
@@ -556,7 +678,7 @@ function DayPanel({
                               <button
                                 key={option.status}
                                 type="button"
-                                onClick={() => void handleOutcomeClick(event, option.status)}
+                                onClick={() => void handleOutcomeClick(event, option.status, currentReflection)}
                                 disabled={savingOutcomeId === event.id}
                                 className={cn(
                                   'rounded-full border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
@@ -570,6 +692,20 @@ function DayPanel({
                             );
                           })}
                         </div>
+                        {currentOutcome && (
+                          <div className="mt-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">
+                              Session length
+                            </p>
+                            <StudyReflectionPicker
+                              currentReflection={currentReflection}
+                              disabled={savingOutcomeId === event.id}
+                              onPick={reflection => {
+                                void handleOutcomeClick(event, currentOutcome.status, reflection);
+                              }}
+                            />
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -589,301 +725,8 @@ function DayPanel({
               )}
             </div>
           )}
-
-          {dayDeadlines.map(dl => (
-            <div
-              key={dl.id}
-              className="flex items-start gap-3 rounded-lg bg-orange-400/6 p-3"
-            >
-              <div className="mt-0.5 flex h-8 w-1 shrink-0 rounded-full bg-orange-400" />
-              <div className="min-w-0 flex-1">
-                <h4 className="text-sm font-medium text-[var(--text-primary)] truncate">
-                  {dl.title}
-                </h4>
-                <p className="text-xs text-orange-400/80">
-                  {dl.type.charAt(0).toUpperCase() + dl.type.slice(1)} deadline
-                  {dl.dueTime ? ` · ${dl.dueTime}` : ''}
-                </p>
-              </div>
-            </div>
-          ))}
-          {events.map(event => (
-            (() => {
-              const currentOutcome = getStudyBlockOutcome(event);
-              const presentation = getCalendarEventPresentation(event);
-              return (
-                <button
-                  key={getCalendarEventRenderKey(event)}
-                  type="button"
-                  onClick={() => onOpenDetails(event)}
-                  className={cn(
-                    'group flex w-full items-start gap-3 rounded-lg p-3 text-left transition hover:brightness-[1.02]',
-                    presentation.isSuggested ? 'border' : 'bg-[var(--surface-muted)]'
-                  )}
-                  style={presentation.isSuggested ? {
-                    backgroundColor: presentation.surfaceColor,
-                    borderColor: presentation.borderColor,
-                  } : undefined}
-                >
-                  <div
-                    className="mt-1 flex h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: presentation.accentColor }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="truncate text-sm font-medium text-[var(--text-primary)]">
-                        {event.summary || 'Untitled event'}
-                      </h4>
-                      {presentation.badgeLabel && (
-                        <span className="rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">
-                          {presentation.badgeLabel}
-                        </span>
-                      )}
-                      {currentOutcome && <OutcomeBadge status={currentOutcome.status} />}
-                    </div>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">
-                      {getEventTimeLabel(event.start)}
-                    </p>
-                    {presentation.metadata?.deadlineTitle && (
-                      <p className="mt-1 text-[11px] font-medium text-[var(--accent)]">
-                        Linked to {presentation.metadata.deadlineTitle}
-                      </p>
-                    )}
-                    {presentation.description && (
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-[var(--text-faint)]">
-                        {presentation.description}
-                      </p>
-                    )}
-                    {event.location && (
-                      <p className="mt-1 text-xs text-[var(--text-faint)] truncate">{event.location}</p>
-                    )}
-                  </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  onClick={clickEvent => {
-                    clickEvent.stopPropagation();
-                    onEdit(event);
-                  }}
-                  className="rounded-full p-1.5 text-[var(--text-faint)] opacity-100 transition hover:text-[var(--text-primary)] md:opacity-0 md:group-hover:opacity-100"
-                >
-                  <Pencil size={13} />
-                </button>
-                <button
-                  type="button"
-                  onClick={clickEvent => {
-                    clickEvent.stopPropagation();
-                    onDelete(event.id);
-                  }}
-                  disabled={deletingId === event.id}
-                  className="rounded-full p-1.5 text-[var(--text-faint)] opacity-100 transition hover:text-red-400 disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
-                >
-                  <Trash2 size={13} />
-                </button>
-                {event.htmlLink && (
-                  <a
-                    href={event.htmlLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={clickEvent => clickEvent.stopPropagation()}
-                    className="rounded-full p-1.5 text-[var(--text-faint)] transition hover:text-[var(--text-primary)]"
-                  >
-                    <ExternalLink size={13} />
-                  </a>
-                )}
-              </div>
-                </button>
-              );
-            })()
-          ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function CalendarEventDetailModal({
-  event,
-  currentOutcome,
-  isSavingOutcome,
-  onClose,
-  onEdit,
-  onDelete,
-  onSetOutcome,
-}: {
-  event: GoogleCalendarEvent;
-  currentOutcome?: StudyBlockOutcome;
-  isSavingOutcome: boolean;
-  onClose: () => void;
-  onEdit: (event: GoogleCalendarEvent) => void;
-  onDelete: (eventId: string) => void;
-  onSetOutcome: (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => Promise<void>;
-}) {
-  const presentation = getCalendarEventPresentation(event);
-  const eventDateKey = getEventDateKey(event);
-  const isStudyBlock = isStudyBlockLikeCalendarEvent(event);
-  const eventEnded = hasEventEnded(event);
-  const reviewReady = isStudyBlock && eventEnded;
-
-  return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-xl rounded-[26px] border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-[0_24px_80px_rgba(15,23,42,0.18)]"
-        onClick={modalEvent => modalEvent.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--border-soft)] px-6 py-5">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate text-xl font-semibold tracking-tight text-[var(--text-primary)]">
-                {event.summary || 'Untitled event'}
-              </h2>
-              {presentation.badgeLabel && (
-                <span className="rounded-full bg-black/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--text-secondary)]">
-                  {presentation.badgeLabel}
-                </span>
-              )}
-              {currentOutcome && <OutcomeBadge status={currentOutcome.status} />}
-            </div>
-            <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              {getEventStartLabel(event.start)}
-              {event.end?.dateTime ? ` · ${getEventTimeLabel(event.start)} – ${getEventTimeLabel(event.end)}` : ''}
-              {event.calendarSummary ? ` · ${event.calendarSummary}` : ''}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full border border-[var(--border-soft)] p-2 text-[var(--text-faint)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="space-y-4 px-6 py-5">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">Timing</p>
-              <p className="mt-2 text-sm text-[var(--text-primary)]">
-                {getEventStartLabel(event.start)}
-                {event.end?.dateTime ? ` · ${getEventTimeLabel(event.start)} – ${getEventTimeLabel(event.end)}` : ''}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">Context</p>
-              <div className="mt-2 space-y-1.5 text-sm text-[var(--text-primary)]">
-                <p>{presentation.badgeLabel ?? 'Manual or AI-assisted event'}</p>
-                {presentation.metadata?.deadlineTitle ? (
-                  <p className="font-medium text-[var(--accent)]">Linked to {presentation.metadata.deadlineTitle}</p>
-                ) : (
-                  <p className="text-[var(--text-muted)]">No linked deadline</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {event.location && (
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">Location</p>
-              <p className="mt-2 text-sm text-[var(--text-primary)]">{event.location}</p>
-            </div>
-          )}
-
-          {(presentation.metadata?.explanation || presentation.description) && (
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">
-                {presentation.metadata?.explanation ? 'Why this slot' : 'Notes'}
-              </p>
-              <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-                {presentation.metadata?.explanation ?? presentation.description}
-              </p>
-            </div>
-          )}
-
-          {presentation.metadata?.notes && presentation.metadata.explanation && (
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">Notes</p>
-              <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">{presentation.metadata.notes}</p>
-            </div>
-          )}
-
-          {isStudyBlock && (
-            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">Study review</p>
-                  <p className="mt-2 text-sm text-[var(--text-secondary)]">
-                    {reviewReady
-                      ? 'Mark what actually happened so the next plan gets smarter.'
-                      : eventDateKey
-                        ? `This block can be reviewed after it ends${eventDateKey ? ` on ${new Date(`${eventDateKey}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}.`
-                        : 'This block can be reviewed after it ends.'}
-                  </p>
-                </div>
-                {currentOutcome && <OutcomeBadge status={currentOutcome.status} />}
-              </div>
-
-              {reviewReady ? (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {STUDY_OUTCOME_OPTIONS.map(option => {
-                    const selected = currentOutcome?.status === option.status;
-                    return (
-                      <button
-                        key={option.status}
-                        type="button"
-                        onClick={() => void onSetOutcome(event, option.status)}
-                        disabled={isSavingOutcome}
-                        className={cn(
-                          'rounded-full border px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60',
-                          selected
-                            ? getOutcomeTone(option.status)
-                            : 'border-[var(--border-soft)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]',
-                        )}
-                      >
-                        {isSavingOutcome && selected ? 'Saving…' : option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              {currentOutcome && (
-                <p className="mt-3 text-xs leading-5 text-[var(--text-faint)]">
-                  {getOutcomeDescription(currentOutcome.status)}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border-soft)] px-6 py-4">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onEdit(event)}
-              className="rounded-xl border border-[var(--border-soft)] px-3.5 py-2 text-sm font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => onDelete(event.id)}
-              className="rounded-xl border border-red-500/20 px-3.5 py-2 text-sm font-medium text-red-400 transition hover:border-red-500/40"
-            >
-              Delete
-            </button>
-          </div>
-          {event.htmlLink && (
-            <a
-              href={event.htmlLink}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-xl px-3.5 py-2 text-sm font-medium text-[var(--accent)] transition hover:bg-[var(--accent-soft)]"
-            >
-              Open in Google Calendar
-            </a>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
@@ -895,12 +738,13 @@ function WeekCalendarGrid({
   selectedDate,
   draftPreview,
   headerLabel,
+  getStudyBlockOutcome: _getStudyBlockOutcome,
   onPrevWeek,
   onNextWeek,
   onToday,
   onSelectDate,
   onOpenEventDetails,
-  onEditEvent,
+  onEditEvent: _onEditEvent,
   onCreateEventAt,
 }: {
   weekStart: Date;
@@ -909,11 +753,12 @@ function WeekCalendarGrid({
   selectedDate: string;
   draftPreview: { dateKey: string; startMinutes: number; endMinutes: number } | null;
   headerLabel: string;
+  getStudyBlockOutcome: (event: GoogleCalendarEvent) => StudyBlockOutcome | undefined;
   onPrevWeek: () => void;
   onNextWeek: () => void;
   onToday: () => void;
   onSelectDate: (date: string) => void;
-  onOpenEventDetails: (event: GoogleCalendarEvent) => void;
+  onOpenEventDetails: (event: GoogleCalendarEvent, anchorRect?: { top: number; left: number; width: number; height: number }) => void;
   onEditEvent: (event: GoogleCalendarEvent, anchorRect?: { top: number; left: number; width: number; height: number }) => void;
   onCreateEventAt: (
     date: string,
@@ -925,7 +770,7 @@ function WeekCalendarGrid({
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const weekStartHour = 0;
   const hourRows = Array.from({ length: 24 }, (_, index) => weekStartHour + index);
-  const rowHeight = 40;
+  const rowHeight = 46;
   const todayKey = formatDateKey(new Date());
   const [nowMinutes, setNowMinutes] = useState(() => {
     const n = new Date();
@@ -1075,8 +920,13 @@ function WeekCalendarGrid({
       </div>
 
       <div className="grid grid-cols-[72px_repeat(7,minmax(0,1fr))] border-b border-[var(--border-soft)]">
-        <div className="border-r border-[var(--border-soft)] bg-[var(--surface)] px-3 py-4 text-[11px] font-medium text-[var(--text-faint)]">
-          GMT-04
+        <div className="flex items-end border-r border-[var(--border-soft)] bg-[var(--surface)] px-2 py-3 text-[9px] font-medium text-[var(--text-faint)]">
+          {(() => {
+            const offset = -new Date().getTimezoneOffset();
+            const sign = offset >= 0 ? '+' : '-';
+            const hours = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0');
+            return `GMT${sign}${hours}`;
+          })()}
         </div>
         {days.map(day => {
           const key = formatDateKey(day);
@@ -1096,11 +946,11 @@ function WeekCalendarGrid({
               <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-faint)]">
                 {day.toLocaleDateString('en-US', { weekday: 'short' })}
               </div>
-              <div className="mt-1 flex items-center gap-2">
+              <div className="mt-1.5 flex items-center gap-2">
                 <span
                   className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold',
-                    isToday ? 'bg-[var(--accent)] text-[var(--accent-contrast)]' : 'text-[var(--text-primary)]'
+                    'flex h-9 w-9 items-center justify-center rounded-full text-[15px] font-semibold transition-colors',
+                    isToday ? 'bg-[var(--accent)] text-[var(--accent-contrast)] shadow-sm' : 'text-[var(--text-primary)]'
                   )}
                 >
                   {day.getDate()}
@@ -1168,8 +1018,8 @@ function WeekCalendarGrid({
         <div className="grid grid-cols-[72px_repeat(7,minmax(0,1fr))]">
           <div className="border-r border-[var(--border-soft)]">
             {hourRows.map(hour => (
-              <div key={hour} className="relative border-b border-[var(--border-soft)] px-2 text-[11px] text-[var(--text-faint)]" style={{ height: `${rowHeight}px` }}>
-                <span className="absolute -top-2 right-2 bg-[var(--surface)] px-1">
+              <div key={hour} className="relative border-b border-[var(--border-soft)]" style={{ height: `${rowHeight}px` }}>
+                <span className="absolute -top-[7px] right-2 bg-[var(--surface)] px-1 text-[10px] font-medium tabular-nums text-[var(--text-faint)]">
                   {new Date(2026, 0, 1, hour).toLocaleTimeString('en-US', { hour: 'numeric' })}
                 </span>
               </div>
@@ -1301,9 +1151,9 @@ function WeekCalendarGrid({
                   // Percentage-based left/width with a small gap between columns
                   const colWidthPct = 100 / totalColumns;
                   const leftPct = column * colWidthPct;
-                  // Small padding: 6px on the outer edges, 2px between columns
-                  const paddingLeft = column === 0 ? 6 : 2;
-                  const paddingRight = column === totalColumns - 1 ? 6 : 2;
+                  // Padding: 6px outer edges, 3px between columns for more breathing room
+                  const paddingLeft = column === 0 ? 6 : 3;
+                  const paddingRight = column === totalColumns - 1 ? 6 : 3;
 
                   return (
                     <button
@@ -1311,9 +1161,9 @@ function WeekCalendarGrid({
                       type="button"
                       onClick={e => {
                         onSelectDate(key);
-                        onOpenEventDetails(event);
+                        onOpenEventDetails(event, e.currentTarget.getBoundingClientRect());
                       }}
-                      className="absolute overflow-hidden rounded-lg px-2 py-1 text-left shadow-sm"
+                      className="absolute overflow-hidden rounded-lg px-2.5 py-1.5 text-left transition-[filter,box-shadow] duration-150 hover:brightness-[0.97] hover:shadow-md"
                       style={{
                         top: `${top}px`,
                         height: `${height}px`,
@@ -1327,21 +1177,18 @@ function WeekCalendarGrid({
                         zIndex: column + 1,
                       }}
                     >
-                      {presentation.badgeLabel && height >= 42 && (
-                        <div className="mb-0.5 text-[8px] font-semibold uppercase tracking-[0.1em] text-[var(--text-secondary)]">
+                      {presentation.badgeLabel && height >= 48 && (
+                        <div className="mb-0.5 w-fit rounded bg-black/5 px-1 py-px text-[7px] font-bold uppercase tracking-[0.12em] text-[var(--text-faint)]">
                           {presentation.badgeLabel}
                         </div>
                       )}
-                      <div className="text-[10px] font-semibold leading-tight text-[var(--text-primary)]">
+                      <div className="truncate text-[11px] font-semibold leading-snug text-[var(--text-primary)]">
                         {event.summary || 'Untitled event'}
                       </div>
-                      <div className="text-[10px] leading-tight text-[var(--text-muted)]">
-                        {getEventTimeLabel(event.start)}
-                        {event.end?.dateTime ? ` - ${getEventTimeLabel(event.end)}` : ''}
-                      </div>
-                      {presentation.metadata?.deadlineTitle && height >= 68 && (
-                        <div className="mt-0.5 truncate text-[9px] leading-tight text-[var(--accent)]">
-                          {presentation.metadata.deadlineTitle}
+                      {height >= 36 && (
+                        <div className="truncate text-[10px] leading-snug text-[var(--text-muted)]">
+                          {getEventTimeLabel(event.start)}
+                          {event.end?.dateTime ? ` - ${getEventTimeLabel(event.end)}` : ''}
                         </div>
                       )}
                     </button>
@@ -1354,8 +1201,8 @@ function WeekCalendarGrid({
                     className="pointer-events-none absolute left-0 right-0 z-30"
                     style={{ top: `${((nowMinutes - weekStartHour * 60) / 60) * rowHeight}px` }}
                   >
-                    <div className="absolute -left-[5px] -top-[5px] h-[10px] w-[10px] rounded-full bg-red-500" />
-                    <div className="absolute left-0 right-0 top-0 h-[2px] bg-red-500" />
+                    <div className="absolute -left-[4px] -top-[4px] h-[8px] w-[8px] rounded-full bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.45)]" />
+                    <div className="absolute left-0 right-0 top-0 h-[1.5px] bg-red-500/90" />
                   </div>
                 )}
               </div>
@@ -1383,14 +1230,12 @@ export function CalendarView({
   );
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<GoogleCalendarEvent | null>(null);
-  const [detailEvent, setDetailEvent] = useState<GoogleCalendarEvent | null>(null);
   const [createDate, setCreateDate] = useState<string | undefined>(undefined);
   const [createStartTime, setCreateStartTime] = useState<string | undefined>(undefined);
   const [createEndTime, setCreateEndTime] = useState<string | undefined>(undefined);
   const [createAnchorRect, setCreateAnchorRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const [weekDraftPreview, setWeekDraftPreview] = useState<{ dateKey: string; startMinutes: number; endMinutes: number } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [savingDetailOutcomeId, setSavingDetailOutcomeId] = useState<string | null>(null);
   const [showCalendarList, setShowCalendarList] = useState(true);
 
   const now = new Date();
@@ -1538,9 +1383,6 @@ export function CalendarView({
   };
 
   const handleDelete = async (eventId: string) => {
-    if (detailEvent?.id === eventId) {
-      setDetailEvent(null);
-    }
     setDeletingId(eventId);
     await calendar.deleteEvent(eventId);
     setDeletingId(null);
@@ -1550,7 +1392,6 @@ export function CalendarView({
     event: GoogleCalendarEvent,
     anchorRect?: { top: number; left: number; width: number; height: number },
   ) => {
-    setDetailEvent(null);
     setEditingEvent(event);
     setCreateDate(undefined);
     setCreateStartTime(undefined);
@@ -1584,14 +1425,11 @@ export function CalendarView({
       }))
   ), [deadlines]);
 
-  const handleOpenEventDetails = (event: GoogleCalendarEvent) => {
-    setDetailEvent(event);
-  };
-
-  const handleDetailOutcome = async (event: GoogleCalendarEvent, status: StudyBlockOutcomeStatus) => {
-    setSavingDetailOutcomeId(event.id);
-    await onSetStudyBlockOutcome(event, status);
-    setSavingDetailOutcomeId(current => (current === event.id ? null : current));
+  const handleOpenEventDetails = (
+    event: GoogleCalendarEvent,
+    anchorRect?: { top: number; left: number; width: number; height: number },
+  ) => {
+    handleEditEvent(event, anchorRect);
   };
 
   return (
@@ -1778,6 +1616,7 @@ export function CalendarView({
               selectedDate={selectedDate}
               draftPreview={weekDraftPreview}
               headerLabel={formatWeekRangeLabel(weekStart)}
+              getStudyBlockOutcome={getStudyBlockOutcome}
               onPrevWeek={() => setViewDate(formatDateKey(addDays(viewAnchor, -7)))}
               onNextWeek={() => setViewDate(formatDateKey(addDays(viewAnchor, 7)))}
               onToday={handleToday}
@@ -1854,12 +1693,11 @@ export function CalendarView({
                     <div className="mt-3 space-y-3">
                       {events.map(event => (
                         (() => {
-                          const currentOutcome = getStudyBlockOutcome(event);
                           const presentation = getCalendarEventPresentation(event);
                           return (
                             <article
                               key={getCalendarEventRenderKey(event)}
-                              onClick={() => handleOpenEventDetails(event)}
+                              onClick={clickEvent => handleOpenEventDetails(event, clickEvent.currentTarget.getBoundingClientRect())}
                               className={cn(
                                 'group cursor-pointer rounded-lg p-4 transition hover:brightness-[1.02]',
                                 presentation.isSuggested ? 'border' : 'bg-[var(--surface-muted)]'
@@ -1880,16 +1718,10 @@ export function CalendarView({
                                         {presentation.badgeLabel}
                                       </span>
                                     )}
-                                    {currentOutcome && <OutcomeBadge status={currentOutcome.status} />}
                                   </div>
                                   <p className="mt-1 text-sm text-[var(--text-secondary)]">
                                     {getEventStartLabel(event.start)}
                                   </p>
-                                  {presentation.metadata?.deadlineTitle && (
-                                    <p className="mt-2 text-xs font-medium text-[var(--accent)]">
-                                      Linked to {presentation.metadata.deadlineTitle}
-                                    </p>
-                                  )}
                                   <p className="mt-2 text-xs text-[var(--text-faint)]">
                                     {event.location
                                       ? event.location
@@ -1982,26 +1814,15 @@ export function CalendarView({
           initialAllDay={Boolean(editingEvent?.start?.date && !editingEvent?.start?.dateTime)}
           deadlineOptions={deadlineOptions}
           initialLinkedDeadlineId={editingEvent ? parseAcademicPlanMetadata(editingEvent.description)?.deadlineId ?? null : null}
+          initialLinkedDeadlineLabel={editingEvent ? parseAcademicPlanMetadata(editingEvent.description)?.deadlineTitle ?? null : null}
           initialMetadataOrigin={editingEvent ? parseAcademicPlanMetadata(editingEvent.description)?.origin ?? null : null}
           calendars={calendar.calendars}
           initialCalendarId={editingEvent?.calendarId || calendar.selectedCalendarId}
-          compact={viewMode === 'week'}
+          compact={viewMode === 'week' || Boolean(editingEvent)}
           anchorRect={createAnchorRect}
           mode={editingEvent ? 'edit' : 'create'}
           onSave={handleSaveEvent}
           onClose={handleCloseCreateModal}
-        />
-      )}
-
-      {detailEvent && (
-        <CalendarEventDetailModal
-          event={detailEvent}
-          currentOutcome={getStudyBlockOutcome(detailEvent)}
-          isSavingOutcome={savingDetailOutcomeId === detailEvent.id}
-          onClose={() => setDetailEvent(null)}
-          onEdit={handleEditEvent}
-          onDelete={handleDelete}
-          onSetOutcome={handleDetailOutcome}
         />
       )}
     </div>

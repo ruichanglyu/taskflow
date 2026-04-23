@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Plus, Trash2, Search, Filter, Pencil, MessageSquare, Target } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Plus, Trash2, Search, Filter, Pencil, MessageSquare, Target, Timer, Play, Pause, RotateCcw, CheckCircle2, Coffee } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Task, Project, Deadline, TaskStatus, Priority, Recurrence } from '../types';
 import { cn } from '../utils/cn';
@@ -34,6 +34,237 @@ const priorityBadge = (p: Priority) => {
   if (p === 'medium') return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
   return 'bg-[var(--surface-muted)] text-[var(--text-faint)] border-[var(--border-soft)]';
 };
+
+const focusTimerPresets = [
+  { id: 'quick', label: 'Quick push', helper: 'Short task sprint', minutes: 15 },
+  { id: 'focus', label: 'Focus block', helper: 'Default work session', minutes: 35 },
+  { id: 'deep', label: 'Deep block', helper: 'Harder work', minutes: 50 },
+  { id: 'reset', label: 'Reset break', helper: 'Step away', minutes: 7 },
+] as const;
+
+type FocusTimerPresetId = typeof focusTimerPresets[number]['id'];
+
+function formatTimer(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+function FocusTimerCard({
+  tasks,
+  projects,
+  onUpdateStatus,
+}: {
+  tasks: Task[];
+  projects: Project[];
+  onUpdateStatus: (id: string, status: TaskStatus) => void;
+}) {
+  const actionableTasks = useMemo(
+    () => tasks
+      .filter(task => task.status !== 'done')
+      .sort((a, b) => {
+        if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+        if (a.dueDate && !b.dueDate) return -1;
+        if (!a.dueDate && b.dueDate) return 1;
+        const priorityRank: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
+        return priorityRank[a.priority] - priorityRank[b.priority];
+      }),
+    [tasks],
+  );
+  const [presetId, setPresetId] = useState<FocusTimerPresetId>('focus');
+  const selectedPreset = focusTimerPresets.find(preset => preset.id === presetId) ?? focusTimerPresets[1];
+  const [secondsLeft, setSecondsLeft] = useState(selectedPreset.minutes * 60);
+  const [isRunning, setIsRunning] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState(actionableTasks[0]?.id ?? '');
+  const [completedBlocks, setCompletedBlocks] = useState(0);
+
+  const selectedTask = actionableTasks.find(task => task.id === selectedTaskId) ?? null;
+  const selectedProject = selectedTask ? projects.find(project => project.id === selectedTask.projectId) : null;
+  const totalSeconds = selectedPreset.minutes * 60;
+  const progress = totalSeconds > 0 ? Math.max(0, Math.min(1, 1 - secondsLeft / totalSeconds)) : 0;
+  const circumference = 2 * Math.PI * 44;
+
+  useEffect(() => {
+    if (selectedTaskId && actionableTasks.some(task => task.id === selectedTaskId)) return;
+    setSelectedTaskId(actionableTasks[0]?.id ?? '');
+  }, [actionableTasks, selectedTaskId]);
+
+  useEffect(() => {
+    if (!isRunning) return;
+    const interval = window.setInterval(() => {
+      setSecondsLeft(current => {
+        if (current <= 1) {
+          window.clearInterval(interval);
+          setIsRunning(false);
+          setCompletedBlocks(count => count + 1);
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [isRunning]);
+
+  const handlePresetChange = (nextPresetId: FocusTimerPresetId) => {
+    setPresetId(nextPresetId);
+    setIsRunning(false);
+    const nextPreset = focusTimerPresets.find(preset => preset.id === nextPresetId) ?? focusTimerPresets[1];
+    setSecondsLeft(nextPreset.minutes * 60);
+  };
+
+  const handleStartPause = () => {
+    if (!isRunning && presetId !== 'reset' && selectedTask && selectedTask.status === 'todo') {
+      onUpdateStatus(selectedTask.id, 'in-progress');
+    }
+    setIsRunning(running => !running);
+  };
+
+  const handleReset = () => {
+    setIsRunning(false);
+    setSecondsLeft(totalSeconds);
+  };
+
+  return (
+    <section className="overflow-hidden rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] shadow-sm">
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="relative overflow-hidden p-5">
+          <div className="pointer-events-none absolute right-8 top-5 h-32 w-32 rounded-full bg-[var(--accent-soft)]/30 blur-3xl" />
+          <div className="relative flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[var(--accent)]">
+                <Timer size={18} />
+                <span className="text-xs font-semibold uppercase tracking-[0.18em]">Focus timer</span>
+              </div>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight text-[var(--text-primary)]">
+                Turn one task into a focused work block.
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
+                Pick what you are working on, choose a session length, and TaskFlow will move the task into progress when you start.
+              </p>
+            </div>
+
+            <div className="relative flex shrink-0 items-center justify-center">
+              <svg className="h-32 w-32 -rotate-90" viewBox="0 0 104 104" aria-hidden="true">
+                <circle cx="52" cy="52" r="44" fill="none" stroke="var(--border-soft)" strokeWidth="9" />
+                <circle
+                  cx="52"
+                  cy="52"
+                  r="44"
+                  fill="none"
+                  stroke="var(--accent)"
+                  strokeWidth="9"
+                  strokeLinecap="round"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={circumference * (1 - progress)}
+                  className="transition-[stroke-dashoffset] duration-500"
+                />
+              </svg>
+              <div className="absolute text-center">
+                <div className="text-2xl font-semibold tabular-nums text-[var(--text-primary)]">{formatTimer(secondsLeft)}</div>
+                <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--text-faint)]">
+                  {isRunning ? 'in focus' : secondsLeft === 0 ? 'complete' : 'ready'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {focusTimerPresets.map(preset => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => handlePresetChange(preset.id)}
+                className={cn(
+                  'rounded-xl border px-3 py-3 text-left transition',
+                  presetId === preset.id
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                    : 'border-[var(--border-soft)] bg-[var(--surface-muted)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]',
+                )}
+              >
+                <div className="text-sm font-semibold">{preset.label}</div>
+                <div className="mt-1 flex items-center justify-between text-xs text-[var(--text-faint)]">
+                  <span>{preset.helper}</span>
+                  <span>{preset.minutes}m</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-[var(--border-soft)] bg-[var(--surface-muted)]/70 p-5 lg:border-l lg:border-t-0">
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-faint)]">
+            Work on
+          </label>
+          <select
+            value={selectedTaskId}
+            onChange={event => setSelectedTaskId(event.target.value)}
+            disabled={actionableTasks.length === 0}
+            className="w-full cursor-pointer appearance-none rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {actionableTasks.length === 0 ? (
+              <option value="">No open tasks yet</option>
+            ) : (
+              actionableTasks.map(task => (
+                <option key={task.id} value={task.id}>{task.title}</option>
+              ))
+            )}
+          </select>
+
+          <div className="mt-4 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
+            {selectedTask ? (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{selectedTask.title}</p>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      {selectedProject ? selectedProject.name : 'No course'} · {selectedTask.priority} priority
+                    </p>
+                  </div>
+                  {selectedTask.status === 'in-progress' ? (
+                    <span className="rounded-full bg-blue-400/10 px-2 py-0.5 text-[10px] font-medium text-blue-400">In progress</span>
+                  ) : (
+                    <span className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-faint)]">Ready</span>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                <Coffee size={15} />
+                Add a task first, then use this as your focus anchor.
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={handleStartPause}
+              disabled={actionableTasks.length === 0 || secondsLeft === 0}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--accent-strong)] px-4 py-3 text-sm font-medium text-[var(--accent-contrast)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isRunning ? <Pause size={15} /> : <Play size={15} />}
+              {isRunning ? 'Pause' : 'Start'}
+            </button>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="flex items-center justify-center rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-sm font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+              title="Reset timer"
+            >
+              <RotateCcw size={15} />
+            </button>
+          </div>
+
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-400/15 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-300">
+            <CheckCircle2 size={14} />
+            <span>{completedBlocks} focus block{completedBlocks === 1 ? '' : 's'} completed this session</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function TaskCard({
   task,
@@ -186,6 +417,12 @@ export function TaskBoard({ tasks, projects, deadlines = [], initialProjectFilte
           </div>
         </div>
       </div>
+
+      <FocusTimerCard
+        tasks={filteredTasks}
+        projects={projects}
+        onUpdateStatus={onUpdateStatus}
+      />
 
       {/* Filters */}
       <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-4 sm:p-5">

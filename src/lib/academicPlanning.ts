@@ -782,9 +782,21 @@ export function buildAcademicPlanProposal(params: {
         const daysBeforeDue = Math.max(daysBetween(dateKey, context.deadline.dueDate), 0);
         const spacingTarget = Math.max(0, planningDays.length - Math.round(((sessionIndex + 1) / (durations.length + 1)) * planningDays.length));
         const spacingPenalty = Math.abs(daysBeforeDue - spacingTarget) * 0.04;
-        const sameDayPenalty = blocks.filter(block => block.dateKey === dateKey).length * 0.35;
+        const blocksOnSameDay = blocks.filter(block => block.dateKey === dateKey);
+        const sameDayPenalty = blocksOnSameDay.length * 0.45;
+        const plannedMinutesOnDay = blocksOnSameDay.reduce(
+          (total, block) => total + (block.endMinutes - block.startMinutes),
+          0,
+        );
+        const heavyDayPenalty = plannedMinutesOnDay >= 240
+          ? 1.1
+          : plannedMinutesOnDay >= 180
+            ? 0.65
+            : plannedMinutesOnDay >= 120
+              ? 0.25
+              : 0;
         const adjustedScore = slot.candidates[0]?.score ?? 0;
-        const combinedScore = adjustedScore - spacingPenalty - sameDayPenalty;
+        const combinedScore = adjustedScore - spacingPenalty - sameDayPenalty - heavyDayPenalty;
 
         if (!bestChoice || combinedScore > bestChoice.score) {
           bestChoice = {

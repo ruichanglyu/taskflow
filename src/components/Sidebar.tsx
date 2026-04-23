@@ -72,6 +72,7 @@ export function Sidebar({
             <button
               key={item.view}
               onClick={() => { onViewChange(item.view); onClose(); }}
+              data-walkthrough={`nav-${item.view}`}
               className={cn(
                 'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                 currentView === item.view
@@ -165,6 +166,7 @@ export function Sidebar({
             <button
               key={item.view}
               onClick={() => onViewChange(item.view)}
+              data-walkthrough={`nav-${item.view}`}
               className={cn(
                 'group relative rounded-lg transition-colors',
                 desktopCollapsed ? 'flex h-10 w-10 items-center justify-center' : 'flex h-10 w-full items-center gap-3 px-3',

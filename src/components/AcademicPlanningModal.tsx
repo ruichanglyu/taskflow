@@ -102,6 +102,7 @@ export function AcademicPlanningModal({
   return (
     <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div
+        data-walkthrough-modal="academic-planner"
         className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-[0_30px_80px_rgba(15,23,42,0.18)]"
         onClick={event => event.stopPropagation()}
       >

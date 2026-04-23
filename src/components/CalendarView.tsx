@@ -1487,6 +1487,7 @@ export function CalendarView({
               <button
                 type="button"
                 onClick={() => { setCreateDate(undefined); setShowCreateModal(true); }}
+                data-walkthrough="calendar-new"
                 className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)]"
                
               >

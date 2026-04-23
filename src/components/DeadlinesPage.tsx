@@ -13,6 +13,7 @@ interface DeadlinesPageProps {
   calendarEvents: GoogleCalendarEvent[];
   initialCourseFilter?: string | null;
   initialDetailId?: string | null;
+  initialImportOpen?: boolean;
   onAdd: (title: string, projectId: string | null, type: DeadlineType, dueDate: string, dueTime: string | null, notes: string, status?: DeadlineStatus, source?: { sourceType: Deadline['sourceType']; sourceId: string; sourceUrl?: string }) => Promise<boolean>;
   onAddProject: (name: string, description: string) => Promise<string | null> | void;
   onUpdate: (id: string, updates: Partial<Pick<Deadline, 'title' | 'projectId' | 'status' | 'type' | 'dueDate' | 'dueTime' | 'notes'>>) => Promise<boolean>;
@@ -117,6 +118,10 @@ function getImportRowReviewIssues(row: ParsedImportRow) {
 
 function hasImportRowBlockingIssue(row: ParsedImportRow) {
   return !row.title.trim() || !isImportDateValue(row.dueDate) || !isImportTimeValue(row.dueTime);
+}
+
+function buildImportRowSignature(row: ParsedImportRow) {
+  return buildDeadlineSignature(row.course, row.title, row.dueDate, row.dueTime);
 }
 
 function getDeadlineSourceMeta(sourceType: Deadline['sourceType']) {
@@ -363,6 +368,7 @@ export function DeadlinesPage({
   calendarEvents,
   initialCourseFilter = null,
   initialDetailId = null,
+  initialImportOpen = false,
   onAdd,
   onAddProject,
   onUpdate,
@@ -417,6 +423,22 @@ export function DeadlinesPage({
   useEffect(() => {
     setDetailId(initialDetailId);
   }, [initialDetailId]);
+
+  useEffect(() => {
+    if (initialImportOpen) {
+      setShowImportModal(true);
+    }
+  }, [initialImportOpen]);
+
+  useEffect(() => {
+    const handleCloseWalkthroughOverlays = () => {
+      setShowAddModal(false);
+      setShowImportModal(false);
+    };
+
+    window.addEventListener('taskflow:close-deadlines-overlays', handleCloseWalkthroughOverlays);
+    return () => window.removeEventListener('taskflow:close-deadlines-overlays', handleCloseWalkthroughOverlays);
+  }, []);
 
   const filtered = useMemo(() => {
     let result = [...deadlines];
@@ -534,6 +556,7 @@ export function DeadlinesPage({
     let skippedDuplicates = 0;
     let createdPrepTasks = 0;
     const importedSignatures: string[] = [];
+    const importedPreviewSignatures = new Set<string>();
 
     for (const row of preview.rows) {
       if (hasImportRowBlockingIssue(row)) {
@@ -559,8 +582,8 @@ export function DeadlinesPage({
         }
       }
 
-      const signature = buildDeadlineSignature(row.course, row.title, row.dueDate, row.dueTime);
-      if (existingSignatures.has(signature)) {
+      const signature = buildImportRowSignature(row);
+      if (existingSignatures.has(signature) || importedPreviewSignatures.has(signature)) {
         skippedDuplicates++;
         continue;
       }
@@ -582,6 +605,7 @@ export function DeadlinesPage({
       );
       if (ok) {
         importedCount++;
+        importedPreviewSignatures.add(signature);
         existingSignatures.add(signature);
         importedSignatures.push(signature);
         if (row.prepTaskTitle?.trim()) {
@@ -599,7 +623,7 @@ export function DeadlinesPage({
     if (skippedDuplicates > 0) parts.push(`skipped ${skippedDuplicates} duplicates`);
     if (preview.skippedRows.length > 0) parts.push(`ignored ${preview.skippedRows.length} invalid rows`);
 
-    setImportStatus(importedCount > 0 ? 'success' : 'error');
+    setImportStatus(importedCount > 0 || skippedDuplicates > 0 ? 'success' : 'error');
     setImportMessage(parts.join(' • '));
     setPendingImportedSignatures(importedSignatures);
     return {
@@ -646,6 +670,7 @@ export function DeadlinesPage({
             <button
               type="button"
               onClick={() => setShowImportModal(true)}
+              data-walkthrough="deadlines-import"
               className="flex h-10 items-center gap-1.5 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] px-3 text-xs font-medium text-[var(--text-secondary)] shadow-sm transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
             >
               <Upload size={14} />
@@ -672,6 +697,7 @@ export function DeadlinesPage({
             <button
               type="button"
               onClick={() => setShowAddModal(true)}
+              data-walkthrough="deadlines-add"
               className="flex h-10 items-center gap-1.5 rounded-lg px-4 text-xs font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] shadow-sm"
              
             >
@@ -1551,11 +1577,18 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
     );
   }, [existingDeadlines, existingProjects]);
 
-  const duplicateCount = useMemo(() => {
-    if (!preview) return 0;
-    return preview.rows.filter(row =>
-      existingSignatures.has(buildDeadlineSignature(row.course, row.title, row.dueDate, row.dueTime))
-    ).length;
+  const duplicateRowIndexes = useMemo(() => {
+    if (!preview) return new Set<number>();
+    const seenInBatch = new Set<string>();
+    const duplicates = new Set<number>();
+    preview.rows.forEach((row, index) => {
+      const signature = buildImportRowSignature(row);
+      if (existingSignatures.has(signature) || seenInBatch.has(signature)) {
+        duplicates.add(index);
+      }
+      seenInBatch.add(signature);
+    });
+    return duplicates;
   }, [existingSignatures, preview]);
 
   const rowReviewSummaries = useMemo(() => {
@@ -1571,6 +1604,13 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
   const blockingIssueCount = useMemo(
     () => preview ? preview.rows.filter(row => hasImportRowBlockingIssue(row)).length : 0,
     [preview],
+  );
+
+  const importableRowCount = useMemo(
+    () => preview
+      ? preview.rows.filter((row, index) => !hasImportRowBlockingIssue(row) && !duplicateRowIndexes.has(index)).length
+      : 0,
+    [duplicateRowIndexes, preview],
   );
 
   const resetImportPreview = () => {
@@ -1767,7 +1807,7 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
-      <div className="relative flex max-h-[min(92vh,980px)] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm" onClick={e => e.stopPropagation()}>
+      <div data-walkthrough-modal="deadline-import" className="relative flex max-h-[min(92vh,980px)] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-primary)]">Import deadlines</h2>
@@ -1946,7 +1986,7 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
                   <div className="mt-1 truncate text-sm font-medium text-[var(--text-primary)]">{preview.fileName}</div>
                 </div>
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-                  <div className="text-xs text-[var(--text-faint)]">Rows ready</div>
+                  <div className="text-xs text-[var(--text-faint)]">Rows parsed</div>
                   <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{preview.rows.length}</div>
                 </div>
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
@@ -1955,7 +1995,7 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
                 </div>
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
                   <div className="text-xs text-[var(--text-faint)]">Will be skipped</div>
-                  <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{duplicateCount + preview.skippedRows.length}</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{duplicateRowIndexes.size + preview.skippedRows.length}</div>
                 </div>
               </div>
 
@@ -1963,12 +2003,12 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
                   <div className="text-xs text-[var(--text-faint)]">Ready to import</div>
                   <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">
-                    {Math.max(preview.rows.length - rowsNeedingReviewCount, 0)} clean row{preview.rows.length - rowsNeedingReviewCount === 1 ? '' : 's'}
+                    {importableRowCount} row{importableRowCount === 1 ? '' : 's'}
                   </div>
                 </div>
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
-                  <div className="text-xs text-[var(--text-faint)]">Duplicates already in app</div>
-                  <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{duplicateCount}</div>
+                  <div className="text-xs text-[var(--text-faint)]">Duplicate rows</div>
+                  <div className="mt-1 text-sm font-medium text-[var(--text-primary)]">{duplicateRowIndexes.size}</div>
                 </div>
                 <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3">
                   <div className="text-xs text-[var(--text-faint)]">Skipped by parser</div>
@@ -2004,7 +2044,7 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
                       {preview.rows.map((row, index) => {
                         const issues = rowReviewSummaries[index] ?? [];
                         const hasIssues = issues.length > 0;
-                        const isDuplicate = existingSignatures.has(buildDeadlineSignature(row.course, row.title, row.dueDate, row.dueTime));
+                        const isDuplicate = duplicateRowIndexes.has(index);
                         return (
                           <tr
                             key={`${row.title}-${index}`}
@@ -2023,7 +2063,7 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
                                 <div className="mt-1 text-[11px] text-amber-900/80">{issues.join(' • ')}</div>
                               )}
                               {isDuplicate && !hasIssues && (
-                                <div className="mt-1 text-[11px] text-[var(--text-faint)]">Matches an existing deadline</div>
+                                <div className="mt-1 text-[11px] text-[var(--text-faint)]">Duplicate of an existing or already-imported row</div>
                               )}
                             </td>
                             <td className="px-3 py-2 align-top text-[var(--text-faint)] uppercase">{row.type}</td>
@@ -2089,11 +2129,11 @@ function ImportDeadlinesModal({ userId, existingDeadlines, existingProjects, onI
           <button
             type="button"
             onClick={() => void handleImport()}
-            disabled={!preview || isImporting}
+            disabled={!preview || isImporting || importableRowCount === 0}
             className="flex-1 rounded-lg py-2.5 text-sm font-medium bg-[var(--accent-strong)] text-[var(--accent-contrast)] transition disabled:cursor-not-allowed disabled:opacity-40"
            
           >
-            {isImporting ? 'Importing...' : 'Import Deadlines'}
+            {isImporting ? 'Importing...' : importableRowCount > 0 ? `Import ${importableRowCount} deadline${importableRowCount === 1 ? '' : 's'}` : 'Nothing ready to import'}
           </button>
         </div>
 
@@ -2220,7 +2260,7 @@ function AddDeadlineModal({ projects, onAdd, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm" onClick={e => e.stopPropagation()}>
+      <div data-walkthrough-modal="deadline-add" className="w-full max-w-md rounded-xl border border-[var(--border-soft)] bg-[var(--surface-elevated)] shadow-sm" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-5 py-4">
           <h2 className="text-lg font-semibold text-[var(--text-primary)]">New Deadline</h2>
           <button onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-primary)]"><X size={18} /></button>

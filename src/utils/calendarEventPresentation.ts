@@ -39,7 +39,7 @@ export function getCalendarEventPresentation(event: GoogleCalendarEvent) {
     isLinked,
     isSuggested,
     originLabel,
-    badgeLabel: isSuggested ? 'AI suggested' : null,
+    badgeLabel: null,
     description,
     surfaceColor: isSuggested ? withAlpha(accentColor, '40') : withAlpha(accentColor, '28'),
     mutedSurfaceColor: isSuggested ? withAlpha(accentColor, '2a') : 'transparent',

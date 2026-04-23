@@ -203,12 +203,7 @@ function mapTask(row: TaskRow, subtasks: Subtask[] = [], comments: TaskComment[]
 }
 
 function getStoredSnapshot<T>(baseKey: string, userId: string): T | null {
-  const userScoped = loadFromStorage<T | null>(getStorageKey(baseKey, userId), null);
-  if (userScoped !== null) {
-    return userScoped;
-  }
-
-  return loadFromStorage<T | null>(baseKey, null);
+  return loadFromStorage<T | null>(getStorageKey(baseKey, userId), null);
 }
 
 async function loadUserScopedRows<Row>(
@@ -241,25 +236,6 @@ async function loadUserScopedRows<Row>(
   console.warn(`Falling back to RLS-scoped ${table} load without explicit user_id filter.`, filtered.error);
   return { data: (fallback.data ?? []) as Row[], error: null };
 }
-
-// Seed data
-const seedProjects: Project[] = [
-  { id: 'p1', name: 'Website Redesign', description: 'Revamp the company website with modern design', color: '#6366f1', createdAt: new Date(Date.now() - 7 * 86400000).toISOString(), canvasCourseId: null },
-  { id: 'p2', name: 'Mobile App', description: 'Build the React Native mobile application', color: '#ec4899', createdAt: new Date(Date.now() - 14 * 86400000).toISOString(), canvasCourseId: null },
-  { id: 'p3', name: 'API Integration', description: 'Integrate third-party APIs and services', color: '#10b981', createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), canvasCourseId: null },
-];
-
-const seedTasks: Task[] = [
-  { id: 't1', title: 'Design homepage mockup', description: 'Create wireframes and high-fidelity mockups for the new homepage', status: 'done', priority: 'high', projectId: 'p1', createdAt: new Date(Date.now() - 6 * 86400000).toISOString(), dueDate: new Date(Date.now() - 1 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
-  { id: 't2', title: 'Set up CI/CD pipeline', description: 'Configure GitHub Actions for automated testing and deployment', status: 'in-progress', priority: 'high', projectId: 'p1', createdAt: new Date(Date.now() - 5 * 86400000).toISOString(), dueDate: new Date(Date.now() + 2 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
-  { id: 't3', title: 'User authentication flow', description: 'Implement login, signup, and password reset', status: 'in-progress', priority: 'high', projectId: 'p2', createdAt: new Date(Date.now() - 4 * 86400000).toISOString(), dueDate: new Date(Date.now() + 3 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
-  { id: 't4', title: 'Design system components', description: 'Build reusable UI components library', status: 'todo', priority: 'medium', projectId: 'p1', createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), dueDate: new Date(Date.now() + 5 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
-  { id: 't5', title: 'Payment gateway integration', description: 'Integrate Stripe for payment processing', status: 'todo', priority: 'high', projectId: 'p3', createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), dueDate: new Date(Date.now() + 7 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
-  { id: 't6', title: 'Write unit tests', description: 'Add comprehensive test coverage for core modules', status: 'todo', priority: 'medium', projectId: 'p2', createdAt: new Date(Date.now() - 1 * 86400000).toISOString(), dueDate: new Date(Date.now() + 10 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
-  { id: 't7', title: 'Performance optimization', description: 'Audit and optimize page load times and bundle size', status: 'todo', priority: 'low', projectId: 'p1', createdAt: new Date().toISOString(), dueDate: null, recurrence: 'none', subtasks: [], comments: [] },
-  { id: 't8', title: 'Push notifications', description: 'Implement push notification service for mobile', status: 'todo', priority: 'medium', projectId: 'p2', createdAt: new Date().toISOString(), dueDate: new Date(Date.now() + 14 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
-  { id: 't9', title: 'API documentation', description: 'Write comprehensive API docs with examples', status: 'done', priority: 'low', projectId: 'p3', createdAt: new Date(Date.now() - 10 * 86400000).toISOString(), dueDate: new Date(Date.now() - 3 * 86400000).toISOString(), recurrence: 'none', subtasks: [], comments: [] },
-];
 
 export function useStore(userId: string) {
   const taskStorageKey = getStorageKey(STORAGE_KEY_TASKS, userId);
@@ -361,8 +337,8 @@ export function useStore(userId: string) {
       if (nextProjects.length === 0 && nextTasks.length === 0) {
         const storedProjects = getStoredSnapshot<Project[]>(STORAGE_KEY_PROJECTS, userId);
         const storedTasks = getStoredSnapshot<Task[]>(STORAGE_KEY_TASKS, userId);
-        const legacyProjects = storedProjects ?? seedProjects;
-        const legacyTasks = storedTasks ?? seedTasks;
+        const legacyProjects = storedProjects ?? [];
+        const legacyTasks = storedTasks ?? [];
         const projectIdMap = new Map<string, string>();
 
         if (legacyProjects.length > 0) {

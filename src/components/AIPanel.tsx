@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, Component, type ReactNode } from 'react';
-import { Minus, Send, Sparkles, Square, Check, AlertCircle, Download, ImagePlus, Plus, Mic, MicOff, CopyPlus, FileSearch, CheckCircle2, ChevronDown, LayoutPanelLeft, PanelRightOpen, Wand2, Pencil, Trash2, X, CalendarDays } from 'lucide-react';
+import { Minus, Send, Sparkles, Square, Check, AlertCircle, Download, ImagePlus, Plus, Mic, MicOff, CopyPlus, FileSearch, CheckCircle2, ChevronDown, LayoutPanelLeft, PanelRightOpen, Wand2, Pencil, Trash2, X, CalendarDays, Upload } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -79,6 +79,7 @@ interface SlotResolutionResult {
   durationMinutes: number | null;
   selectedStartMinutes: number | null;
   candidates: StudySlotCandidate[];
+  exactTimeConflict?: boolean;
 }
 
 interface RecentCalendarTarget {
@@ -506,12 +507,14 @@ interface AIPanelProps {
   }) => Promise<boolean>;
   onAddProject: (name: string, description: string, options?: BehaviorLearningActionOptions) => Promise<string | null>;
   onAddSubtask: (taskId: string, title: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
+  onDeleteSubtask: (subtaskId: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onDeleteTask: (taskId: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onLinkTask: (deadlineId: string, taskId: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onCreateCalendarEvent: (event: NewGoogleCalendarEvent, calendarId?: string, options?: BehaviorLearningActionOptions) => Promise<boolean>;
   onUpdateCalendarEvent: (eventId: string, event: Partial<NewGoogleCalendarEvent>, calendarId?: string, options?: BehaviorLearningActionOptions, existingEvent?: GoogleCalendarEvent) => Promise<boolean>;
   onDeleteCalendarEvent: (eventId: string, calendarId?: string, options?: BehaviorLearningActionOptions, existingEvent?: GoogleCalendarEvent, deleteOptions?: { silent?: boolean }) => Promise<boolean>;
   onOpenAcademicPlanner?: (deadlineIds?: string[]) => void;
+  onOpenDeadlineImport?: () => void;
   habits: Habit[];
   onAddHabit: (title: string, frequency?: 'daily' | 'weekly', options?: BehaviorLearningActionOptions) => Promise<void>;
   onToggleHabit: (id: string, options?: BehaviorLearningActionOptions) => Promise<void>;
@@ -522,9 +525,10 @@ export function AIPanel({
   open, mode, onModeChange, onClose, onOpenDataSettings, userId,
   tasks, deadlines, projects, plans, dayTemplates, exercises, dayExercises,
   calendarEvents, calendarCalendars, selectedCalendarId, getCalendarEventsForRange, aiLearningEnabled, onAiLearningEnabledChange: _onAiLearningEnabledChange, scoreStudySlot, behaviorSummary, draftPrompt, onDraftPromptConsumed, onAiPromptSubmitted, onAiActionsApplied, onAiSuggestionAccepted, onAiSuggestionEdited, onAiSuggestionRejected, onStudyBlockLinkedTarget, onStudySlotCandidatesLogged,
-  onAddTask, onUpdateTask, onAddDeadline, onUpdateDeadline, onAddProject, onAddSubtask, onDeleteTask, onLinkTask,
+  onAddTask, onUpdateTask, onAddDeadline, onUpdateDeadline, onAddProject, onAddSubtask, onDeleteSubtask, onDeleteTask, onLinkTask,
   onCreateCalendarEvent, onUpdateCalendarEvent, onDeleteCalendarEvent,
   onOpenAcademicPlanner,
+  onOpenDeadlineImport,
   habits, onAddHabit, onToggleHabit, onDeleteHabit,
 }: AIPanelProps) {
   const {
@@ -1157,6 +1161,7 @@ export function AIPanel({
       let created = 0;
       let skipped = 0;
       let adjusted = 0;
+      let exactTimeConflictSkips = 0;
 
       for (const row of block.rows) {
         const targetCalendarId = row.calendar
@@ -1185,6 +1190,9 @@ export function AIPanel({
           scoreStudySlot,
         );
         if (!resolved.payload) {
+          if (resolved.exactTimeConflict) {
+            exactTimeConflictSkips++;
+          }
           if (
             resolved.dateKey &&
             resolved.durationMinutes !== null &&
@@ -1311,9 +1319,15 @@ export function AIPanel({
       skippedForLog = skipped;
       if (skipped > 0) {
         setPanelError(
-          skipped === 1
-            ? 'Skipped 1 calendar create because it conflicted, was incomplete, or failed to save.'
-            : `Skipped ${skipped} calendar creates because they conflicted, were incomplete, or failed to save.`,
+          exactTimeConflictSkips > 0
+            ? exactTimeConflictSkips === skipped
+              ? skipped === 1
+                ? 'Skipped 1 calendar create because the exact requested time was not free.'
+                : `Skipped ${skipped} calendar creates because the exact requested times were not free.`
+              : `Skipped ${skipped} calendar creates because some exact requested times were not free and others were incomplete or failed to save.`
+            : skipped === 1
+              ? 'Skipped 1 calendar create because it conflicted, was incomplete, or failed to save.'
+              : `Skipped ${skipped} calendar creates because they conflicted, were incomplete, or failed to save.`,
         );
       } else if (adjusted > 0) {
         setPanelError(null);
@@ -1554,27 +1568,72 @@ export function AIPanel({
         );
       }
     } else if (block.type === 'subtasks') {
-      // Find the parent task by title (case-insensitive, also try stripped)
-      const parentTitle = block.parentTaskTitle?.trim().toLowerCase() ?? '';
-      const parentStripped = stripTrailingCourseTag(block.parentTaskTitle ?? '').trim().toLowerCase();
-      const parentTask = workingTasks.find(t => {
-        const tt = t.title.trim().toLowerCase();
-        const ts = stripTrailingCourseTag(t.title).trim().toLowerCase();
-        return tt === parentTitle || ts === parentTitle || tt === parentStripped || ts === parentStripped;
-      });
-      if (!parentTask) {
-        skippedForLog = block.rows.length;
-        setPanelError(
-          `Could not find parent task "${block.parentTaskTitle}". Subtasks were not created. ` +
-          `Make sure the parent task exists first, then try again.`
-        );
-      } else {
+      const rowsByParent = new Map<string, { title: string; course?: string; rows: ParsedImportRow[] }>();
+      for (const row of block.rows) {
+        const parentTitle = (row.taskTitle ?? block.parentTaskTitle ?? '').trim();
+        const parentCourse = row.course ?? extractCourseFromTitle(parentTitle);
+        const key = `${normalizeDeleteCandidate(parentTitle)}::${normalizeDeleteCandidate(parentCourse ?? '')}`;
+        const group = rowsByParent.get(key) ?? { title: parentTitle, course: parentCourse, rows: [] };
+        group.rows.push(row);
+        rowsByParent.set(key, group);
+      }
+
+      const skippedParents: string[] = [];
+      for (const group of rowsByParent.values()) {
+        const parentMatches = resolveSubtaskParentCandidates(workingTasks, projects, group.title, group.course);
+        if (parentMatches.length !== 1) {
+          skippedForLog += group.rows.length;
+          skippedParents.push(group.title || 'missing parent task');
+          continue;
+        }
+
+        const parentTask = parentMatches[0];
         const subtaskResults = await Promise.all(
-          block.rows.map(row => onAddSubtask(parentTask.id, row.title, aiLearningOptions))
+          group.rows.map(row => onAddSubtask(parentTask.id, row.title, aiLearningOptions))
         );
         imported += subtaskResults.filter(Boolean).length;
         subtaskResults.filter(Boolean).forEach(() => onAiSuggestionAccepted?.(block.type, 1));
-        skippedForLog = subtaskResults.length - subtaskResults.filter(Boolean).length;
+        skippedForLog += subtaskResults.length - subtaskResults.filter(Boolean).length;
+      }
+
+      if (skippedParents.length > 0) {
+        setPanelError(
+          `Skipped ${skippedForLog} subtask${skippedForLog === 1 ? '' : 's'} because the parent task was missing or ambiguous: ` +
+          skippedParents.join(', ')
+        );
+      }
+    } else if (block.type === 'delete-subtasks') {
+      let skipped = 0;
+      for (const row of block.rows) {
+        const parentTitle = (row.taskTitle ?? block.parentTaskTitle ?? '').trim();
+        const parentCourse = row.course ?? extractCourseFromTitle(parentTitle);
+        const parentMatches = resolveSubtaskParentCandidates(workingTasks, projects, parentTitle, parentCourse);
+        if (parentMatches.length !== 1) {
+          skipped++;
+          continue;
+        }
+
+        const subtaskMatches = matchSubtaskCandidates(parentMatches[0], row.title);
+        if (subtaskMatches.length !== 1) {
+          skipped++;
+          continue;
+        }
+
+        const ok = await onDeleteSubtask(subtaskMatches[0].id, aiLearningOptions);
+        if (ok) {
+          imported++;
+          onAiSuggestionAccepted?.(block.type, 1);
+        } else {
+          skipped++;
+        }
+      }
+      skippedForLog = skipped;
+      if (skipped > 0) {
+        setPanelError(
+          skipped === 1
+            ? 'Skipped 1 subtask delete because the parent or subtask was missing or ambiguous.'
+            : `Skipped ${skipped} subtask deletes because the parent or subtask was missing or ambiguous.`,
+        );
       }
     } else if (block.type === 'tasks') {
       // Resolve all project IDs first (may create projects), then insert all tasks in parallel
@@ -1756,6 +1815,7 @@ export function AIPanel({
 
   const panelContent = (
       <div
+        data-walkthrough-panel="ai"
         className={cn(
           'flex min-h-0 flex-col overflow-hidden border border-[var(--border-soft)] bg-[var(--surface-elevated)]',
           mode === 'floating'
@@ -1955,7 +2015,7 @@ export function AIPanel({
                     </div>
                   </div>
                 ) : messages.length === 0 ? (
-                  <WelcomeScreen userId={userId} hasKey={hasKey} onUsePrompt={handleStarterPrompt} onOpenAcademicPlanner={onOpenAcademicPlanner} />
+                  <WelcomeScreen userId={userId} hasKey={hasKey} onUsePrompt={handleStarterPrompt} onOpenAcademicPlanner={onOpenAcademicPlanner} onOpenDeadlineImport={onOpenDeadlineImport} />
                 ) : (
                   <div className="space-y-4">
                     {messages.map((msg, index) => (
@@ -2185,16 +2245,28 @@ export function AIPanel({
 }
 
 // --- Welcome Screen ---
-function WelcomeScreen({ userId, hasKey, onUsePrompt, onOpenAcademicPlanner }: { userId: string; hasKey: boolean; onUsePrompt: (prompt: string) => void; onOpenAcademicPlanner?: (deadlineIds?: string[]) => void }) {
+function WelcomeScreen({
+  userId,
+  hasKey,
+  onUsePrompt,
+  onOpenAcademicPlanner,
+  onOpenDeadlineImport,
+}: {
+  userId: string;
+  hasKey: boolean;
+  onUsePrompt: (prompt: string) => void;
+  onOpenAcademicPlanner?: (deadlineIds?: string[]) => void;
+  onOpenDeadlineImport?: () => void;
+}) {
   const badgeOptions = ['✨', '🎓', '🪄', '🧠', '🌿', '👑', '🦆', '🌶️', '🪐', '🍅', '🎀', '🧢'];
   const [showPersonalize, setShowPersonalize] = useState(false);
   const [personalizeOpen, setPersonalizeOpen] = useState(false);
   const [personality, setPersonality] = useState<AIPersonality>(() => loadAIPersonality(userId));
   const starterPrompts = [
-    { icon: Sparkles, label: 'Personalize your AI', prompt: 'Help me personalize how you plan my workload and schedule.' },
-    { icon: CopyPlus, label: 'Build a study plan', prompt: 'Build me a study plan for my next few deadlines.' },
+    { icon: CopyPlus, label: 'Build a study plan', prompt: 'Build me a study plan for my next few deadlines and keep it realistic.' },
     { icon: FileSearch, label: 'Analyze my workload', prompt: 'Analyze my current workload and tell me what needs attention first.' },
-    { icon: CheckCircle2, label: 'Create a task tracker', prompt: 'Create tasks for my upcoming exams and assignments.' },
+    { icon: CheckCircle2, label: 'Create prep tasks', prompt: 'Create prep tasks for my upcoming exams and assignments.' },
+    { icon: Sparkles, label: 'Personalize your AI', prompt: 'Help me personalize how you plan my workload and schedule.' },
   ];
 
   useEffect(() => {
@@ -2245,11 +2317,24 @@ function WelcomeScreen({ userId, hasKey, onUsePrompt, onOpenAcademicPlanner }: {
       <h3 className="text-3xl font-semibold tracking-tight text-[var(--text-primary)]">How can I help you today?</h3>
       <p className="mt-3 max-w-md text-sm leading-6 text-[var(--text-muted)]">
         {hasKey
-          ? 'Use AI to plan your workload, build study blocks, and turn what’s coming up into an actionable schedule.'
+          ? 'Use AI to turn your deadlines, calendar, and messy school input into an actionable plan you can actually follow.'
           : 'Add your Google Gemini API key above to get started — it\'s free!'}
       </p>
       {hasKey && (
         <div className="mt-8 grid w-full max-w-md gap-2.5 text-left">
+          <button
+            type="button"
+            onClick={onOpenDeadlineImport}
+            className="group flex w-full items-center gap-3 rounded-[20px] border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-3 text-left text-sm text-[var(--text-secondary)] transition duration-150 hover:-translate-y-0.5 hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)] transition group-hover:scale-105">
+              <Upload size={15} />
+            </span>
+            <div>
+              <div className="font-medium">Import your deadlines</div>
+              <div className="text-xs text-[var(--text-faint)]">Start with a screenshot, syllabus, email, or CSV</div>
+            </div>
+          </button>
           <button
             type="button"
             onClick={() => onOpenAcademicPlanner?.()}
@@ -2959,6 +3044,7 @@ function maybeResolveCalendarCreateConflict(
       durationMinutes: null,
       selectedStartMinutes: null,
       candidates: [],
+      exactTimeConflict: false,
     };
   }
 
@@ -2996,6 +3082,7 @@ function maybeResolveCalendarCreateConflict(
         durationMinutes: timedDetails.durationMinutes,
         selectedStartMinutes: timedDetails.startMinutes,
         candidates: nextSlot.candidates,
+        exactTimeConflict: false,
       };
     }
 
@@ -3007,6 +3094,7 @@ function maybeResolveCalendarCreateConflict(
       durationMinutes: timedDetails.durationMinutes,
       selectedStartMinutes: nextSlot.startMinutes,
       candidates: nextSlot.candidates,
+      exactTimeConflict: true,
     };
   }
 
@@ -3018,6 +3106,7 @@ function maybeResolveCalendarCreateConflict(
     durationMinutes: timedDetails.durationMinutes,
     selectedStartMinutes: timedDetails.startMinutes,
     candidates: nextSlot?.candidates ?? [],
+    exactTimeConflict: false,
   };
 }
 
@@ -3160,6 +3249,23 @@ function resolvePreferredTaskCandidates(tasks: Task[], rawTitle: string, recentT
 
   const recentMatch = recentMatches[0];
   return matches.filter(task => task.id === recentMatch.id);
+}
+
+function resolveSubtaskParentCandidates(tasks: Task[], projects: Project[], rawTitle: string, course?: string) {
+  const title = rawTitle.trim();
+  if (!title) return [];
+
+  const taskPool = buildEntityScopedTaskPool(tasks, projects, title, course);
+  const normalizedTitle = normalizeDeleteCandidate(title);
+  const exactMatches = taskPool.filter(task => normalizeDeleteCandidate(task.title) === normalizedTitle);
+  if (exactMatches.length > 0) return exactMatches;
+
+  return matchTaskCandidates(taskPool, title);
+}
+
+function matchSubtaskCandidates(task: Task, rawTitle: string) {
+  const normalizedTitle = normalizeDeleteCandidate(rawTitle);
+  return task.subtasks.filter(subtask => normalizeDeleteCandidate(subtask.title) === normalizedTitle);
 }
 
 function getSourceUserMessageForBlock(messages: ChatMessage[], blockKey: string) {
@@ -3774,7 +3880,7 @@ function renderContentWithBlocks(content: string, importBlocks: ImportBlock[]): 
   const segments: Segment[] = [];
 
   // Find all fenced code blocks
-  const blockRegex = /```(import:(?:tasks|deadlines|delete-tasks|update-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|habits-create|habits-complete|habits-delete|subtasks:[^\n]*)|csv)\n([\s\S]*?)```/g;
+  const blockRegex = /```(import:(?:tasks|deadlines|delete-tasks|update-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|habits-create|habits-complete|habits-delete|(?:delete-)?subtasks:[^\n]*)|csv)\n([\s\S]*?)```/g;
   let match;
   let lastIndex = 0;
 
@@ -3875,12 +3981,13 @@ function ActionBundleCard({
         block.type === 'calendar-update' ? 3 :
         block.type === 'subtasks' ? 4 :
         block.type === 'deadline-links' ? 5 :
-        block.type === 'calendar-delete' ? 6 : 7,
+        block.type === 'delete-subtasks' ? 6 :
+        block.type === 'calendar-delete' ? 7 : 8,
     }))
   ), [safeBlocks, importedBlocks, messageId]);
 
   const pendingEntries = entries.filter(entry => !entry.imported);
-  const hasDeletes = entries.some(entry => entry.block?.type === 'delete-tasks' || entry.block?.type === 'calendar-delete');
+  const hasDeletes = entries.some(entry => entry.block?.type === 'delete-tasks' || entry.block?.type === 'delete-subtasks' || entry.block?.type === 'calendar-delete');
   const allDone = optimisticDone || entries.every(entry => entry.imported);
 
   const summary = useMemo(() => {
@@ -3889,6 +3996,7 @@ function ActionBundleCard({
       updates: 0,
       deadlines: 0,
       subtasks: 0,
+      subtaskDeletes: 0,
       links: 0,
       deletes: 0,
       calendarCreates: 0,
@@ -3904,6 +4012,7 @@ function ActionBundleCard({
       if (block.type === 'update-tasks') counts.updates += block.rows.length;
       if (block.type === 'deadlines') counts.deadlines += block.rows.length;
       if (block.type === 'subtasks') counts.subtasks += block.rows.length;
+      if (block.type === 'delete-subtasks') counts.subtaskDeletes += block.rows.length;
       if (block.type === 'deadline-links') counts.links += block.rows.length;
       if (block.type === 'delete-tasks') counts.deletes += block.rows.length;
       if (block.type === 'calendar-update') counts.calendarUpdates += block.rows.length;
@@ -4000,6 +4109,45 @@ function ActionBundleCard({
       );
   }, [safeBlocks, tasks]);
 
+  const subtaskGroups = useMemo(() => {
+    return safeBlocks
+      .filter(block => block.type === 'subtasks')
+      .flatMap(block =>
+        block.rows.map(row => {
+          const parentTitle = (row.taskTitle ?? block.parentTaskTitle ?? '').trim();
+          const parentCourse = row.course ?? extractCourseFromTitle(parentTitle);
+          const matches = resolveSubtaskParentCandidates(tasks, projects, parentTitle, parentCourse);
+          return {
+            label: `${row.title} → ${parentTitle || 'missing parent task'}`,
+            valid: matches.length === 1,
+            reason: matches.length === 0 ? 'parent not found' : matches.length > 1 ? 'parent ambiguous' : '',
+          };
+        }),
+      );
+  }, [projects, safeBlocks, tasks]);
+
+  const subtaskDeleteGroups = useMemo(() => {
+    return safeBlocks
+      .filter(block => block.type === 'delete-subtasks')
+      .flatMap(block =>
+        block.rows.map(row => {
+          const parentTitle = (row.taskTitle ?? block.parentTaskTitle ?? '').trim();
+          const parentCourse = row.course ?? extractCourseFromTitle(parentTitle);
+          const parentMatches = resolveSubtaskParentCandidates(tasks, projects, parentTitle, parentCourse);
+          const subtaskMatches = parentMatches.length === 1 ? matchSubtaskCandidates(parentMatches[0], row.title) : [];
+          return {
+            label: `${row.title} ← ${parentTitle || 'missing parent task'}`,
+            valid: parentMatches.length === 1 && subtaskMatches.length === 1,
+            reason:
+              parentMatches.length === 0 ? 'parent not found' :
+              parentMatches.length > 1 ? 'parent ambiguous' :
+              subtaskMatches.length === 0 ? 'subtask not found' :
+              subtaskMatches.length > 1 ? 'subtask ambiguous' : '',
+          };
+        }),
+      );
+  }, [projects, safeBlocks, tasks]);
+
   const calendarGroups = useMemo(() => {
     const recentCalendarTargets = loadRecentCalendarTargets(userId);
     const creates = safeBlocks
@@ -4081,6 +4229,7 @@ function ActionBundleCard({
     summary.updates +
     summary.deadlines +
     summary.subtasks +
+    summary.subtaskDeletes +
     summary.links +
     summary.deletes +
     summary.calendarCreates +
@@ -4172,6 +4321,7 @@ function ActionBundleCard({
                   summary.calendarUpdates ? `${summary.calendarUpdates} event update${summary.calendarUpdates === 1 ? '' : 's'}` : null,
                   summary.calendarDeletes ? `${summary.calendarDeletes} event delete${summary.calendarDeletes === 1 ? '' : 's'}` : null,
                   summary.subtasks ? `${summary.subtasks} subtask${summary.subtasks === 1 ? '' : 's'}` : null,
+                  summary.subtaskDeletes ? `${summary.subtaskDeletes} subtask delete${summary.subtaskDeletes === 1 ? '' : 's'}` : null,
                   summary.links ? `${summary.links} link${summary.links === 1 ? '' : 's'}` : null,
                   summary.deletes ? `${summary.deletes} delete${summary.deletes === 1 ? '' : 's'}` : null,
                   summary.habitsCreate ? `${summary.habitsCreate} routine${summary.habitsCreate === 1 ? '' : 's'}` : null,
@@ -4262,7 +4412,18 @@ function ActionBundleCard({
             <ActionSection
               label="Subtasks"
               tone="default"
-              items={safeBlocks.filter(block => block.type === 'subtasks').flatMap(block => block.rows.map(row => row.title))}
+              items={subtaskGroups.map(group => (
+                group.valid ? group.label : `${group.label} · ${group.reason}`
+              ))}
+            />
+          )}
+          {summary.subtaskDeletes > 0 && (
+            <ActionSection
+              label="Delete subtasks"
+              tone="warning"
+              items={subtaskDeleteGroups.map(group => (
+                group.valid ? group.label : `${group.label} · ${group.reason}`
+              ))}
             />
           )}
           {summary.deadlines > 0 && (

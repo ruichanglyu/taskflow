@@ -26,12 +26,15 @@ import { AIPanel } from './AIPanel';
 import { HabitsPanel } from './HabitsPanel';
 import { AuthOnboarding } from './AuthOnboarding';
 import { AcademicPlanningModal } from './AcademicPlanningModal';
+import { WalkthroughController, type WalkthroughControllerHandle, loadWalkthroughState } from './WalkthroughController';
 import { migrateLegacyAIData } from '../hooks/useAI';
 import { useHabits } from '../hooks/useHabits';
 import { useGoogleCalendar } from '../hooks/useGoogleCalendar';
 import { useBehaviorLearning, type BehaviorLearningActionOptions } from '../hooks/useBehaviorLearning';
 import { useStudyBlockOutcomes } from '../hooks/useStudyBlockOutcomes';
 import type { StudyBlockOutcomeStatus } from '../types';
+import { isStudyBlockLikeCalendarEvent } from '../utils/studyBlockDetection';
+import { hasEventEnded } from '../utils/calendarEventHelpers';
 import {
   buildAcademicPlanEvent,
   buildAcademicPlanProposal,
@@ -163,6 +166,18 @@ export function AppShell({ user }: AppShellProps) {
   const navigate = useNavigate();
   const currentView = getViewFromPath(location.pathname);
   const initialAcademicPlanningDraft = useMemo(() => readAcademicPlanningDraft(user.id), [user.id]);
+  const walkthroughRef = useRef<WalkthroughControllerHandle>(null);
+  const [walkthroughSnapshot, setWalkthroughSnapshot] = useState(() => loadWalkthroughState(user.id));
+  useEffect(() => {
+    setWalkthroughSnapshot(loadWalkthroughState(user.id));
+    const listener = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { userId?: string; state?: typeof walkthroughSnapshot } | undefined;
+      if (!detail || detail.userId !== user.id || !detail.state) return;
+      setWalkthroughSnapshot(detail.state);
+    };
+    window.addEventListener('taskflow:walkthrough-update', listener);
+    return () => window.removeEventListener('taskflow:walkthrough-update', listener);
+  }, [user.id]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState<boolean>(() => {
     const stored = window.localStorage.getItem('taskflow_sidebar_collapsed');
@@ -213,11 +228,16 @@ export function AppShell({ user }: AppShellProps) {
   const projectFocusId = searchParams.get('project');
   const deadlineCourseFilterId = searchParams.get('course');
   const deadlineFocusId = searchParams.get('deadline');
+  const deadlineImportRequested = searchParams.get('import') === '1';
   const taskProjectFilterId = searchParams.get('project') ?? 'all';
   const openAiWithPrompt = useCallback((prompt: string) => {
     setQueuedAiPrompt(prompt);
     setAiOpen(true);
   }, []);
+
+  const openDeadlineImport = useCallback(() => {
+    navigate('/deadlines?import=1');
+  }, [navigate]);
 
   const openAiPanel = useCallback(() => {
     learning.logAiPanelOpened({ source: 'manual', learn: true });
@@ -240,6 +260,22 @@ export function AppShell({ user }: AppShellProps) {
   const pendingProjectIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'project').map(entry => entry.key.replace('project:', ''))), [pendingDeleteEntries]);
   const pendingSubtaskIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'subtask').map(entry => entry.key.replace('subtask:', ''))), [pendingDeleteEntries]);
   const pendingCommentIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'comment').map(entry => entry.key.replace('comment:', ''))), [pendingDeleteEntries]);
+  const hasStudyReviewReady = useMemo(() => {
+    const now = new Date();
+    return calendar.events.some(event => {
+      if (!event.id) return false;
+      if (!isStudyBlockLikeCalendarEvent(event)) return false;
+      if (!hasEventEnded(event, now)) return false;
+      return !studyBlockOutcomes.getOutcomeForEvent(event);
+    });
+  }, [calendar.events, studyBlockOutcomes]);
+
+  const openStudyReviewFromWalkthrough = useCallback(() => {
+    navigate('/dashboard');
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('taskflow:open-study-review', { detail: { userId: user.id } }));
+    }, 80);
+  }, [navigate, user.id]);
   const pendingHabitIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'habit').map(entry => entry.key.replace('habit:', ''))), [pendingDeleteEntries]);
   const pendingCalendarEventKeys = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'calendar_event').map(entry => entry.key.replace('calendar_event:', ''))), [pendingDeleteEntries]);
   const pendingGymPlanIds = useMemo(() => new Set(pendingDeleteEntries.filter(entry => entry.kind === 'gym_plan').map(entry => entry.key.replace('gym_plan:', ''))), [pendingDeleteEntries]);
@@ -1114,10 +1150,13 @@ export function AppShell({ user }: AppShellProps) {
     }
   }, [learning, store]);
 
-  const handleDeleteSubtask = useCallback(async (subtaskId: string) => {
+  const handleDeleteSubtask = useCallback(async (
+    subtaskId: string,
+    options?: BehaviorLearningActionOptions,
+  ): Promise<boolean> => {
     const task = store.tasks.find(item => item.subtasks.some(subtask => subtask.id === subtaskId));
     const subtask = task?.subtasks.find(item => item.id === subtaskId);
-    if (!task || !subtask) return;
+    if (!task || !subtask) return false;
     scheduleUndoableDelete({
       key: `subtask:${subtaskId}`,
       kind: 'subtask',
@@ -1132,12 +1171,13 @@ export function AppShell({ user }: AppShellProps) {
             subtaskTitle: subtask.title,
             projectId: task.projectId,
             dueDate: task.dueDate,
-            options: { source: 'manual', learn: true },
+            options: options ?? { source: 'manual', learn: true },
           });
         }
         return ok;
       },
     });
+    return true;
   }, [learning, scheduleUndoableDelete, store]);
 
   const handleAddComment = useCallback(async (taskId: string, text: string): Promise<boolean> => {
@@ -1499,6 +1539,7 @@ export function AppShell({ user }: AppShellProps) {
               path="/dashboard"
               element={
                 <Dashboard
+                  userId={user.id}
                   tasks={filteredTasks}
                   projects={filteredProjects}
                   deadlines={filteredDeadlines}
@@ -1517,6 +1558,13 @@ export function AppShell({ user }: AppShellProps) {
                   planningMetrics={academicPlanningMetrics}
                   onPlanNextDeadlines={() => openAcademicPlanner('dashboard')}
                   nextPlanningTarget={upcomingPlannableDeadlines[0] ?? null}
+                  onOpenImportDeadlines={openDeadlineImport}
+                  onOpenAiPrompt={openAiWithPrompt}
+                  onNavigate={navigateInApp}
+                  walkthroughCompleted={walkthroughSnapshot.completed}
+                  walkthroughSeen={walkthroughSnapshot.seen}
+                  onStartWalkthrough={() => walkthroughRef.current?.open()}
+                  onRestartWalkthrough={() => walkthroughRef.current?.restart()}
                 />
               }
             />
@@ -1529,6 +1577,7 @@ export function AppShell({ user }: AppShellProps) {
                   tasks={filteredTasks}
                   initialCourseFilter={deadlineCourseFilterId}
                   initialDetailId={deadlineFocusId}
+                  initialImportOpen={deadlineImportRequested}
                   onAdd={handleAddDeadline}
                   onAddProject={handleAddProject}
                   onUpdate={handleUpdateDeadline}
@@ -1679,12 +1728,14 @@ export function AppShell({ user }: AppShellProps) {
             onUpdateDeadline={handleUpdateDeadline}
             onAddProject={handleAddProject}
             onAddSubtask={handleAddSubtask}
+            onDeleteSubtask={handleDeleteSubtask}
             onDeleteTask={handleDeleteTask}
             onLinkTask={handleLinkTask}
             onCreateCalendarEvent={handleCreateCalendarEvent}
             onUpdateCalendarEvent={handleUpdateCalendarEvent}
             onDeleteCalendarEvent={handleDeleteCalendarEvent}
             onOpenAcademicPlanner={(deadlineIds) => openAcademicPlanner('ai', deadlineIds)}
+            onOpenDeadlineImport={openDeadlineImport}
             aiLearningEnabled={learning.aiLearningEnabled}
             onAiLearningEnabledChange={learning.setAiLearningEnabled}
             scoreStudySlot={learning.scoreStudySlot}
@@ -1822,6 +1873,7 @@ export function AppShell({ user }: AppShellProps) {
         <button
           type="button"
           onClick={openAiPanel}
+          data-walkthrough="ai"
           className="fixed bottom-6 right-6 z-[55] flex h-14 w-14 items-center justify-center rounded-full border border-[var(--border-soft)] bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-[0_10px_30px_rgba(15,23,42,0.12)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(15,23,42,0.16)]"
           title="AI Assistant"
         >
@@ -1910,6 +1962,20 @@ export function AppShell({ user }: AppShellProps) {
           });
         })()}
       </div>
+
+      <WalkthroughController
+        ref={walkthroughRef}
+        userId={user.id}
+        hasDeadlines={filteredDeadlines.length > 0}
+        hasPlan={(academicPlanningMetrics.generated ?? 0) > 0}
+        hasReviewReady={hasStudyReviewReady}
+        onOpenImportDeadlines={openDeadlineImport}
+        onOpenPlanner={() => openAcademicPlanner('dashboard')}
+        onOpenAiPrompt={openAiWithPrompt}
+        onOpenStudyReview={openStudyReviewFromWalkthrough}
+        onClosePlanner={() => setAcademicPlanningOpen(false)}
+        onCloseAiPanel={() => setAiOpen(false)}
+      />
     </div>
   );
 }

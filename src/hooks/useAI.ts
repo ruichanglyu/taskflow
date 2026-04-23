@@ -25,11 +25,11 @@ export interface ChatThread {
 }
 
 export interface ImportBlock {
-  type: 'tasks' | 'deadlines' | 'subtasks' | 'delete-tasks' | 'update-tasks' | 'deadline-links' | 'calendar-create' | 'calendar-update' | 'calendar-delete' | 'habits-create' | 'habits-complete' | 'habits-delete';
+  type: 'tasks' | 'deadlines' | 'subtasks' | 'delete-subtasks' | 'delete-tasks' | 'update-tasks' | 'deadline-links' | 'calendar-create' | 'calendar-update' | 'calendar-delete' | 'habits-create' | 'habits-complete' | 'habits-delete';
   raw: string;
   rows: ParsedImportRow[];
   imported?: boolean;
-  parentTaskTitle?: string;  // for subtasks — the parent task to attach to
+  parentTaskTitle?: string;  // for subtask actions — the parent task to target
 }
 
 export interface ParsedImportRow {
@@ -282,7 +282,10 @@ function buildSystemPrompt(data: {
   const tasksSummary = activeTasks.length > 0
     ? activeTasks.map(t => {
         const proj = t.projectId ? data.projects.find(p => p.id === t.projectId)?.name : null;
-        return `- ${t.title}${proj ? ` [${proj}]` : ''}${t.dueDate ? ` (due ${t.dueDate})` : ''} [${t.priority}] [${t.status}]`;
+        const subtasks = t.subtasks.length > 0
+          ? ` [subtasks: ${t.subtasks.map(st => `${st.title}${st.done ? ' (done)' : ''}`).join('; ')}]`
+          : '';
+        return `- ${t.title}${proj ? ` [${proj}]` : ''}${t.dueDate ? ` (due ${t.dueDate})` : ''} [${t.priority}] [${t.status}]${subtasks}`;
       }).join('\n')
     : '(none)';
 
@@ -452,7 +455,15 @@ Review HashMap implementation
 Review AVL Tree logic
 Code Trace DaleDB
 \`\`\`
-The parent task title after "subtasks:" MUST exactly match an existing task title. Each line is just a subtask title (no pipes/fields needed). PREFER subtasks over separate tasks when the user wants to break down an existing task into smaller pieces.
+The parent task title after "subtasks:" MUST exactly match an existing task title, including any course tag shown in ACTIVE TASKS, for example "Study for Exam 3 [MATH 2550]". Each line is just a subtask title (no pipes/fields needed). PREFER subtasks over separate tasks when the user wants to break down an existing task into smaller pieces.
+If the user asks for subtasks under more than one task, output one separate import:subtasks block per parent task. Never combine subtasks for different parent tasks into one block.
+
+To delete subtasks under an existing task, output a fenced code block with language "import:delete-subtasks:Parent Task Title":
+\`\`\`import:delete-subtasks:Study for Exam 3 [MATH 3012]
+Review Webworks 15.1
+Practice exam 1
+\`\`\`
+Only list subtasks that already exist under that exact parent task. If deleting subtasks from multiple parent tasks, output one separate import:delete-subtasks block per parent task. Never use empty subtask blocks to delete anything.
 
 To update existing tasks (add/change due date, priority, status, description), output a fenced code block with language "import:update-tasks":
 \`\`\`import:update-tasks
@@ -560,6 +571,9 @@ SCHEDULING RULES (CRITICAL — you MUST follow these when creating calendar even
 - For each requested day, keep the day/cadence the user asked for whenever possible and adjust the TIME within that same day before you consider skipping the day.
 - For each day, pick a FREE slot that is long enough for the requested duration. Different days will have different free times — use different times per day.
 - If no FREE slot on a day is long enough, skip that day and tell the user.
+- If the user names specific days like "Saturday and Sunday", "this weekend", or "every Tuesday", preserve those exact days. Do not silently move one of those blocks to a different day.
+- If the user says they want to "study a lot" or "block out a lot of time", prefer multiple focused sessions with breaks between them instead of one giant marathon block.
+- If the user asks you to repeat a suggestion that was NOT applied yet, regenerate the same plan as a fresh suggestion. Do not describe it as a replacement unless the user says the previous suggestion was already applied.
 - If the user gives a time floor like "after 4 PM", every start time you emit must be at or after that exact time. Never move earlier than the requested floor, even by 15 minutes.
 - When explaining, mention which free slot you used per day (e.g. "Saturday at 2 PM in your free window between EAS 1600 and MATH 3012").
 - STUDY PLAN REPLACEMENT: If the user asks to change, revise, extend, or redo a study plan for a deadline you previously suggested study blocks for, emit a fresh \`import:calendar-create\` covering the full updated plan for the affected days. The app will automatically delete prior AI-created study blocks for the same deadline on the same days before creating the new ones, so do NOT emit matching \`calendar-delete\` rows for those old blocks yourself — that causes skipped events. Only use \`calendar-delete\` when the user wants specific blocks removed without replacement.
@@ -604,14 +618,15 @@ STYLE RULES:
 /** Parse import blocks from AI response */
 export function parseImportBlocks(content: string): ImportBlock[] {
   const blocks: ImportBlock[] = [];
-  const regex = /```import:(tasks|deadlines|delete-tasks|update-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|habits-create|habits-complete|habits-delete|subtasks:([^\n]*))\n([\s\S]*?)```/g;
+  const regex = /```import:(tasks|deadlines|delete-tasks|update-tasks|deadline-links|calendar-create|calendar-update|calendar-delete|habits-create|habits-complete|habits-delete|(?:delete-)?subtasks:([^\n]*))\n([\s\S]*?)```/g;
   let match;
 
   while ((match = regex.exec(content)) !== null) {
     const rawType = match[1];
     const isSubtasks = rawType.startsWith('subtasks:');
-    const type: ImportBlock['type'] = isSubtasks ? 'subtasks' : rawType as ImportBlock['type'];
-    const parentTaskTitle = isSubtasks ? (match[2]?.trim() || '') : undefined;
+    const isDeleteSubtasks = rawType.startsWith('delete-subtasks:');
+    const type: ImportBlock['type'] = isSubtasks ? 'subtasks' : isDeleteSubtasks ? 'delete-subtasks' : rawType as ImportBlock['type'];
+    const parentTaskTitle = (isSubtasks || isDeleteSubtasks) ? (match[2]?.trim() || '') : undefined;
     const raw = match[3].trim();
     const lines = raw.split('\n').filter(l => l.trim());
     const rows: ParsedImportRow[] = [];
